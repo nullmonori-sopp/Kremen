@@ -1,0 +1,6 @@
+package vec
+type Vec struct {
+	x i64
+	y i64
+}
+func sum(value Vec) i64

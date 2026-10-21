@@ -1,0 +1,4 @@
+package vec
+func sum(value Vec) i64 {
+	return value.x + value.y
+}
