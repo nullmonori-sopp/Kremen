@@ -1,0 +1,9 @@
+package main
+
+import "math/vec"
+import named "math/offset"
+
+func main() {
+    var point = vec.Vec{x: 3, y: 4}
+    println(vec.sum(point), named.add(5))
+}
