@@ -1,0 +1,13 @@
+package main
+func main() {
+	unsafe {
+		var values = alloc [i64](4)
+		values[1] = 7
+		values[2] = 11
+		var middle = slice(values, 1, 3)
+		// Both descriptors share the allocation; making a view copies no data.
+		middle[0] = 19
+		println(len(values), len(middle), values[1], middle[1])
+		free(values)
+	}
+}

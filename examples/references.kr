@@ -1,0 +1,14 @@
+package main
+func main() {
+	var value i64 = 10
+	{
+		var reference &mut i64 = &mut value
+		*reference += 5
+		println("Через изменяемую ссылку:", *reference)
+	}
+	{
+		var reference &i64 = &value
+		println("Через ссылку для чтения:", *reference)
+	}
+	println("После завершения заимствований:", value)
+}

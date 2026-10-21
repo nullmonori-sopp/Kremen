@@ -1,0 +1,10 @@
+package main
+func main() {
+	var value i64 = 7
+	unsafe {
+		var pointer *i64 = raw(&mut value)
+		*pointer += 1
+		println("Через указатель:", *pointer)
+	}
+	println("После unsafe:", value)
+}

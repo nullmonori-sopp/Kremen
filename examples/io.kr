@@ -1,0 +1,6 @@
+package main
+func main() {
+	println("Введите целое число:")
+	number := readInt()
+	println("Удвоенное:", number * 2)
+}

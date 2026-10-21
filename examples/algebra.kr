@@ -1,0 +1,81 @@
+package main
+type Event enum {
+	Empty
+	Number(value i64)
+	Pair(value i64, text string)
+}
+func measure(event Event) i64 {
+	match event {
+		Empty => {
+			return 0
+		}
+		Number(n) => {
+			return n
+		}
+		Pair(n, _) => {
+			return n + 1
+		}
+	}
+}
+func pair()(i64, string) {
+	return(7, "seven")
+}
+func checked(n i64)!i64 {
+	if n < 0 {
+		return fail(9)
+	}
+	return ok(n)
+}
+func leaving(n i64)!i64 {
+	defer println("leave", n)
+	var value = checked(n)?
+	return ok(value + 1)
+}
+func main() {
+	defer println("outer", 1)
+	defer println("outer", 2)
+	var value i64 = 3
+	{
+		defer println("captured", value)
+		value = 4
+		println("body", value)
+	}
+	for i := 0; i < 3; i++ {
+		defer println("loop", i)
+		if i == 0 {
+			continue
+		}
+		if i == 1 {
+			break
+		}
+	}
+	var (number, text) = pair()
+	var tuple(i64, string) =(number + 1, text)
+	tuple.0 += 1
+	println(tuple[0], tuple.1)
+	println(measure(Event.Empty()), measure(Event.Number(5)), measure(Event.Pair(8, "x")))
+	var zero Event
+	println(measure(zero))
+	println(checked(-1) catch code => code + 1)
+	println(checked(6) catch 99)
+	var failed = leaving(-1)
+	match failed {
+		ok(n) => {
+			println("ok", n)
+		}
+		fail(code) => {
+			println("error", code)
+		}
+	}
+	arenablock memory {
+		unsafe {
+			var data = arenaAlloc [i64](memory, 3)
+			data[1] = 42
+			println(len(data), data[0], data[1])
+			arenaReset(memory)
+			var next = arenaAlloc [(i64, bool)](memory, 1)
+			next[0] =(11, true)
+			println(next[0].0, next[0].1)
+		}
+	}
+}

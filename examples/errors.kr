@@ -1,0 +1,18 @@
+package main
+// !T returns either a value or a positive error code. There is no unwinder.
+func double(value i64)!i64 {
+	if value < 0 {
+		return fail(17)
+	}
+	return ok(value * 2)
+}
+func answer(value i64)!i64 {
+	var doubled = double(value)?
+	return ok(doubled + 1)
+}
+func main() {
+	var success = answer(20)
+	println(success.ok, success.value)
+	var failure = answer(-1)
+	println(failure.ok, failure.code)
+}

@@ -1,0 +1,19 @@
+package main
+func fileLength(path string)!i64 {
+	var handle = fsOpen(path, "rb")?
+	defer fileClose(handle)
+	var text = fsReadAll(handle)?
+	return ok(len(text))
+}
+func main() {
+	defer println("resources released")
+	println("current directory:", fsCwd() catch "unavailable")
+	println("README bytes:", fileLength("README.md") catch code => -code)
+	arenablock memory {
+		unsafe {
+			var pairs = arenaAlloc [(i64, bool)](memory, 2)
+			pairs[0] =(42, true)
+			println(pairs[0].0, pairs[0].1)
+		}
+	}
+}
