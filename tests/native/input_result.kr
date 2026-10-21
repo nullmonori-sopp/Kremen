@@ -1,0 +1,10 @@
+package main
+
+func main() {
+    var result = readIntResult()
+    if result.ok {
+        println(result.value)
+    } else {
+        println("error", result.code)
+    }
+}

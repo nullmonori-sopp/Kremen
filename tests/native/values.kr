@@ -1,0 +1,61 @@
+package main
+
+type Counter struct {
+    value i64
+}
+
+func (counter &mut Counter) add(amount i64) {
+    counter.value += amount
+}
+
+func (counter Counter) get() i64 {
+    return counter.value
+}
+
+func pair(first i64, second i64) i64 {
+    return first * 10 + second
+}
+
+func step(value &mut i64) i64 {
+    *value += 1
+    return *value
+}
+
+func touch(value &mut i64) bool {
+    *value += 1
+    return true
+}
+
+func main() {
+    var counter Counter
+    var values = [4]i64{2, 3, 5, 7}
+    for index := 0; index < len(values); index++ {
+        if index == 1 {
+            continue
+        }
+        counter.add(values[index])
+    }
+    println(counter.get(), len(values))
+    var copied = values
+    copied[0] = 99
+    println(values[0], copied[0])
+
+    var value i64 = 0
+    println(false && touch(&mut value), true || touch(&mut value), value)
+    println(pair(step(&mut value), step(&mut value)))
+    {
+        var reference &mut i64 = &mut value
+        *reference += 3
+        println(*reference)
+    }
+    unsafe {
+        var pointer *i64 = raw(&mut value)
+        *pointer += 1
+        println(*pointer)
+    }
+
+    var narrow i8 = -12
+    var large u64 = 18446744073709551615
+    println(narrow + 5, large - 1, u8(1) << u8(7))
+    println("Привет", len("Привет"))
+}

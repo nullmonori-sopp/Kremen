@@ -1,0 +1,96 @@
+package main
+
+type Cell struct {
+    number i64
+    items [2]i64
+}
+
+func release(values []i64) i64 {
+    unsafe { free(values) }
+    return 7
+}
+
+func releaseCells(values []Cell) i64 {
+    unsafe { free(values) }
+    return 7
+}
+
+func releaseOuter(values [][]i64) i64 {
+    unsafe { free(values) }
+    return 0
+}
+
+func replace(reference &mut []i64, other []i64) i64 {
+    *reference = other
+    return 9
+}
+
+func replaceAndFree(reference &mut []i64) i64 {
+    unsafe {
+        free(*reference)
+        *reference = alloc[i64](1)
+    }
+    return 7
+}
+
+func writeThroughReference(reference &mut []i64) {
+    reference[0] = release(*reference)
+}
+
+func writeThroughReplacedReference(reference &mut []i64) {
+    reference[0] = replaceAndFree(reference)
+}
+
+func successfulReplacement(reference &mut []i64, other []i64) {
+    reference[0] = replace(reference, other)
+}
+
+func wrapped(values []i64) ![]i64 {
+    return ok(values)
+}
+
+func next(reference &mut i64) i64 {
+    *reference += 1
+    return 0
+}
+
+func main() {
+    var mode = readInt()
+    unsafe {
+        if mode == 0 {
+            var old = alloc[i64](1)
+            var current = old
+            var other = alloc[i64](1)
+            var visits i64 = 0
+            current[next(&mut visits)] += next(&mut visits) + 3
+            successfulReplacement(&mut current, other)
+            println(visits, old[0], current[0], other[0])
+
+            var outer = alloc[[]i64](1)
+            outer[0] = old
+            outer[0][releaseOuter(outer)] = 17
+            println(old[0])
+            free(old)
+            free(other)
+        } else if mode == 1 {
+            var values = alloc[i64](1)
+            values[0] = release(values)
+        } else if mode == 2 {
+            var values = alloc[i64](1)
+            values[0] += release(values)
+        } else if mode == 3 {
+            var values = alloc[Cell](1)
+            values[0].items[1] = releaseCells(values)
+        } else if mode == 4 {
+            var values = alloc[i64](1)
+            writeThroughReference(&mut values)
+        } else if mode == 5 {
+            var values = alloc[i64](1)
+            writeThroughReplacedReference(&mut values)
+        } else if mode == 6 {
+            var values = alloc[i64](1)
+            var _result = wrapped(values)
+            _result.value[0] = release(values)
+        }
+    }
+}

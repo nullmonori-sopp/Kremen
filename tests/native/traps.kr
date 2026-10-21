@@ -1,0 +1,64 @@
+package main
+
+func add(left i64, right i64) i64 {
+    return left + right
+}
+
+func divide(left i64, right i64) i64 {
+    return left / right
+}
+
+func failed() !i64 {
+    return fail(9)
+}
+
+func dynamicFailure(code i64) !i64 {
+    return fail(code)
+}
+
+func main() {
+    var mode = readInt()
+    if mode == 1 {
+        println(add(9223372036854775807, 1))
+    } else if mode == 2 {
+        println(divide(1, 0))
+    } else if mode == 3 {
+        var array = [2]i64{3, 5}
+        println(array[mode])
+    } else if mode == 4 {
+        var result = failed()
+        println(result.value)
+    } else if mode == 12 {
+        var result = dynamicFailure(mode - 12)
+        println(result.ok)
+    } else if mode == 13 {
+        var result = dynamicFailure(mode - 14)
+        println(result.ok)
+    } else {
+        unsafe {
+            var values = alloc[i64](2)
+            var alias = slice(values, 0, 1)
+            if mode == 5 {
+                free(values)
+                println(len(alias))
+            } else if mode == 6 {
+                free(values)
+                println(alias[0])
+            } else if mode == 7 {
+                free(values)
+                free(values)
+            } else if mode == 8 {
+                println(values[mode])
+            } else if mode == 9 {
+                var invalid = slice(values, 1, mode)
+                println(len(invalid))
+            } else if mode == 11 {
+                free(alias)
+            } else {
+                var invalid = alloc[i64](-mode)
+                println(len(invalid))
+            }
+            free(values)
+        }
+    }
+}

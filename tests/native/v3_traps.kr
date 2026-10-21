@@ -1,0 +1,49 @@
+package main
+
+func nested() {
+    defer println("inner")
+    panic("boom")
+}
+func escaped() []i64 {
+    arenablock memory {
+        unsafe { return arenaAlloc[i64](memory, 1) }
+    }
+}
+func invalidate(memory arena) i64 {
+    unsafe { arenaReset(memory) }
+    return 7
+}
+func main() {
+    var mode = readInt()
+    defer println("outer")
+    if mode == 0 { nested(); return }
+    if mode == 1 { assert(false); return }
+    if mode == 3 {
+        var values = escaped()
+        println(values[0])
+        return
+    }
+    unsafe {
+        var memory = arenaNew()
+        var values = arenaAlloc[i64](memory, 2)
+        if mode == 2 { arenaReset(memory); println(values[0]) }
+        if mode == 4 { free(values) }
+        if mode == 5 {
+            arenaFree(memory)
+            var next = arenaAlloc[i64](memory, 1)
+            println(len(next))
+            return
+        }
+        if mode == 6 {
+            defer arenaFree(memory)
+            values[0] = invalidate(memory)
+            return
+        }
+        if mode == 7 { arenaFree(memory); arenaFree(memory); return }
+        if mode == 8 {
+            var next = arenaAlloc[i64](memory, -mode)
+            println(len(next))
+        }
+        arenaFree(memory)
+    }
+}

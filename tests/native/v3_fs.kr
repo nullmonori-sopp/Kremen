@@ -1,0 +1,44 @@
+package main
+
+func save() !i64 {
+    var handle = fsOpen("output.bin", "wb")?
+    defer fileClose(handle)
+    return fsWriteAll(handle, "a\0b")
+}
+func main() {
+    var made = fsMkdir("folder")
+    assert(made.ok)
+    var written = fsWrite("folder/a", "hello")
+    assert(written.ok)
+    var appended = fsAppend("folder/a", "!")
+    assert(appended.ok)
+    println(fsRead("folder/a") catch "bad")
+    println(fsSize("folder/a") catch -1, fsIsDir("folder") catch false)
+    var moved = fsRename("folder/a", "folder/b")
+    assert(moved.ok)
+    var listed = fsList("folder")
+    assert(listed.ok)
+    unsafe { defer free(listed.value); println(len(listed.value), listed.value[0]) }
+    println(save() catch -1)
+    var input = fsOpen("output.bin", "rb")
+    assert(input.ok)
+    {
+        defer fileClose(input.value)
+        var bytes = fsReadAll(input.value)
+        assert(bytes.ok)
+        println(len(bytes.value))
+    }
+    var stale = fsReadAll(input.value)
+    println(stale.ok, stale.code > 0)
+    var missing = fsRead("missing")
+    println(missing.ok, len(errorMessage(missing.code)) > 0)
+    var invalid = fsRead("folder\0secret")
+    println(invalid.ok, invalid.code > 0)
+    var removed = fsRemove("folder/b")
+    assert(removed.ok)
+    removed = fsRemove("folder")
+    assert(removed.ok)
+    removed = fsRemove("output.bin")
+    assert(removed.ok)
+    println(fsExists("folder") catch true)
+}

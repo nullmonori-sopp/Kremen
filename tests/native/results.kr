@@ -1,0 +1,20 @@
+package main
+
+func double(value i64) !i64 {
+    if value < 0 {
+        return fail(17)
+    }
+    return ok(value * 2)
+}
+
+func next(value i64) !i64 {
+    var doubled = double(value)?
+    return ok(doubled + 1)
+}
+
+func main() {
+    var success = next(20)
+    println(success.ok, success.value)
+    var failure = next(-1)
+    println(failure.ok, failure.code)
+}
