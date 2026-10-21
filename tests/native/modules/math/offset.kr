@@ -1,0 +1,5 @@
+package offset
+
+func add(value i64) i64 {
+    return value + 10
+}
