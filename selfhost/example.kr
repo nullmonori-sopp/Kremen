@@ -1,0 +1,38 @@
+extern func rt_arg(index i64) string
+extern func rt_number(value i64) string
+extern func rt_cat(left string, right string) string
+extern func rt_write(path string, value string) i64
+
+func factorial(n i64) i64 {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+func main() i64 {
+    unsafe {
+        var n i64 = 1
+        var total i64
+        for n <= 10 {
+            if n == 3 {
+                n = n + 1
+                continue
+            }
+            total = total + n
+            if n == 6 {
+                break
+            }
+            n = n + 1
+        }
+        var correct bool = factorial(6) == 720 && total == 18
+        if correct {
+            var output string = rt_cat(rt_number(factorial(6)), rt_cat("|", rt_cat(rt_number(total), "|ok\n")))
+            return rt_write(rt_arg(1), output)
+        } else if total == 0 {
+            return 2
+        } else {
+            return 3
+        }
+    }
+}

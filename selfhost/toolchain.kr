@@ -1,0 +1,428 @@
+// The toolchain policy and command line are implemented in the bootstrap subset.
+// C host primitives provide process, filesystem and executable-path operations.
+extern func bootstrap_compile(input string, destination string) i64
+extern func rt_arg(index i64) string
+extern func rt_len(value string) i64
+extern func rt_slice(value string, start i64, end i64) string
+extern func rt_at(value string, index i64) i64
+extern func rt_cat(left string, right string) string
+extern func rt_equal(left string, right string) bool
+extern func host_argc() i64
+extern func host_env(name string) string
+extern func host_setenv(name string, value string) i64
+extern func host_resource(name string) string
+extern func host_executable() string
+extern func host_tempdir() string
+extern func host_stage_dir(output string) string
+extern func host_remove(path string) i64
+extern func host_rmdir(path string) i64
+extern func host_same_file(left string, right string) bool
+extern func host_publish(temporary string, output string) i64
+extern func host_exec_begin(program string) i64
+extern func host_exec_arg(argument string) i64
+extern func host_exec_run() i64
+extern func host_print(text string, standard_error bool) i64
+extern func host_equal_files(left string, right string) bool
+
+var driver_command string = ""
+var driver_source string = ""
+var driver_output string = ""
+var driver_cc string = "cc"
+var driver_optimization string = "-O3"
+var driver_run_start i64 = 0
+var driver_root string = ""
+var driver_work string = ""
+var driver_output_set bool = false
+var driver_cc_set bool = false
+var driver_optimization_set bool = false
+var driver_spawn_failed bool = false
+
+func driver_error(message string) i64 {
+    unsafe {
+        host_print(rt_cat("kremen-selfhost: ", rt_cat(message, "\n")), true)
+        return 1
+    }
+}
+
+func driver_usage_error(message string) i64 {
+    unsafe {
+        driver_error(message)
+        host_print("Use kremen-selfhost --help for command syntax.\n", true)
+        return 2
+    }
+}
+
+func driver_help() i64 {
+    unsafe {
+        host_print("Kremen selfhost 0.4.0 (bootstrap subset)\n", false)
+        host_print("usage: kremen-selfhost check SOURCE.kr [--cc COMPILER] [-O0..-O3]\n", false)
+        host_print("       kremen-selfhost emit-c SOURCE.kr -o FILE\n", false)
+        host_print("       kremen-selfhost build SOURCE.kr [-o FILE] [--cc COMPILER] [-O0..-O3]\n", false)
+        host_print("       kremen-selfhost run SOURCE.kr [--cc COMPILER] [-O0..-O3] [-- ARGS...]\n", false)
+        host_print("       kremen-selfhost bootstrap [-o FILE] [--cc COMPILER] [-O0..-O3]\n", false)
+        host_print("defaults: build a.out; bootstrap kremen-selfhost; CC environment or cc; -O3\n", false)
+        host_print("C backend: -std=c11 -Wall -Wextra -Wpedantic -Werror\n", false)
+        host_print("The bootstrap subset has i64, bool, string, functions, variables and control flow.\n", false)
+        host_print("The full native frontend remains a separate compiler. No shell is used for commands.\n", false)
+        return 0
+    }
+}
+
+func driver_has_kr_extension(filename string) bool {
+    unsafe {
+        var length i64 = rt_len(filename)
+        if length < 3 {
+            return false
+        }
+        return rt_equal(rt_slice(filename, length - 3, length), ".kr")
+    }
+}
+
+func driver_parse() i64 {
+    unsafe {
+        if host_argc() < 2 {
+            return driver_usage_error("a command is required")
+        }
+        driver_command = rt_arg(1)
+        if !rt_equal(driver_command, "check") && !rt_equal(driver_command, "emit-c") && !rt_equal(driver_command, "build") && !rt_equal(driver_command, "run") && !rt_equal(driver_command, "bootstrap") {
+            return driver_usage_error(rt_cat("unknown command: ", driver_command))
+        }
+        var environment_cc string = host_env("CC")
+        if !rt_equal(environment_cc, "") {
+            driver_cc = environment_cc
+        }
+        var argument_index i64 = 2
+        driver_run_start = host_argc()
+        for argument_index < host_argc() {
+            var argument string = rt_arg(argument_index)
+            if rt_equal(argument, "") {
+                return driver_usage_error("empty command arguments are not accepted before --")
+            } else if rt_equal(argument, "--") {
+                if !rt_equal(driver_command, "run") {
+                    return driver_usage_error("-- program arguments are accepted only by run")
+                }
+                driver_run_start = argument_index + 1
+                argument_index = host_argc()
+            } else if rt_equal(argument, "-o") {
+                if driver_output_set {
+                    return driver_usage_error("output was specified more than once")
+                }
+                argument_index = argument_index + 1
+                if argument_index >= host_argc() || rt_equal(rt_arg(argument_index), "") {
+                    return driver_usage_error("-o requires a nonempty output path")
+                }
+                driver_output = rt_arg(argument_index)
+                driver_output_set = true
+            } else if rt_equal(argument, "--cc") {
+                if driver_cc_set {
+                    return driver_usage_error("C compiler was specified more than once")
+                }
+                argument_index = argument_index + 1
+                if argument_index >= host_argc() || rt_equal(rt_arg(argument_index), "") {
+                    return driver_usage_error("--cc requires a compiler executable")
+                }
+                driver_cc = rt_arg(argument_index)
+                driver_cc_set = true
+            } else if rt_equal(argument, "-O0") || rt_equal(argument, "-O1") || rt_equal(argument, "-O2") || rt_equal(argument, "-O3") {
+                driver_optimization = argument
+                driver_optimization_set = true
+            } else if rt_at(argument, 0) == 45 {
+                return driver_usage_error(rt_cat("unknown option: ", argument))
+            } else {
+                if rt_equal(driver_command, "bootstrap") {
+                    return driver_usage_error("bootstrap does not accept a source argument")
+                }
+                if !rt_equal(driver_source, "") {
+                    return driver_usage_error("exactly one source file is required")
+                }
+                driver_source = argument
+            }
+            argument_index = argument_index + 1
+        }
+        if !rt_equal(driver_command, "bootstrap") {
+            if rt_equal(driver_source, "") {
+                return driver_usage_error("a source file is required")
+            }
+            if !driver_has_kr_extension(driver_source) {
+                return driver_usage_error("source file must have the .kr extension")
+            }
+        }
+        if rt_equal(driver_command, "check") || rt_equal(driver_command, "run") {
+            if driver_output_set {
+                return driver_usage_error("-o is supported by build, emit-c and bootstrap")
+            }
+        }
+        if rt_equal(driver_command, "emit-c") {
+            if !driver_output_set {
+                return driver_usage_error("emit-c requires -o FILE")
+            }
+            if driver_cc_set || driver_optimization_set {
+                return driver_usage_error("emit-c does not accept C compiler or optimization options")
+            }
+        }
+        if rt_equal(driver_command, "build") && !driver_output_set {
+            driver_output = "a.out"
+        }
+        if rt_equal(driver_command, "bootstrap") && !driver_output_set {
+            driver_output = "kremen-selfhost"
+        }
+        return 0
+    }
+}
+
+func driver_is_support_file(filename string) bool {
+    unsafe {
+        if host_same_file(filename, rt_cat(driver_root, "/bootstrap.kr")) || host_same_file(filename, rt_cat(driver_root, "/toolchain.kr")) || host_same_file(filename, rt_cat(driver_root, "/stage0.c")) {
+            return true
+        }
+        if host_same_file(filename, rt_cat(driver_root, "/runtime.c")) || host_same_file(filename, rt_cat(driver_root, "/runtime.h")) {
+            return true
+        }
+        if host_same_file(filename, rt_cat(driver_root, "/driver.c")) || host_same_file(filename, rt_cat(driver_root, "/host.c")) || host_same_file(filename, rt_cat(driver_root, "/host.h")) {
+            return true
+        }
+        return host_same_file(filename, host_executable())
+    }
+}
+
+func driver_protect_output() i64 {
+    unsafe {
+        if rt_equal(driver_output, "") {
+            return 0
+        }
+        if !rt_equal(driver_source, "") && host_same_file(driver_output, driver_source) {
+            return driver_error("output would overwrite source")
+        }
+        if driver_is_support_file(driver_output) {
+            return driver_error("output would overwrite a toolchain resource or the running executable")
+        }
+        return 0
+    }
+}
+
+func driver_begin(program string) i64 {
+    unsafe {
+        driver_spawn_failed = host_exec_begin(program) != 0
+        return 0
+    }
+}
+
+func driver_argument(argument string) i64 {
+    unsafe {
+        if !driver_spawn_failed {
+            if host_exec_arg(argument) != 0 {
+                driver_spawn_failed = true
+            }
+        }
+        return 0
+    }
+}
+
+func driver_execute() i64 {
+    unsafe {
+        if driver_spawn_failed {
+            return 1
+        }
+        return host_exec_run()
+    }
+}
+
+func driver_c_command() i64 {
+    unsafe {
+        driver_begin(driver_cc)
+        driver_argument("-std=c11")
+        driver_argument("-Wall")
+        driver_argument("-Wextra")
+        driver_argument("-Wpedantic")
+        driver_argument("-Werror")
+        driver_argument(driver_optimization)
+        return 0
+    }
+}
+
+func driver_cleanup() i64 {
+    unsafe {
+        if rt_equal(driver_work, "") {
+            return 0
+        }
+        host_remove(rt_cat(driver_work, "/program.c"))
+        host_remove(rt_cat(driver_work, "/program"))
+        host_remove(rt_cat(driver_work, "/compiler.c"))
+        host_remove(rt_cat(driver_work, "/compiler.o"))
+        host_remove(rt_cat(driver_work, "/toolchain.c"))
+        host_remove(rt_cat(driver_work, "/next-compiler.c"))
+        host_remove(rt_cat(driver_work, "/next-toolchain.c"))
+        host_rmdir(driver_work)
+        driver_work = ""
+        return 0
+    }
+}
+
+func driver_prepare() i64 {
+    unsafe {
+        if rt_equal(driver_output, "") {
+            driver_work = host_tempdir()
+        } else {
+            driver_work = host_stage_dir(driver_output)
+        }
+        if rt_equal(driver_work, "") {
+            return 1
+        }
+        return 0
+    }
+}
+
+func driver_normal() i64 {
+    unsafe {
+        var generated string = rt_cat(driver_work, "/program.c")
+        var binary string = rt_cat(driver_work, "/program")
+        var status i64 = bootstrap_compile(driver_source, generated)
+        if status != 0 {
+            return status
+        }
+        if rt_equal(driver_command, "emit-c") {
+            return host_publish(generated, driver_output)
+        }
+        driver_c_command()
+        driver_argument(generated)
+        if rt_equal(driver_command, "check") {
+            driver_argument("-fsyntax-only")
+        } else {
+            driver_argument(rt_cat(driver_root, "/runtime.c"))
+            driver_argument(rt_cat(driver_root, "/driver.c"))
+            driver_argument("-o")
+            driver_argument(binary)
+        }
+        status = driver_execute()
+        if status != 0 {
+            return status
+        }
+        if rt_equal(driver_command, "check") {
+            host_print(rt_cat(driver_source, ": OK\n"), false)
+            return 0
+        }
+        if rt_equal(driver_command, "build") {
+            status = host_publish(binary, driver_output)
+            if status == 0 {
+                host_print(rt_cat("Built ", rt_cat(driver_output, "\n")), false)
+            }
+            return status
+        }
+        driver_begin(binary)
+        var argument_index i64 = driver_run_start
+        for argument_index < host_argc() {
+            driver_argument(rt_arg(argument_index))
+            argument_index = argument_index + 1
+        }
+        return driver_execute()
+    }
+}
+
+func driver_next_emit(binary string, input string, destination string) i64 {
+    unsafe {
+        driver_begin(binary)
+        driver_argument("emit-c")
+        driver_argument(input)
+        driver_argument("-o")
+        driver_argument(destination)
+        return driver_execute()
+    }
+}
+
+func driver_bootstrap() i64 {
+    unsafe {
+        var compiler_source string = rt_cat(driver_root, "/bootstrap.kr")
+        var toolchain_source string = rt_cat(driver_root, "/toolchain.kr")
+        var compiler_c string = rt_cat(driver_work, "/compiler.c")
+        var compiler_object string = rt_cat(driver_work, "/compiler.o")
+        var toolchain_c string = rt_cat(driver_work, "/toolchain.c")
+        var binary string = rt_cat(driver_work, "/program")
+        var next_compiler string = rt_cat(driver_work, "/next-compiler.c")
+        var next_toolchain string = rt_cat(driver_work, "/next-toolchain.c")
+        var status i64 = bootstrap_compile(compiler_source, compiler_c)
+        if status != 0 {
+            return status
+        }
+        status = bootstrap_compile(toolchain_source, toolchain_c)
+        if status != 0 {
+            return status
+        }
+        driver_c_command()
+        driver_argument("-Dkr_main=kr_bootstrap_entry")
+        driver_argument("-c")
+        driver_argument(compiler_c)
+        driver_argument("-o")
+        driver_argument(compiler_object)
+        status = driver_execute()
+        if status != 0 {
+            return status
+        }
+        driver_c_command()
+        driver_argument(compiler_object)
+        driver_argument(toolchain_c)
+        driver_argument(rt_cat(driver_root, "/runtime.c"))
+        driver_argument(rt_cat(driver_root, "/host.c"))
+        driver_argument(rt_cat(driver_root, "/driver.c"))
+        driver_argument("-o")
+        driver_argument(binary)
+        status = driver_execute()
+        if status != 0 {
+            return status
+        }
+        status = driver_next_emit(binary, compiler_source, next_compiler)
+        if status != 0 {
+            return status
+        }
+        status = driver_next_emit(binary, toolchain_source, next_toolchain)
+        if status != 0 {
+            return status
+        }
+        if !host_equal_files(compiler_c, next_compiler) || !host_equal_files(toolchain_c, next_toolchain) {
+            return driver_error("self-hosting fixed point differs; output was preserved")
+        }
+        status = host_publish(binary, driver_output)
+        if status == 0 {
+            host_print("Self-hosting fixed point verified for compiler and driver C.\n", false)
+            host_print(rt_cat("Built ", rt_cat(driver_output, "\n")), false)
+        }
+        return status
+    }
+}
+
+func main() i64 {
+    unsafe {
+        if host_argc() == 2 && (rt_equal(rt_arg(1), "--help") || rt_equal(rt_arg(1), "help")) {
+            return driver_help()
+        }
+        if host_argc() == 2 && rt_equal(rt_arg(1), "--version") {
+            host_print("Kremen selfhost 0.4.0 (bootstrap subset)\n", false)
+            return 0
+        }
+        var status i64 = driver_parse()
+        if status != 0 {
+            return status
+        }
+        driver_root = host_resource("")
+        if rt_equal(driver_root, "") {
+            return driver_error("cannot find the self-hosting resources")
+        }
+        if host_setenv("KREMEN_SELFHOST_ROOT", driver_root) != 0 {
+            return 1
+        }
+        status = driver_protect_output()
+        if status != 0 {
+            return status
+        }
+        status = driver_prepare()
+        if status != 0 {
+            return status
+        }
+        if rt_equal(driver_command, "bootstrap") {
+            status = driver_bootstrap()
+        } else {
+            status = driver_normal()
+        }
+        driver_cleanup()
+        return status
+    }
+}

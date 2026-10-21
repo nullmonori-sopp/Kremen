@@ -1,0 +1,805 @@
+// The bootstrap compiler is written in the subset that it compiles.
+// Runtime externs supply strings, files and the process arguments only.
+extern func rt_len(value string) i64
+extern func rt_at(value string, index i64) i64
+extern func rt_slice(value string, start i64, end i64) string
+extern func rt_cat(left string, right string) string
+extern func rt_equal(left string, right string) bool
+extern func rt_number(value i64) string
+extern func rt_arg(index i64) string
+extern func rt_read(path string) string
+extern func rt_write(path string, value string) i64
+extern func rt_error(path string, line i64, column i64, message string) i64
+
+var source string = ""
+var path string = ""
+var offset i64 = 0
+var line i64 = 1
+var column i64 = 1
+var token string = ""
+var token_kind i64 = 0
+var token_line i64 = 1
+var token_column i64 = 1
+var declarations string = ""
+var definitions string = ""
+var loop_depth i64 = 0
+var parse_depth i64 = 0
+
+func fail(message string) i64 {
+    unsafe {
+        return rt_error(path, token_line, token_column, message)
+    }
+}
+
+func enter() i64 {
+    unsafe {
+        parse_depth = parse_depth + 1
+        if parse_depth > 128 {
+            return fail("parser nesting limit (128) exceeded")
+        }
+        return 0
+    }
+}
+
+func leave(value string) string {
+    unsafe {
+        parse_depth = parse_depth - 1
+        return value
+    }
+}
+
+func peek() i64 {
+    unsafe {
+        return rt_at(source, offset)
+    }
+}
+
+func bump() i64 {
+    unsafe {
+        if peek() == 10 {
+            line = line + 1
+            column = 1
+        } else {
+            column = column + 1
+        }
+        offset = offset + 1
+        return 0
+    }
+}
+
+func is_digit(c i64) bool {
+    unsafe {
+        return c >= 48 && c <= 57
+    }
+}
+
+func is_letter(c i64) bool {
+    unsafe {
+        return (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95
+    }
+}
+
+func next() i64 {
+    unsafe {
+        var scanning bool = true
+        for scanning {
+            for peek() == 32 || peek() == 9 || peek() == 10 || peek() == 13 || peek() == 59 {
+                bump()
+            }
+            if peek() == 47 && rt_at(source, offset + 1) == 47 {
+                for peek() != 10 && peek() >= 0 {
+                    bump()
+                }
+            } else {
+                scanning = false
+            }
+        }
+        token_line = line
+        token_column = column
+        var start i64 = offset
+        var c i64 = peek()
+        token_kind = 0
+        token = ""
+        if c < 0 {
+            return 0
+        }
+        if is_letter(c) {
+            bump()
+            for is_letter(peek()) || is_digit(peek()) {
+                bump()
+            }
+            token_kind = 1
+        } else if is_digit(c) {
+            bump()
+            for is_digit(peek()) {
+                bump()
+            }
+            if c == 48 && offset - start > 1 {
+                return fail("decimal integer literals must not have leading zeros")
+            }
+            token_kind = 2
+        } else if c == 34 {
+            bump()
+            for peek() != 34 && peek() >= 0 {
+                if peek() == 10 || peek() == 13 {
+                    return fail("newline inside string literal")
+                }
+                if peek() == 92 {
+                    bump()
+                    if peek() != 110 && peek() != 114 && peek() != 116 && peek() != 92 && peek() != 34 {
+                        return fail("unsupported string escape (use n, r, t, backslash or quote)")
+                    }
+                }
+                bump()
+            }
+            if peek() != 34 {
+                return fail("unterminated string literal")
+            }
+            bump()
+            token_kind = 3
+        } else {
+            bump()
+            var pair string = rt_slice(source, start, offset)
+            var following i64 = peek()
+            if (c == 61 || c == 33 || c == 60 || c == 62) && following == 61 {
+                bump()
+            } else if (c == 38 && following == 38) || (c == 124 && following == 124) {
+                bump()
+            } else if c != 40 && c != 41 && c != 123 && c != 125 && c != 61 && c != 43 && c != 45 && c != 42 && c != 47 && c != 37 && c != 60 && c != 62 && c != 33 && c != 44 {
+                return fail(rt_cat("unexpected character: ", pair))
+            }
+            token_kind = 4
+        }
+        token = rt_slice(source, start, offset)
+        return 0
+    }
+}
+
+func take(expected string) i64 {
+    unsafe {
+        if !rt_equal(token, expected) {
+            return fail(rt_cat(rt_cat("expected '", expected), rt_cat("', found '", rt_cat(token, "'"))))
+        }
+        return next()
+    }
+}
+
+func identifier() string {
+    unsafe {
+        if token_kind != 1 {
+            fail("expected an identifier")
+        }
+        var name string = token
+        if rt_equal(name, "kr_main") || semantic_reserved_identifier(name) {
+            fail("identifier belongs to a reserved C header/backend family")
+        }
+        if rt_equal(name, "true") || rt_equal(name, "false") || rt_equal(name, "i64") || rt_equal(name, "bool") || rt_equal(name, "string") || rt_equal(name, "var") || rt_equal(name, "func") || rt_equal(name, "unsafe") || rt_equal(name, "if") || rt_equal(name, "else") || rt_equal(name, "for") || rt_equal(name, "return") || rt_equal(name, "break") || rt_equal(name, "continue") {
+            fail("expected an identifier, found a reserved language word")
+        }
+        if rt_equal(name, "main") {
+            name = "kr_main"
+        }
+        if rt_equal(name, "auto") || rt_equal(name, "register") || rt_equal(name, "typedef") || rt_equal(name, "sizeof") || rt_equal(name, "goto") || rt_equal(name, "switch") || rt_equal(name, "case") || rt_equal(name, "default") || rt_equal(name, "static") || rt_equal(name, "union") || rt_equal(name, "enum") || rt_equal(name, "volatile") || rt_equal(name, "restrict") || rt_equal(name, "int") || rt_equal(name, "char") || rt_equal(name, "long") || rt_equal(name, "short") || rt_equal(name, "float") || rt_equal(name, "double") || rt_equal(name, "signed") || rt_equal(name, "unsigned") || rt_equal(name, "const") || rt_equal(name, "void") || rt_equal(name, "struct") || rt_equal(name, "extern") || rt_equal(name, "while") || rt_equal(name, "do") || rt_equal(name, "_Bool") || rt_equal(name, "_Alignas") || rt_equal(name, "_Alignof") || rt_equal(name, "_Atomic") || rt_equal(name, "_Complex") || rt_equal(name, "_Generic") || rt_equal(name, "_Imaginary") || rt_equal(name, "_Noreturn") || rt_equal(name, "_Static_assert") || rt_equal(name, "_Thread_local") {
+            fail("identifier is reserved by the bootstrap C backend")
+        }
+        next()
+        return name
+    }
+}
+
+func type_name() string {
+    unsafe {
+        var result string = ""
+        if rt_equal(token, "i64") {
+            result = "int64_t"
+        } else if rt_equal(token, "bool") {
+            result = "bool"
+        } else if rt_equal(token, "string") {
+            result = "const char *"
+        } else {
+            fail("expected bootstrap type i64, bool or string")
+        }
+        next()
+        return result
+    }
+}
+
+func precedence(op string) i64 {
+    unsafe {
+        if rt_equal(op, "||") {
+            return 1
+        }
+        if rt_equal(op, "&&") {
+            return 2
+        }
+        if rt_equal(op, "==") || rt_equal(op, "!=") {
+            return 3
+        }
+        if rt_equal(op, "<") || rt_equal(op, "<=") || rt_equal(op, ">") || rt_equal(op, ">=") {
+            return 4
+        }
+        if rt_equal(op, "+") || rt_equal(op, "-") {
+            return 5
+        }
+        if rt_equal(op, "*") || rt_equal(op, "/") || rt_equal(op, "%") {
+            return 6
+        }
+        return 0
+    }
+}
+
+// Semantic tables encode one identifier/signature pair per line. The compiler
+// owns parsing and typing; the C runtime still only provides host primitives.
+var semantic_globals string = ""
+var semantic_locals string = ""
+var semantic_collecting bool = true
+var semantic_in_function bool = false
+var semantic_result string = ""
+var semantic_expression_type string = ""
+var semantic_lvalue bool = false
+var semantic_call bool = false
+var semantic_constant bool = false
+var semantic_terminal bool = false
+var semantic_returns bool = false
+
+func semantic_prefix(value string, prefix string) bool {
+    unsafe {
+        var length i64 = rt_len(prefix)
+        if rt_len(value) < length { return false }
+        var index i64 = 0
+        for index < length {
+            if rt_at(value, index) != rt_at(prefix, index) { return false }
+            index = index + 1
+        }
+        return true
+    }
+}
+
+func semantic_reserved_identifier(name string) bool {
+    unsafe {
+        // stdint/stdbool and implementation macros are expanded before the C
+        // parser sees declarations. Reserve their families instead of allowing
+        // a valid Kremen name to turn into a token sequence in generated C.
+        if semantic_prefix(name, "INT") || semantic_prefix(name, "UINT") || semantic_prefix(name, "SIZE_") || semantic_prefix(name, "PTRDIFF_") || semantic_prefix(name, "SIG_ATOMIC_") || semantic_prefix(name, "WCHAR_") || semantic_prefix(name, "WINT_") || semantic_prefix(name, "_") || rt_equal(name, "NULL") {
+            return true
+        }
+        if semantic_prefix(name, "int") {
+            var suffix string = rt_slice(name, 3, rt_len(name))
+            if is_digit(rt_at(suffix, 0)) || rt_at(suffix, 0) == 95 || rt_equal(suffix, "max_t") || rt_equal(suffix, "ptr_t") { return true }
+        }
+        if semantic_prefix(name, "uint") {
+            var suffix string = rt_slice(name, 4, rt_len(name))
+            if is_digit(rt_at(suffix, 0)) || rt_at(suffix, 0) == 95 || rt_equal(suffix, "max_t") || rt_equal(suffix, "ptr_t") { return true }
+        }
+        return false
+    }
+}
+
+func semantic_lookup(table string, name string) string {
+    unsafe {
+        var wanted i64 = rt_len(name)
+        var length i64 = rt_len(table)
+        var position i64 = 0
+        for position < length {
+            var start i64 = position
+            for position < length && rt_at(table, position) != 58 {
+                position = position + 1
+            }
+            var matched bool = false
+            if position - start == wanted {
+                matched = rt_equal(rt_slice(table, start, position), name)
+            }
+            position = position + 1
+            start = position
+            for position < length && rt_at(table, position) != 10 {
+                position = position + 1
+            }
+            if matched {
+                return rt_slice(table, start, position)
+            }
+            position = position + 1
+        }
+        return ""
+    }
+}
+
+func semantic_record(table string, name string, value string) string {
+    unsafe {
+        return rt_cat(table, rt_cat(name, rt_cat(":", rt_cat(value, "\n"))))
+    }
+}
+
+func semantic_code(ctype string) string {
+    unsafe {
+        if rt_equal(ctype, "int64_t") { return "i" }
+        if rt_equal(ctype, "bool") { return "b" }
+        return "s"
+    }
+}
+
+func semantic_description(code string) string {
+    unsafe {
+        if rt_equal(code, "i") { return "i64" }
+        if rt_equal(code, "b") { return "bool" }
+        if rt_equal(code, "s") { return "string" }
+        return "invalid type"
+    }
+}
+
+func semantic_same(actual string, expected string) i64 {
+    unsafe {
+        if !semantic_collecting && !rt_equal(actual, expected) {
+            return fail(rt_cat("type mismatch: expected ", rt_cat(semantic_description(expected), rt_cat(", found ", semantic_description(actual)))))
+        }
+        return 0
+    }
+}
+
+func semantic_variable(name string) string {
+    unsafe {
+        var found string = semantic_lookup(semantic_locals, name)
+        if rt_equal(found, "") { found = semantic_lookup(semantic_globals, name) }
+        if !semantic_collecting {
+            if rt_equal(found, "") { fail(rt_cat("undefined name: ", name)) }
+            if rt_at(found, 0) != 86 { fail("function names are only valid in calls") }
+        }
+        return found
+    }
+}
+
+func semantic_bind_local(name string, ctype string) i64 {
+    unsafe {
+        if !rt_equal(semantic_lookup(semantic_locals, name), "") {
+            return fail(rt_cat("duplicate or shadowed local name: ", name))
+        }
+        semantic_locals = semantic_record(semantic_locals, name, rt_cat("V", semantic_code(ctype)))
+        return 0
+    }
+}
+
+func semantic_integer(text string) i64 {
+    unsafe {
+        var length i64 = rt_len(text)
+        if length > 19 { return fail("integer literal is outside i64 range") }
+        if length == 19 {
+            var limit string = "9223372036854775807"
+            var index i64 = 0
+            for index < length {
+                var digit i64 = rt_at(text, index)
+                var maximum i64 = rt_at(limit, index)
+                if digit > maximum { return fail("integer literal is outside i64 range") }
+                if digit < maximum { return 0 }
+                index = index + 1
+            }
+        }
+        return 0
+    }
+}
+
+func semantic_string_range(text string, start i64, end i64) string {
+    unsafe {
+        if end - start > 64 {
+            var middle i64 = start + (end - start) / 2
+            return rt_cat(semantic_string_range(text, start, middle), semantic_string_range(text, middle, end))
+        }
+        var result string = ""
+        var position i64 = start
+        var copied i64 = start
+        for position < end {
+            if rt_at(text, position) == 63 {
+                result = rt_cat(result, rt_cat(rt_slice(text, copied, position), "\\?"))
+                copied = position + 1
+            }
+            position = position + 1
+        }
+        return rt_cat(result, rt_slice(text, copied, end))
+    }
+}
+
+func semantic_string_literal(text string) string {
+    unsafe {
+        var length i64 = rt_len(text)
+        var position i64 = 0
+        for position < length {
+            if rt_at(text, position) == 63 { return semantic_string_range(text, 0, length) }
+            position = position + 1
+        }
+        return text
+    }
+}
+
+func primary() string {
+    unsafe {
+        enter()
+        var value string = ""
+        if rt_equal(token, "!") || rt_equal(token, "-") || rt_equal(token, "+") {
+            var unary string = token
+            next()
+            if rt_equal(unary, "-") && token_kind == 2 && rt_equal(token, "9223372036854775808") {
+                next()
+                semantic_expression_type = "i"
+                semantic_lvalue = false
+                semantic_call = false
+                semantic_constant = true
+                return leave("(-INT64_C(9223372036854775807) - INT64_C(1))")
+            }
+            value = primary()
+            if rt_equal(unary, "!") {
+                semantic_same(semantic_expression_type, "b")
+                semantic_expression_type = "b"
+            } else {
+                semantic_same(semantic_expression_type, "i")
+                semantic_expression_type = "i"
+            }
+            semantic_lvalue = false
+            semantic_call = false
+            return leave(rt_cat(rt_cat("(", unary), rt_cat(value, ")")))
+        }
+        if rt_equal(token, "(") {
+            next()
+            value = expression(1)
+            take(")")
+            return leave(rt_cat("(", rt_cat(value, ")")))
+        }
+        semantic_lvalue = false
+        semantic_call = false
+        semantic_constant = true
+        if token_kind == 2 {
+            semantic_integer(token)
+            value = rt_cat("INT64_C(", rt_cat(token, ")"))
+            semantic_expression_type = "i"
+            next()
+        } else if token_kind == 3 {
+            value = semantic_string_literal(token)
+            semantic_expression_type = "s"
+            next()
+        } else if rt_equal(token, "true") || rt_equal(token, "false") {
+            value = token
+            semantic_expression_type = "b"
+            next()
+        } else if token_kind == 1 {
+            var name string = identifier()
+            semantic_constant = false
+            if rt_equal(token, "(") {
+                var signature string = semantic_lookup(semantic_globals, name)
+                if !semantic_collecting {
+                    if !rt_equal(semantic_lookup(semantic_locals, name), "") {
+                        fail(rt_cat("local value is not callable: ", name))
+                    }
+                    if rt_equal(signature, "") { fail(rt_cat("undefined function: ", name)) }
+                    if rt_at(signature, 0) != 70 { fail(rt_cat("value is not callable: ", name)) }
+                }
+                next()
+                value = rt_cat(name, "(")
+                var argument i64 = 2
+                var first bool = true
+                for !rt_equal(token, ")") {
+                    if !first {
+                        take(",")
+                        value = rt_cat(value, ", ")
+                    }
+                    value = rt_cat(value, expression(1))
+                    if !semantic_collecting {
+                        if argument >= rt_len(signature) { fail(rt_cat("too many arguments for ", name)) }
+                        semantic_same(semantic_expression_type, rt_slice(signature, argument, argument + 1))
+                    }
+                    argument = argument + 1
+                    first = false
+                }
+                if !semantic_collecting && argument != rt_len(signature) {
+                    fail(rt_cat("incorrect argument count for ", name))
+                }
+                take(")")
+                value = rt_cat(value, ")")
+                if semantic_collecting {
+                    semantic_expression_type = "i"
+                } else {
+                    semantic_expression_type = rt_slice(signature, 1, 2)
+                }
+                semantic_lvalue = false
+                semantic_call = true
+                semantic_constant = false
+            } else {
+                var metadata string = semantic_variable(name)
+                if semantic_collecting {
+                    semantic_expression_type = "i"
+                } else {
+                    semantic_expression_type = rt_slice(metadata, 1, 2)
+                }
+                value = name
+                semantic_lvalue = true
+            }
+        } else {
+            fail(rt_cat("expected expression, found '", rt_cat(token, "'")))
+        }
+        return leave(value)
+    }
+}
+
+func expression(minimum i64) string {
+    unsafe {
+        enter()
+        var left string = primary()
+        var level i64 = precedence(token)
+        for level >= minimum {
+            var op string = token
+            var left_type string = semantic_expression_type
+            var left_constant bool = semantic_constant
+            next()
+            var right string = expression(level + 1)
+            var right_type string = semantic_expression_type
+            if rt_equal(op, "&&") || rt_equal(op, "||") {
+                semantic_same(left_type, "b")
+                semantic_same(right_type, "b")
+                semantic_expression_type = "b"
+            } else if rt_equal(op, "==") || rt_equal(op, "!=") {
+                semantic_same(right_type, left_type)
+                if !semantic_collecting && rt_equal(left_type, "s") {
+                    fail("string equality requires rt_equal")
+                }
+                semantic_expression_type = "b"
+            } else {
+                semantic_same(left_type, "i")
+                semantic_same(right_type, "i")
+                if level == 4 { semantic_expression_type = "b" } else { semantic_expression_type = "i" }
+            }
+            semantic_constant = left_constant && semantic_constant
+            semantic_lvalue = false
+            semantic_call = false
+            left = rt_cat("(", rt_cat(left, rt_cat(" ", rt_cat(op, rt_cat(" ", rt_cat(right, ")"))))))
+            level = precedence(token)
+        }
+        return leave(left)
+    }
+}
+
+func variable() string {
+    unsafe {
+        take("var")
+        var name string = identifier()
+        var ctype string = type_name()
+        var result string = rt_cat(ctype, rt_cat(" ", name))
+        if semantic_collecting && !semantic_in_function {
+            if !rt_equal(semantic_lookup(semantic_globals, name), "") {
+                fail(rt_cat("duplicate top-level name: ", name))
+            }
+            semantic_globals = semantic_record(semantic_globals, name, rt_cat("V", semantic_code(ctype)))
+        }
+        if !semantic_collecting && semantic_in_function && !rt_equal(semantic_lookup(semantic_globals, name), "") {
+            fail(rt_cat("local name shadows a top-level name: ", name))
+        }
+        if rt_equal(token, "=") {
+            next()
+            result = rt_cat(result, rt_cat(" = ", expression(1)))
+            semantic_same(semantic_expression_type, semantic_code(ctype))
+            if !semantic_collecting && !semantic_in_function && !semantic_constant {
+                fail("global initializer must be a literal constant expression")
+            }
+        } else {
+            if rt_equal(ctype, "const char *") { result = rt_cat(result, " = \"\"") } else { result = rt_cat(result, " = 0") }
+        }
+        if !semantic_collecting && semantic_in_function { semantic_bind_local(name, ctype) }
+        return rt_cat(result, ";\n")
+    }
+}
+
+func block() string {
+    unsafe {
+        enter()
+        take("{")
+        var saved_locals string = semantic_locals
+        var result string = "{\n"
+        var ended bool = false
+        var returned bool = false
+        for !rt_equal(token, "}") {
+            if token_kind == 0 { fail("expected '}' before end of file") }
+            if ended { fail("unreachable statement") }
+            result = rt_cat(result, statement())
+            ended = semantic_terminal
+            returned = semantic_returns
+        }
+        take("}")
+        semantic_locals = saved_locals
+        semantic_terminal = ended
+        semantic_returns = returned
+        return leave(rt_cat(result, "}\n"))
+    }
+}
+
+func statement() string {
+    unsafe {
+        enter()
+        semantic_terminal = false
+        semantic_returns = false
+        var result string = ""
+        if rt_equal(token, "var") { return leave(variable()) }
+        if rt_equal(token, "unsafe") { next(); return leave(block()) }
+        if rt_equal(token, "{") { return leave(block()) }
+        if rt_equal(token, "if") {
+            next()
+            result = rt_cat("if (", rt_cat(expression(1), ") "))
+            semantic_same(semantic_expression_type, "b")
+            result = rt_cat(result, block())
+            var then_terminal bool = semantic_terminal
+            var then_returns bool = semantic_returns
+            semantic_terminal = false
+            semantic_returns = false
+            if rt_equal(token, "else") {
+                next()
+                result = rt_cat(result, "else ")
+                if rt_equal(token, "if") { result = rt_cat(result, statement()) } else { result = rt_cat(result, block()) }
+                semantic_terminal = then_terminal && semantic_terminal
+                semantic_returns = then_returns && semantic_returns
+            }
+            return leave(result)
+        }
+        if rt_equal(token, "for") {
+            next()
+            loop_depth = loop_depth + 1
+            result = rt_cat("while (", rt_cat(expression(1), ") "))
+            semantic_same(semantic_expression_type, "b")
+            result = rt_cat(result, block())
+            loop_depth = loop_depth - 1
+            semantic_terminal = false
+            semantic_returns = false
+            return leave(result)
+        }
+        if rt_equal(token, "return") {
+            next()
+            result = rt_cat("return ", rt_cat(expression(1), ";\n"))
+            semantic_same(semantic_expression_type, semantic_result)
+            semantic_terminal = true
+            semantic_returns = true
+            return leave(result)
+        }
+        if rt_equal(token, "break") || rt_equal(token, "continue") {
+            if loop_depth == 0 { fail("break/continue requires an enclosing loop") }
+            result = rt_cat(token, ";\n")
+            next()
+            semantic_terminal = true
+            semantic_returns = false
+            return leave(result)
+        }
+        result = expression(1)
+        if rt_equal(token, "=") {
+            if !semantic_lvalue { fail("assignment requires a variable") }
+            var target_type string = semantic_expression_type
+            next()
+            result = rt_cat(result, rt_cat(" = ", expression(1)))
+            semantic_same(semantic_expression_type, target_type)
+        } else if !semantic_call {
+            fail("expression statement requires a function call")
+        }
+        return leave(rt_cat(result, ";\n"))
+    }
+}
+
+func semantic_skip_body() i64 {
+    unsafe {
+        take("{")
+        var depth i64 = 1
+        for depth > 0 {
+            if token_kind == 0 { return fail("expected '}' before end of file") }
+            if rt_equal(token, "{") { depth = depth + 1 }
+            if rt_equal(token, "}") { depth = depth - 1 }
+            if depth > 128 { return fail("parser nesting limit (128) exceeded") }
+            next()
+        }
+        return 0
+    }
+}
+
+func function_definition(external bool) i64 {
+    unsafe {
+        take("func")
+        var name string = identifier()
+        take("(")
+        var parameters string = ""
+        var parameter_types string = ""
+        semantic_locals = ""
+        var first bool = true
+        for !rt_equal(token, ")") {
+            if !first { take(","); parameters = rt_cat(parameters, ", ") }
+            var pname string = identifier()
+            var ptype string = type_name()
+            semantic_bind_local(pname, ptype)
+            parameter_types = rt_cat(parameter_types, semantic_code(ptype))
+            parameters = rt_cat(parameters, rt_cat(ptype, rt_cat(" ", pname)))
+            first = false
+        }
+        take(")")
+        if first { parameters = "void" }
+        var result_type string = type_name()
+        var metadata string = rt_cat("F", rt_cat(semantic_code(result_type), parameter_types))
+        if semantic_collecting {
+            if !rt_equal(semantic_lookup(semantic_globals, name), "") { return fail(rt_cat("duplicate top-level name: ", name)) }
+            if rt_equal(name, "kr_main") && (external || !rt_equal(metadata, "Fi")) {
+                return fail("entry point must be func main() i64")
+            }
+            semantic_globals = semantic_record(semantic_globals, name, metadata)
+            if !external { semantic_skip_body() }
+        } else {
+            var signature string = rt_cat(result_type, rt_cat(" ", rt_cat(name, rt_cat("(", rt_cat(parameters, ")")))))
+            declarations = rt_cat(declarations, rt_cat(signature, ";\n"))
+            if !external {
+                semantic_result = semantic_code(result_type)
+                semantic_in_function = true
+                definitions = rt_cat(definitions, rt_cat(signature, rt_cat(" ", block())))
+                semantic_in_function = false
+                if !semantic_returns { return fail(rt_cat("function may finish without returning: ", name)) }
+            }
+        }
+        semantic_locals = ""
+        return 0
+    }
+}
+
+func semantic_rewind() i64 {
+    unsafe {
+        offset = 0
+        line = 1
+        column = 1
+        token = ""
+        token_kind = 0
+        token_line = 1
+        token_column = 1
+        parse_depth = 0
+        loop_depth = 0
+        return next()
+    }
+}
+
+func semantic_translation_unit() i64 {
+    unsafe {
+        for token_kind != 0 {
+            if rt_equal(token, "extern") { next(); function_definition(true) }
+            else if rt_equal(token, "func") { function_definition(false) }
+            else if rt_equal(token, "var") { declarations = rt_cat(declarations, variable()) }
+            else { return fail("expected top-level func, extern func or var") }
+        }
+        return 0
+    }
+}
+
+func bootstrap_compile(input string, destination string) i64 {
+    unsafe {
+        path = input
+        source = rt_read(path)
+        declarations = ""
+        definitions = ""
+        semantic_globals = ""
+        semantic_locals = ""
+        semantic_collecting = true
+        semantic_in_function = false
+        semantic_result = ""
+        semantic_expression_type = ""
+        semantic_lvalue = false
+        semantic_call = false
+        semantic_constant = false
+        semantic_terminal = false
+        semantic_returns = false
+        semantic_rewind()
+        semantic_translation_unit()
+        if !rt_equal(semantic_lookup(semantic_globals, "kr_main"), "Fi") {
+            return fail("program requires func main() i64")
+        }
+        declarations = ""
+        definitions = ""
+        semantic_collecting = false
+        semantic_rewind()
+        semantic_translation_unit()
+        var output string = rt_cat("// Generated by the Kremen bootstrap compiler.\n#include <stdint.h>\n#include <stdbool.h>\n\n", rt_cat(declarations, rt_cat("\n", definitions)))
+        return rt_write(destination, output)
+    }
+}
+
+func main() i64 {
+    unsafe {
+        var input string = rt_arg(1)
+        var destination string = rt_arg(2)
+        if rt_equal(input, "") || rt_equal(destination, "") || !rt_equal(rt_arg(3), "") {
+            return rt_error("<command line>", 1, 1, "usage: selfhost input.kr output.c")
+        }
+        return bootstrap_compile(input, destination)
+    }
+}
