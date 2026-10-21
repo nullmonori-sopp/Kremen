@@ -1,0 +1,6 @@
+package main
+import "math/vec"
+func main() {
+	var point = vec.Vec{x: 3, y: 4}
+	println(vec.sum(point))
+}
