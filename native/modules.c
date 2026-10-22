@@ -68,6 +68,8 @@ static int compare_names(const void *a, const void *b) { return strcmp(*(const c
 
 Module *km_load(Context *ctx, const char *path) {
     Token tok = ctx->import_token;
+    Source missing = {.path = (char *)path};
+    if (!tok.src) tok = (Token){.src = &missing, .line = 1, .col = 1};
     char resolved[PATH_MAX];
     if (!realpath(path, resolved)) km_error(ctx, tok, "E010", "cannot resolve %s: %s", path, strerror(errno));
     for (size_t i = 0; i < ctx->modules.len; i++) {

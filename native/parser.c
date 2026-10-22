@@ -339,7 +339,15 @@ static Node *statement(Parser *p) {
             Token tag = take(p);
             if (strcmp(tag.kind, "ident") && strcmp(tag.kind, "ok") && strcmp(tag.kind, "fail")) km_error(p->ctx, tag, "E141", "expected a variant pattern or '_'");
             Node *arm = km_node(p->ctx, N_ARM, tag); arm->name = tag.text;
-            while (accept(p, ".")) arm->name = km_sprintf(p->ctx, "%s.%s", arm->name, expect(p, "ident").text);
+            Buffer qualified = {0};
+            while (accept(p, ".")) {
+                Token part = expect(p, "ident");
+                if (!qualified.len) km_buf_append(&qualified, tag.text, tag.len);
+                km_buf_puts(&qualified, ".");
+                km_buf_append(&qualified, part.text, part.len);
+            }
+            if (qualified.len) arm->name = km_strndup(p->ctx, qualified.data, qualified.len);
+            free(qualified.data);
             if (accept(p, "(")) {
                 while (!at(p, ")")) {
                     Token binding = expect(p, "ident"); Node *b = km_node(p->ctx, N_PARAM, binding); b->name = binding.text;

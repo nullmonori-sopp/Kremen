@@ -35,6 +35,8 @@ static Token lex_token(Lexer *l, const char *kind, size_t start, int line, int c
 }
 
 static void push_token(Lexer *l, Token t) {
+    if (l->tokens.len >= 1000000)
+        km_error(l->ctx, t, "E111", "Source exceeds the supported limit of 1000000 tokens");
     if (l->tokens.len == l->tokens.cap) {
         size_t cap = l->tokens.cap ? l->tokens.cap * 2 : 64;
         Token *data = km_alloc(l->ctx, cap * sizeof(*data));

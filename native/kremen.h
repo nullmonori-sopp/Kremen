@@ -25,12 +25,14 @@ typedef struct { Source **data; size_t len, cap; } Sources;
 typedef struct { Module **data; size_t len, cap; } Modules;
 typedef struct { char *data; size_t len, cap; } Buffer;
 typedef struct { char *kind, *text; size_t len, offset; int line, col; Source *src; } Token;
+typedef struct { char text[1024]; unsigned caret, width; } DiagnosticSpan;
 typedef struct { Token *data; size_t len, cap; } Tokens;
 typedef enum { TY_VOID, TY_INT, TY_BOOL, TY_STRING, TY_STRUCT, TY_ARRAY, TY_REF, TY_PTR, TY_SLICE, TY_RESULT, TY_FUNCTION, TY_TUPLE, TY_ENUM, TY_ARENA, TY_FILE } TypeKind;
 struct Type { TypeKind kind; char *name; Type *elem; size_t count; int bits; bool sign, mut; unsigned id; Node *decl; Token tok; Types members; };
 typedef enum { N_STRUCT, N_FN, N_PARAM, N_BLOCK, N_VAR, N_ASSIGN, N_EXPRSTMT, N_IF, N_FOR, N_RETURN, N_UNSAFE, N_BREAK, N_CONTINUE, N_INT, N_BOOL, N_STRING, N_NAME, N_BINARY, N_UNARY, N_CALL, N_FIELD, N_INDEX, N_STRUCTLIT, N_ARRAYLIT, N_IMPORT, N_TRY, N_DEFER, N_CATCH, N_ARENA, N_ENUM, N_VARIANT, N_MATCH, N_ARM, N_TUPLE, N_DESTRUCT } NodeKind;
 struct Node {
     NodeKind kind; Token tok; char *name, *op, *text, *cname, *builtin;
+    unsigned location_id;
     size_t text_len; uint64_t integer; bool flag, negative, external;
     Type *type, *annotation, *result, *typearg;
     Node *left, *right, *value, *base, *index, *callee, *condition;
@@ -45,11 +47,13 @@ typedef struct Import { char *alias; Module *target; Token tok; struct Import *n
 struct Source { char *path, *data; size_t len; bool header; Module *module; };
 struct Module { char *path, *name, *cname; Nodes decls; Sources sources; Import *imports; bool loading, loaded; };
 struct Context {
-    ArenaBlock *arena; Sources sources; Modules modules; Nodes decls, structs, functions;
+    ArenaBlock *arena; size_t arena_bytes; Sources sources; Modules modules; Nodes decls, structs, functions;
     Type *t_void, *t_bool, *t_string, *t_arena, *t_file, *ints[8]; unsigned next_type, next_symbol;
     jmp_buf failure; bool failure_ready; unsigned errors;
     char *project_root, *runtime_path, *cc; bool no_asm; int optimization;
     Token import_token;
+    Token related_token;
+    const char *related_message;
 };
 
 void *km_alloc(Context *, size_t);
@@ -64,6 +68,7 @@ void km_buf_append(Buffer *, const char *, size_t);
 void km_buf_puts(Buffer *, const char *);
 void km_buf_printf(Buffer *, const char *, ...);
 _Noreturn void km_error(Context *, Token, const char *, const char *, ...);
+void km_diagnostic_span(Token, DiagnosticSpan *);
 void km_init(Context *);
 void km_destroy(Context *);
 Node *km_node(Context *, NodeKind, Token);

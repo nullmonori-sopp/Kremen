@@ -43,8 +43,13 @@ char *km_format(Context *ctx, Source *src) {
             bool literal = depth ? literals[--depth] : false;
             if (literal) { trim(&w); emit(&w, "}"); }
             else {
+                /* Comments do not separate `}` from `else`. Looking only at
+                 * the physical token would insert a semicolon before them. */
+                size_t following = i + 1;
+                while (following < tokens.len && !strcmp(tokens.data[following].kind, "comment")) following++;
+                Token *significant_next = following < tokens.len ? &tokens.data[following] : NULL;
                 newline(&w); if (w.indent) w.indent--; emit(&w, "}");
-                if (next && !strcmp(next->text, "else")) space(&w);
+                if (significant_next && !strcmp(significant_next->text, "else")) space(&w);
                 else if (next && (!strcmp(next->text, ")") || !strcmp(next->text, ","))) { /* expression block not currently supported */ }
                 else newline(&w);
             }

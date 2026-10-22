@@ -14,15 +14,18 @@ static void copy_bytes(void *dst, const void *src, size_t n) {
 
 void *km_alloc(Context *ctx, size_t n) {
     size_t align = _Alignof(max_align_t);
-    if (n > SIZE_MAX - align) { fputs("kremen: allocation overflow\n", stderr); exit(2); }
+    const size_t limit = (size_t)512 * 1024 * 1024;
+    if (n > SIZE_MAX - align) km_error(ctx, (Token){0}, "E011", "compiler allocation size overflow");
     n = (n + align - 1) / align * align;
     if (!n) n = align;
     ArenaBlock *block = ctx->arena;
     if (!block || n > block->capacity - block->used) {
         size_t cap = n > 65536 ? n : 65536;
-        if (cap > SIZE_MAX - sizeof *block || !(block = calloc(1, sizeof *block + cap))) {
-            fputs("kremen: out of memory\n", stderr); exit(2);
-        }
+        if (cap > limit - sizeof *block || ctx->arena_bytes > limit - sizeof *block - cap)
+            km_error(ctx, (Token){0}, "E011", "compiler arena exceeds 512 MiB");
+        block = calloc(1, sizeof *block + cap);
+        if (!block) km_error(ctx, (Token){0}, "E011", "compiler out of memory");
+        ctx->arena_bytes += sizeof *block + cap;
         block->capacity = cap; block->next = ctx->arena; ctx->arena = block;
     }
     void *result = block->data + block->used;
@@ -31,6 +34,7 @@ void *km_alloc(Context *ctx, size_t n) {
 }
 
 char *km_strndup(Context *ctx, const char *s, size_t n) {
+    if (n == SIZE_MAX) km_error(ctx, (Token){0}, "E011", "compiler string size overflow");
     char *result = km_alloc(ctx, n + 1);
     copy_bytes(result, s, n); result[n] = 0; return result;
 }
@@ -45,7 +49,9 @@ char *km_sprintf(Context *ctx, const char *format, ...) {
 #define PUSH_IMPL(name, T, V) \
 void name(Context *ctx, V *vec, T value) { \
     if (vec->len == vec->cap) { \
+        if (vec->cap > SIZE_MAX / 2) km_error(ctx, (Token){0}, "E011", "compiler vector size overflow"); \
         size_t cap = vec->cap ? vec->cap * 2 : 16; \
+        if (cap > SIZE_MAX / sizeof(T)) km_error(ctx, (Token){0}, "E011", "compiler vector size overflow"); \
         T *data = km_alloc(ctx, cap * sizeof *data); \
         if (vec->len) copy_bytes(data, vec->data, vec->len * sizeof *data); \
         vec->data = data; vec->cap = cap; \
@@ -81,17 +87,69 @@ void km_buf_printf(Buffer *buf, const char *format, ...) {
     km_buf_append(buf, s, (size_t)n); free(s);
 }
 
+/* Choose a bounded window around the token before computing its end. Keeping
+ * these offsets ordered matters for errors near the end of very long lines. */
+void km_diagnostic_span(Token tok, DiagnosticSpan *span) {
+    memset(span, 0, sizeof *span);
+    span->width = 1;
+    if (!tok.src || !tok.src->data || tok.offset > tok.src->len) return;
+    const unsigned char *data = (const unsigned char *)tok.src->data;
+    size_t start = tok.offset, end = tok.offset;
+    while (start && tok.offset - start < 64 && data[start - 1] != '\n' && data[start - 1] != '\r') start--;
+    bool clipped = start && data[start - 1] != '\n' && data[start - 1] != '\r';
+    while (start < tok.offset && (data[start] & 0xc0) == 0x80) start++;
+    while (end < tok.src->len && data[end] != '\n' && data[end] != '\r' && end - start < 160) end++;
+    while (end > tok.offset && end < tok.src->len && (data[end] & 0xc0) == 0x80) end--;
+    size_t token_end = tok.len > end - tok.offset ? end : tok.offset + tok.len;
+    unsigned used = 0, cells = 0, token_cells = 0;
+    if (clipped) { memcpy(span->text, "...", 3); used = 3; cells = 3; }
+    /* Expand tabs within the visible window; continuation bytes add no cells.
+     * Work per excerpt stays bounded even for a multi-megabyte source line. */
+    unsigned column = 0;
+    for (size_t i = start; i < end; i++) {
+        if (i == tok.offset) span->caret = cells;
+        unsigned width = data[i] == '\t' ? 4 - column % 4 : (data[i] & 0xc0) == 0x80 ? 0 : 1;
+        if (data[i] == '\t') {
+            for (unsigned j = 0; j < width; j++) span->text[used++] = ' ';
+        } else span->text[used++] = data[i] < 32 || data[i] == 127 ? '?' : (char)data[i];
+        column += width; cells += width;
+        if (i >= tok.offset && i < token_end) token_cells += width;
+    }
+    if (tok.offset == end) span->caret = cells;
+    if (end < tok.src->len && data[end] != '\n' && data[end] != '\r') {
+        memcpy(span->text + used, "...", 3); used += 3;
+    }
+    span->text[used] = 0;
+    span->width = token_cells ? token_cells : 1;
+}
+
 _Noreturn void km_error(Context *ctx, Token tok, const char *code, const char *format, ...) {
     fprintf(stderr, "%s:%d:%d: error[%s]: ", tok.src ? tok.src->path : "<program>", tok.line ? tok.line : 1, tok.col ? tok.col : 1, code);
     va_list a; va_start(a, format); vfprintf(stderr, format, a); va_end(a); fputc('\n', stderr);
-    if (tok.src && tok.offset <= tok.src->len) {
-        size_t start = tok.offset, end = tok.offset;
-        while (start && tok.src->data[start - 1] != '\n') start--;
-        while (end < tok.src->len && tok.src->data[end] != '\n' && end - start < 200) end++;
-        if (tok.offset - start > 100) start = tok.offset - 80;
-        fputs("  ", stderr); fwrite(tok.src->data + start, 1, end - start, stderr); fputs("\n  ", stderr);
-        for (size_t i = start; i < tok.offset; i++) fputc(tok.src->data[i] == '\t' ? '\t' : ' ', stderr);
-        fputs("^\n", stderr);
+    if (tok.src && tok.src->data && tok.offset <= tok.src->len) {
+        DiagnosticSpan span; km_diagnostic_span(tok, &span);
+        int number = tok.line > 0 ? tok.line : 1, digits = 1;
+        for (int n = number; n >= 10; n /= 10) digits++;
+        fprintf(stderr, " %*s |\n %d | %s\n %*s | ", digits, "", number, span.text, digits, "");
+        for (unsigned i = 0; i < span.caret; i++) fputc(' ', stderr);
+        fputc('^', stderr);
+        for (unsigned i = 1; i < span.width; i++) fputc('~', stderr);
+        fputc('\n', stderr);
+    }
+    const char *hint = NULL;
+    if (strstr(format, "type mismatch")) hint = "Check the value and its declared type; Kremen does not convert types implicitly.";
+    else if (!strcmp(code, "E107")) hint = "Check the spelling, declaration scope, and any import qualifier.";
+    else if (!strcmp(code, "E131")) hint = "A shared reference allows reads only. A loan lasts until the end of its lexical block.";
+    else if (!strcmp(code, "E132")) hint = "This operation needs an explicit unsafe { ... } block; its memory must remain valid.";
+    else if (strstr(format, "contextual result")) hint = "Declare a result type, for example: var answer !i64 = ok(42).";
+    else if (strstr(format, "exhaustive")) hint = "Handle every variant, or add a final _ => { ... } arm.";
+    if (hint) fprintf(stderr, " help: %s\n", hint);
+    if (ctx->related_message && ctx->related_token.src) {
+        Token related = ctx->related_token;
+        DiagnosticSpan span; km_diagnostic_span(related, &span);
+        fprintf(stderr, "%s:%d:%d: note: %s\n %d | %s\n", related.src->path,
+                related.line, related.col, ctx->related_message, related.line, span.text);
+        ctx->related_message = NULL;
     }
     ctx->errors++;
     if (ctx->failure_ready) longjmp(ctx->failure, 1);
@@ -154,10 +212,11 @@ void km_init(Context *ctx) {
     static const char *names[] = {"i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64"};
     for (size_t i = 0; i < 8; i++) { Type *t = km_type(ctx, TY_INT, NULL); t->name = (char *)names[i]; t->bits = 8 << (i % 4); t->sign = i < 4; ctx->ints[i] = t; }
 }
-void km_destroy(Context *ctx) { ArenaBlock *b = ctx->arena; while (b) { ArenaBlock *next = b->next; free(b); b = next; } }
+void km_destroy(Context *ctx) { ArenaBlock *b = ctx->arena; while (b) { ArenaBlock *next = b->next; free(b); b = next; } ctx->arena = NULL; ctx->arena_bytes = 0; }
 
 Source *km_read_source(Context *ctx, const char *path, bool header) {
-    Token tok = {0};
+    Source missing = {.path = (char *)path};
+    Token tok = {.src = &missing, .line = 1, .col = 1};
     int fd = open(path, O_RDONLY | O_NONBLOCK);
     if (fd < 0) km_error(ctx, tok, "E010", "cannot open %s: %s", path, strerror(errno));
     struct stat state;
