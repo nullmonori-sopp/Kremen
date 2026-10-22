@@ -74,12 +74,40 @@ typedef struct {
     size_t len;
 } kr_slice;
 
-_Noreturn void kr_panic(const char *msg, int line) {
-    if (line > 0) {
-        (void)fprintf(stderr, "runtime error at line %d: %s\n", line, msg);
+/* Generated checks pass an immutable location ID. Resolving it only when a
+ * check fails adds no lookup or mutable location state on the success path. */
+typedef struct {
+    const char *path, *source;
+    int line, column;
+    unsigned caret, width;
+} kr_location;
+static const kr_location *kr_source_locations;
+static size_t kr_source_location_count;
+
+static void kr_report_error(const char *message, size_t length, int id) {
+    const kr_location *location = id > 0 && (size_t)id <= kr_source_location_count ? &kr_source_locations[id - 1] : NULL;
+    if (location != NULL) {
+        (void)fprintf(stderr, "%s:%d:%d: runtime error: ", location->path, location->line, location->column);
+    } else if (id > 0) {
+        (void)fprintf(stderr, "runtime error at line %d: ", id);
     } else {
-        (void)fprintf(stderr, "runtime error: %s\n", msg);
+        (void)fputs("runtime error: ", stderr);
     }
+    if (length) (void)fwrite(message, 1, length, stderr);
+    (void)fputc('\n', stderr);
+    if (location != NULL) {
+        int digits = 1;
+        for (int n = location->line; n >= 10; n /= 10) digits++;
+        (void)fprintf(stderr, " %*s |\n %d | %s\n %*s | ", digits, "", location->line, location->source, digits, "");
+        for (unsigned i = 0; i < location->caret; i++) (void)fputc(' ', stderr);
+        (void)fputc('^', stderr);
+        for (unsigned i = 1; i < location->width; i++) (void)fputc('~', stderr);
+        (void)fputc('\n', stderr);
+    }
+}
+
+_Noreturn void kr_panic(const char *msg, int line) {
+    kr_report_error(msg, strlen(msg), line);
     kr_defer_run_until(NULL);
     exit(EXIT_FAILURE);
 }
@@ -470,6 +498,10 @@ kr_string kr_read_line(int line) {
     if (ch == '\n' && length != 0 && data[length - 1] == '\r') {
         --length;
     }
+    if (length + 1 < capacity) {
+        char *trimmed = realloc(data, length + 1);
+        if (trimmed != NULL) data = trimmed;
+    }
     data[length] = '\0';
     kr_track(data, line);
     {
@@ -497,15 +529,7 @@ void kr_assert(bool condition, int line) {
 }
 
 _Noreturn void kr_user_panic(kr_string message, int line) {
-    if (line > 0) {
-        (void)fprintf(stderr, "runtime error at line %d: ", line);
-    } else {
-        (void)fputs("runtime error: ", stderr);
-    }
-    if (message.len != 0) {
-        (void)fwrite(message.data, 1, message.len, stderr);
-    }
-    (void)fputc('\n', stderr);
+    kr_report_error(message.data, message.len, line);
     kr_defer_run_until(NULL);
     exit(EXIT_FAILURE);
 }
@@ -525,20 +549,30 @@ static bool kr_fs_read_stream(FILE *stream, kr_string *out, int64_t *code) {
     char *data = malloc(capacity + 1);
     if (data == NULL) { *code = ENOMEM; return false; }
     for (;;) {
+        size_t n = fread(data + size, 1, capacity - size, stream); size += n;
+        if (ferror(stream)) { *code = kr_io_code(); free(data); return false; }
+        if (feof(stream)) break;
         if (size == capacity) {
-            if (capacity == limit) {
-                int ch = fgetc(stream);
-                if (ch == EOF && !ferror(stream)) break;
-                *code = ch == EOF ? kr_io_code() : EFBIG; free(data); return false;
+            /* Check EOF before growing. Exact power-of-two files should not
+             * retain twice their size merely to discover the end of input. */
+            int ch = fgetc(stream);
+            if (ch == EOF) {
+                if (ferror(stream)) { *code = kr_io_code(); free(data); return false; }
+                break;
             }
+            if (capacity == limit) { *code = EFBIG; free(data); return false; }
             capacity *= 2;
             char *grown = realloc(data, capacity + 1);
             if (grown == NULL) { free(data); *code = ENOMEM; return false; }
             data = grown;
+            data[size++] = (char)(unsigned char)ch;
         }
-        size_t n = fread(data + size, 1, capacity - size, stream); size += n;
-        if (ferror(stream)) { *code = kr_io_code(); free(data); return false; }
-        if (feof(stream)) break;
+    }
+    if (size < capacity) {
+        /* Strings are retained until exit. Return unused capacity when the
+         * allocator permits it; a failed optional shrink is still success. */
+        char *trimmed = realloc(data, size + 1);
+        if (trimmed != NULL) data = trimmed;
     }
     data[size] = 0; kr_track(data, 0); out->data = data; out->len = size; *code = 0; return true;
 }
