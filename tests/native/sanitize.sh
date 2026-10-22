@@ -20,6 +20,11 @@ export ASAN_OPTIONS UBSAN_OPTIONS
     native/fast_copy.c -o "$BUILD/kremen"
 sh tests/native/run.sh "$BUILD/kremen"
 sh tests/native/v3.sh "$BUILD/kremen"
+sh tests/native/frontend_stability.sh "$BUILD/kremen"
+sh tests/native/diagnostics.sh "$BUILD/kremen"
+SANITIZE_GENERATED=1 sh tests/native/semantic_stability.sh "$BUILD/kremen"
+SANITIZE=1 sh tests/native/runtime_stability.sh
+SANITIZE=1 sh tests/native/toolchain_stability.sh "$BUILD/kremen"
 SANITIZE_GENERATED=1 sh tests/native/v3.sh "$BUILD/kremen"
 
 "$BUILD/kremen" emit-c tests/native/memory_order.kr -o "$BUILD/memory_order.c"
@@ -35,10 +40,10 @@ for mode in 1 2 3 4 5 6; do
         printf 'error: stale assignment mode %s was accepted\n' "$mode" >&2
         exit 1
     fi
-    if ! grep -F 'runtime error at line ' "$BUILD/error" > /dev/null ||
+    if ! grep -F ': runtime error: ' "$BUILD/error" > /dev/null ||
        ! grep -F 'slice use after free' "$BUILD/error" > /dev/null; then
         cat "$BUILD/error" >&2
         exit 1
     fi
 done
-printf '%s\n' 'ASan/UBSan passed: 87 native compiler checks, 29 generated v0.3 checks and 7 assignment-lifetime scenarios.'
+printf '%s\n' 'ASan/UBSan passed: native compiler/runtime/toolchain regressions, generated v0.3/borrow tests and 7 assignment-lifetime scenarios.'

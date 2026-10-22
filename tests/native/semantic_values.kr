@@ -1,0 +1,32 @@
+package main
+
+type Box struct { number i64 }
+func step(value &mut i64) i64 { *value += 1; return *value }
+func checked(value &mut i64) !i64 { *value += 1; return fail(7) }
+func fallback() !i64 { return fail(5) }
+func store(pointer *i64, next i64) { unsafe { *pointer = next } }
+func observe(pointer &i64, number i64) i64 { return *pointer + number }
+func main() {
+    var value = 1
+    println(checked(&mut value) catch code => step(&mut value) + code)
+    println(value)
+    println(observe(&value, fallback() catch code => code))
+    unsafe {
+        var pointer = raw(&mut value)
+        store(pointer, 19)
+        println(*pointer)
+    }
+    const fixed i64 = 5
+    unsafe {
+        var shared = &fixed
+        var pointer = raw(shared)
+        println(*pointer)
+        println(*raw(&fixed))
+    }
+    var boxed = Box{number: 21}
+    unsafe {
+        var pointer = raw(&mut boxed)
+        (*pointer).number += 1
+        println((*pointer).number)
+    }
+}

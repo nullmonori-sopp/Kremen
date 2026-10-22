@@ -14,7 +14,13 @@ sh "$ROOT/install.sh" --prefix "$PREFIX" > "$WORK/log" 2>&1 || { cat "$WORK/log"
 "$PREFIX/bin/kremen" selfhost --version | grep -F 'selfhost' > /dev/null
 "$PREFIX/bin/kremen-selfhost" check "$ROOT/selfhost/example.kr" > "$WORK/log"
 "$PREFIX/bin/kremen" run "$ROOT/examples/hello.kr" > "$WORK/actual"
-printf 'Привет, Кремень!\n' > "$WORK/expected"
+printf 'Hello, Kremen!\n' > "$WORK/expected"
+cmp "$WORK/expected" "$WORK/actual"
+[ -f "$PREFIX/share/doc/kremen/docs/tutorial.md" ]
+[ -f "$PREFIX/share/doc/kremen/bench/check-results.txt" ]
+[ -f "$PREFIX/share/doc/kremen/bench/runtime-comparison.txt" ]
+"$PREFIX/bin/kremen" run "$PREFIX/share/doc/kremen/examples/tutorial/01_hello.kr" > "$WORK/actual"
+cmp "$WORK/expected" "$WORK/actual"
 # Runtime selection must prefer the installation even while the source tree exists.
 printf '\n/* installed runtime lookup probe */\n' >> "$PREFIX/share/kremen/runtime/kremen_rt.h"
 "$PREFIX/bin/kremen" emit-c "$ROOT/examples/hello.kr" -o "$WORK/probe.c"
