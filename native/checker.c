@@ -14,8 +14,8 @@ struct Binding {
     Symbol *sym; bool alive, constant, neg; uint64_t value;
     Binding *next, *hash_next, *scope_next;
 };
-struct Scope { Scope *parent; Binding *bindings; };
-struct Loan { Symbol *root, *owner; bool mut; unsigned depth; Loan *next; };
+struct Scope { Scope *parent; Binding *bindings; Loan *entry_loans; };
+struct Loan { Symbol *root, *owner; bool mut; unsigned depth; Token tok; Loan *next; };
 typedef struct {
     Context *ctx; Node *fn; unsigned depth, loops, unsafe_depth;
     Binding *bindings; Loan *loans; bool types_ready;
@@ -240,7 +240,7 @@ static size_t layout(Checker *c,Type *t,size_t *align,unsigned depth,Node *where
 }
 static void check_size(Checker *c,Type *t,Node *n) { size_t a; (void)layout(c,t,&a,0,n); }
 static void push(Checker *c) {
-    Scope *scope=km_alloc(cx(c),sizeof(*scope));scope->parent=c->scope;c->scope=scope;c->depth++;
+    Scope *scope=km_alloc(cx(c),sizeof(*scope));scope->parent=c->scope;scope->entry_loans=c->loans;c->scope=scope;c->depth++;
 }
 static void remove_temporary(Checker *c) {
     Loan **p=&c->loans;
@@ -251,6 +251,7 @@ static void release_since(Checker *c,Loan *baseline) {
     while(*p && *p!=baseline) { if((*p)->depth==UINT_MAX) *p=(*p)->next; else p=&(*p)->next; }
 }
 static void pop(Checker *c) {
+    Loan *baseline=c->scope->entry_loans;
     for(Binding *b=c->scope->bindings;b;b=b->scope_next) {
         Symbol *s=b->sym;
         if(!s->used&&s->name[0]!='_') km_error(cx(c),s->tok,"W001","unused variable or parameter '%s'; use it or prefix its name with '_'",s->name);
@@ -262,7 +263,12 @@ static void pop(Checker *c) {
     }
     c->scope=c->scope->parent;
     Loan **p=&c->loans;
-    while(*p) { if((*p)->depth==c->depth||(*p)->depth==UINT_MAX) *p=(*p)->next; else p=&(*p)->next; }
+    bool outer=false;
+    while(*p) {
+        if(*p==baseline)outer=true;
+        if((*p)->depth==c->depth||((*p)->depth==UINT_MAX&&!outer)) *p=(*p)->next;
+        else p=&(*p)->next;
+    }
     c->depth--;
 }
 static Binding *binding_for(Checker *c,Symbol *s) {
@@ -277,8 +283,11 @@ static bool has_binding(Checker *c,const char *name) { return local_binding(c,na
 static Symbol *bind(Checker *c,Node *n,Type *t,bool mutable) {
     bool imported=false; Module *m=module_of(c->fn);
     for(Import *i=m?m->imports:NULL;i;i=i->next) if(eq(i->alias,n->name)) imported=true;
-    if(eq(n->name,"_")||has_binding(c,n->name)||builtin_name(n->name)||find_fn(c,m,n->name,NULL)||find_struct(c,m,n->name,n->tok)||imported)
+    if(eq(n->name,"_")||has_binding(c,n->name)||builtin_name(n->name)||find_fn(c,m,n->name,NULL)||find_struct(c,m,n->name,n->tok)||imported) {
+        Binding *previous=local_binding(c,n->name);
+        if(previous) {cx(c)->related_token=previous->sym->tok;cx(c)->related_message="previous declaration is here";}
         km_error(cx(c),n->tok,"E108","declaration '%s' shadows an existing or reserved name",n->name);
+    }
     Symbol *s=km_alloc(cx(c),sizeof(*s));
     s->name=n->name;s->type=t;s->mutable=mutable;s->tok=n->tok;s->depth=c->depth;
     s->cname=km_sprintf(cx(c),"kr_v_%u_%s",++cx(c)->next_symbol,n->name);
@@ -295,15 +304,23 @@ static bool via_owns(Symbol *via,Symbol *owner) {
 }
 static void access_owner(Checker *c,Symbol *root,bool write,Node *n,Symbol *via) {
     if(!root) return;
-    for(Loan *l=c->loans;l;l=l->next) if(l->root==root && (!l->owner||!via_owns(via,l->owner)) && (write||l->mut))
+    for(Loan *l=c->loans;l;l=l->next) if(l->root==root && (!l->owner||!via_owns(via,l->owner)) && (write||l->mut)) {
+        cx(c)->related_token=l->tok;cx(c)->related_message="conflicting borrow starts here";
         km_error(cx(c),n->tok,"E131","cannot %s '%s' while it is borrowed; the loan ends with its lexical block",write?"write":"read",root->name);
+    }
 }
 static Loan *borrow(Checker *c,Symbol *root,bool mut,Node *n,bool persistent,Symbol *via) {
     access_owner(c,root,mut,n,via);
-    Loan *l=km_alloc(cx(c),sizeof(*l));l->root=root;l->mut=mut;l->depth=persistent?c->depth:UINT_MAX;l->next=c->loans;c->loans=l;
+    Loan *l=km_alloc(cx(c),sizeof(*l));l->root=root;l->mut=mut;l->tok=n->tok;l->depth=persistent?c->depth:UINT_MAX;l->next=c->loans;c->loans=l;
     return l;
 }
 static bool is_place(Node *n) { return n&&(n->kind==N_NAME||n->kind==N_FIELD||n->kind==N_INDEX||(n->kind==N_UNARY&&eq(n->op,"*"))); }
+/* Raw pointers keep the mutability of the reference that produced them. A
+ * *T parameter is writable; a local raw(shared) pointer is read-only. */
+static bool writable_pointer(Node *n) {
+    if(n->kind==N_NAME&&n->symbol)return n->symbol->borrow_mut;
+    return n->kind==N_CALL&&eq(n->builtin,"raw")&&n->args.len&&n->args.data[0]->type->mut;
+}
 static void ensure_mutable(Checker *c,Node *n) {
     if(n->kind==N_NAME) {
         Symbol *s=lookup(c,n->name,n,false);
@@ -314,6 +331,7 @@ static void ensure_mutable(Checker *c,Node *n) {
     else if(n->kind==N_UNARY&&eq(n->op,"*")) {
         Type *t=n->value->type;
         if(t&&t->kind==TY_REF&&!t->mut) km_error(cx(c),n->tok,"E131","cannot write through a shared reference");
+        if(t&&t->kind==TY_PTR&&!writable_pointer(n->value))km_error(cx(c),n->tok,"E131","cannot write through a raw pointer derived from a shared reference");
     }
 }
 static Place place(Checker *c,Node *n,bool write,bool read) {
@@ -331,6 +349,7 @@ static Place place(Checker *c,Node *n,bool write,bool read) {
         if(t->kind!=TY_REF&&t->kind!=TY_PTR) km_error(cx(c),n->tok,"E112","dereference requires a reference or raw pointer");
         if(t->kind==TY_PTR&&!c->unsafe_depth) km_error(cx(c),n->tok,"E132","raw pointer dereference requires an unsafe block");
         if(write&&t->kind==TY_REF&&!t->mut) km_error(cx(c),n->tok,"E131","cannot write through a shared reference");
+        if(write&&t->kind==TY_PTR&&!writable_pointer(n->value)) km_error(cx(c),n->tok,"E131","cannot write through a raw pointer derived from a shared reference");
         Symbol *s=n->value->symbol;
         p.root=s?(s->root?s->root:s):n->value->borrow_root;
         p.via=s?s:n->value->borrow_via;
@@ -494,6 +513,7 @@ static Type *ref_argument(Checker *c,Node *a,Type *expected,bool persistent) {
     Type *t=expr(c,a,expected,persistent);
     bool shared=t->kind==TY_REF&&expected->kind==TY_REF&&km_type_equal(t->elem,expected->elem)&&t->mut&&!expected->mut;
     if(!shared) same(c,t,expected,a);
+    if(t->kind==TY_PTR&&!writable_pointer(a))km_error(cx(c),a->tok,"E131","a writable pointer parameter requires raw(&mut value), not a shared-reference pointer");
     if((t->kind==TY_REF||t->kind==TY_PTR)&&a->kind==N_NAME) {
         Symbol *s=a->symbol,*root=s->root?s->root:s;
         borrow(c,root,t->kind==TY_REF?expected->mut:s->borrow_mut,a,persistent,s);
@@ -739,10 +759,11 @@ static Type *expr(Checker *c,Node *n,Type *expected,bool persistent) {
         n->type=t->elem;break;
     }
     case N_CATCH: {
+        Loan *baseline=c->loans;
         Type *want=expected?km_type(cx(c),TY_RESULT,expected):NULL;
         Type *t=expr(c,n->value,want,false);
         if(t->kind!=TY_RESULT)km_error(cx(c),n->tok,"E142","catch requires a result !T");
-        remove_temporary(c);push(c);
+        release_since(c,baseline);push(c);
         if(n->name&&!eq(n->name,"_"))n->symbol=bind(c,n,cx(c)->ints[3],false);
         same(c,expr(c,n->right,t->elem,false),t->elem,n->right);pop(c);n->type=t->elem;break;
     }
@@ -985,7 +1006,7 @@ bool km_check(Context *ctx) {
         c->fn=n;c->bindings=NULL;c->loans=NULL;c->depth=0;c->loops=0;c->unsafe_depth=0;
         c->scope=NULL;c->local_names=NULL;c->local_cap=0;c->local_count=0;push(c);
         if(n->receiver)n->receiver->symbol=bind(c,n->receiver,n->receiver->type,true);
-        for(size_t j=0;j<n->params.len;j++){Node *p=n->params.data[j];p->symbol=bind(c,p,p->type,true);}
+        for(size_t j=0;j<n->params.len;j++){Node *p=n->params.data[j];p->symbol=bind(c,p,p->type,true);p->symbol->borrow_mut=p->type->kind==TY_PTR;}
         bool terminal=block(c,n->body,false);
         if(n->result->kind!=TY_VOID&&!terminal)km_error(ctx,n->tok,"E120","function '%s' can finish without returning %s",n->name,km_type_name(ctx,n->result));
         pop(c);
