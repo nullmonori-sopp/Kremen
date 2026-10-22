@@ -1,6 +1,6 @@
 package main
 func main() {
-	println("Введите целое число:")
+	println("Enter an integer:")
 	number := readInt()
-	println("Удвоенное:", number * 2)
+	println("Doubled:", number * 2)
 }

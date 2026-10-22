@@ -4,11 +4,11 @@ func main() {
 	{
 		var reference &mut i64 = &mut value
 		*reference += 5
-		println("Через изменяемую ссылку:", *reference)
+		println("Through a mutable reference:", *reference)
 	}
 	{
 		var reference &i64 = &value
-		println("Через ссылку для чтения:", *reference)
+		println("Through a shared reference:", *reference)
 	}
-	println("После завершения заимствований:", value)
+	println("After the borrows end:", value)
 }

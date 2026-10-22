@@ -1,4 +1,4 @@
 package main
 func main() {
-	println("Привет, мир!")
+	println("Hello, Kremen!")
 }

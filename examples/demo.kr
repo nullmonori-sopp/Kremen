@@ -24,11 +24,11 @@ func main() {
 		}
 		counter.add(values[i])
 	}
-	println("Сумма массива:", sum(values))
-	println("Счётчик без пятёрки:", counter.current())
+	println("Array sum:", sum(values))
+	println("Counter without five:", counter.current())
 	if counter.current() == 12 {
-		println("Проверка пройдена")
+		println("Check passed")
 	} else {
-		panic("неверное значение счётчика")
+		panic("unexpected counter value")
 	}
 }
