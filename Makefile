@@ -1,12 +1,17 @@
 CC ?= cc
 CFLAGS ?= -O3
 STRICT = -std=c11 -Wall -Wextra -Wpedantic -Werror
+shell_quote = '$(subst ','"'"',$(1))'
+CC_COMMAND = $(call shell_quote,$(CC))
+HOST_OS := $(shell uname -s)
 ARCH := $(shell uname -m)
 USE_ASM ?= 1
 COPY = native/fast_copy.c
+ifeq ($(HOST_OS),Linux)
 ifeq ($(ARCH),x86_64)
 ifeq ($(USE_ASM),1)
 COPY = native/fast_copy.S
+endif
 endif
 endif
 SOURCES = native/core.c native/lexer.c native/parser.c native/modules.c native/checker.c native/codegen.c native/format.c native/main.c
@@ -16,17 +21,23 @@ all: build/kremen
 
 build/config: FORCE
 	mkdir -p build
-	@printf '%s\n' '$(CC) $(STRICT) $(CFLAGS) $(COPY)' > build/config.tmp
+	@printf '%s\n' $(call shell_quote,$(CC) $(STRICT) $(CFLAGS) $(COPY)) > build/config.tmp
 	@cmp -s build/config.tmp build/config || cp build/config.tmp build/config
 	@rm -f build/config.tmp
 
-build/kremen: $(SOURCES) $(COPY) native/kremen.h runtime/kremen_rt.h build/config
+build/kremen: $(SOURCES) $(COPY) native/kremen.h selfhost/platform.h runtime/kremen_rt.h build/config
 	mkdir -p build
-	$(CC) $(STRICT) $(CFLAGS) -DKM_RUNTIME_PATH='"$(CURDIR)/runtime/kremen_rt.h"' -DKM_SELFHOST_PATH='"$(CURDIR)/selfhost/build/kremen-selfhost"' $(SOURCES) $(COPY) -o $@
+	$(CC_COMMAND) $(STRICT) $(CFLAGS) $(SOURCES) $(COPY) -o $@
 
 test: build/kremen
 	sh tests/native/run.sh ./build/kremen
 	sh tests/native/v3.sh ./build/kremen
+	sh tests/native/frontend_stability.sh ./build/kremen
+	sh tests/native/semantic_stability.sh ./build/kremen
+	sh tests/native/runtime_stability.sh
+	sh tests/native/toolchain_stability.sh ./build/kremen
+	sh tests/native/diagnostics.sh ./build/kremen
+	sh tests/native/tutorial.sh ./build/kremen
 	$(MAKE) test-selfhost
 	sh tests/native/source_io.sh
 
@@ -59,15 +70,18 @@ bootstrap:
 
 selfhost: selfhost/build/kremen-selfhost
 
-selfhost/build/kremen-selfhost: selfhost/bootstrap.kr selfhost/toolchain.kr selfhost/stage0.c selfhost/runtime.c selfhost/runtime.h selfhost/driver.c selfhost/host.c selfhost/host.h selfhost/bootstrap.sh
+selfhost/build/kremen-selfhost: selfhost/bootstrap.kr selfhost/toolchain.kr selfhost/stage0.c selfhost/runtime.c selfhost/runtime.h selfhost/driver.c selfhost/host.c selfhost/host.h selfhost/platform.h selfhost/bootstrap.sh
 	sh selfhost/bootstrap.sh
 
 test-selfhost: selfhost/build/kremen-selfhost
 	sh tests/selfhost/semantics.sh
 	sh tests/selfhost/toolchain.sh
+	sh tests/selfhost/frontend_stability.sh
+	sh tests/selfhost/runtime_stability.sh
+	sh tests/selfhost/diagnostics.sh
 
 bench: build/kremen
-	$(CC) $(STRICT) $(CFLAGS) bench/copy.c $(COPY) -o build/bench-copy
+	$(CC_COMMAND) $(STRICT) $(CFLAGS) bench/copy.c $(COPY) -o build/bench-copy
 	./build/bench-copy
 
 clean:

@@ -1,32 +1,46 @@
-# История версий
+# Changelog
+
+## 0.4.2 — 2026-10-22
+
+- Rewrite all Markdown documentation in English; add first-program instructions, ten guided lessons, complete runnable examples, an error guide, and a documentation map.
+- Add numbered, bounded source excerpts, token underlines, and help text to native diagnostics; fix clipping beyond the old long-line window.
+- Report earlier borrow and local declaration locations, and identify missing source paths consistently.
+- Embed full-language runtime locations and excerpts, including imported files and deferred operations, without lookup on successful checks.
+- Track source expressions and names in bootstrap type/name errors; add input excerpts and regenerate the verified C seed.
+- Install saved benchmark reports, verify installed example output, and use English output in general examples.
+- Add diagnostic and tutorial regressions, and document exact repository additions/replacements for this and the preceding release.
+
+## 0.4.1 — 2026-10-22
+
+- Preserve outer expression loans through `catch`; reject writes through raw pointers derived from shared references.
+- Preserve block comments around `if`/`else`; bound tokens and compiler arena allocation with checked size arithmetic.
+- Sequence bootstrap expressions and check arithmetic; regenerate the reproducible seed.
+- Pack bootstrap strings into chunks, cache lengths and backend type mappings, use stack formatting, and shrink successful input/file strings where possible.
+- Add executable lookup without `/proc`, C fallback outside Linux x86-64, support quoted paths, and grow child argument storage dynamically.
+- Protect sources/runtime/compiler from overwrite; validate CLI options and support `--`.
+- Extend regressions, sanitizer coverage, benchmarks, installer resources, and source packaging. See [release notes](docs/v0.4.1.md).
 
 ## 0.4.0 — 2026-10-21
 
-- CLI bootstrap на Kremen: `check`, `emit-c`, `build`, `run`, `bootstrap`; запуск через `kremen selfhost` и отдельную команду `kremen-selfhost`.
-- Строгая типизация подмножества на Kremen: имена, области видимости, вызовы, операторы, условия, возвраты, литералы и точка входа проверяются до C backend.
-- Самопересборка компилятора и драйвера с побайтной проверкой C следующей стадии.
-- Запуск процессов без shell, буквальные аргументы, сохранение статусов, временные каталоги и атомарная публикация артефактов.
-- Защита входных файлов и ресурсов от перезаписи через совпадающие пути, симлинки и жёсткие ссылки.
-- Загрузчики исходников отвергают FIFO без ожидания; bootstrap диагностирует конфликтующие C-имена и сохраняет строковые триграфы C11 без изменения байтов.
-- Установка bootstrap и исходников для самопересборки, проверки переноса и удаления, регрессии и ASan/UBSan для нового C/процессного слоя.
-
-Полный frontend из `native/` остаётся на C. Bootstrap работает с собственным подмножеством, C toolchain и libc; freestanding и MMIO пока относятся к дальнейшему плану.
+- Add the Kremen-written subset CLI: `check`, `emit-c`, `build`, `run`, and `bootstrap`, reachable through `kremen selfhost`.
+- Check subset names, scopes, calls, operators, conditions, returns, literals, and entry points before the C backend.
+- Verify compiler and CLI next-stage C during self-rebuild.
+- Launch children without a shell, preserve arguments/statuses, and publish artifacts atomically after success.
+- Protect sources and resources through path/link aliases; reject FIFO inputs without waiting.
+- Fix C-header identifier conflicts and C11 string trigraph preservation.
+- Install subset rebuild resources and extend relocation, removal, and sanitizer checks.
 
 ## 0.3.0 — 2026-10-20
 
-- `defer`: захват аргументов при регистрации, LIFO-очистка на выходах из блока и при аварийном завершении.
-- `catch` с запасным значением и необязательной привязкой кода ошибки; `match` для `!T`.
-- `arenablock`, ручные арены в `unsafe`, обнулённая bump-аллокация и проверка устаревших срезов после reset/free.
-- Файловый API с результатами, бинарными строками, файловыми дескрипторами и явной очисткой.
-- Тегированные `enum` с полезной нагрузкой, проверка полноты `match`, кортежи и деструктуризация.
-- Форматтер для нового синтаксиса, регрессии, проверки ASan/UBSan.
-- Исходный пакет полностью на C/Asm/Kremen и shell; Python-реализация и её тесты удалены.
-- Инсталлятор, поиск runtime относительно установленного бинарного файла, ZIP/tar.gz и SHA-256-манифесты.
+- Add `defer`, result `catch` and matching, arenas, filesystem built-ins, payload enums, exhaustive `match`, tuples, and destructuring.
+- Extend formatting, regression coverage, and ASan/UBSan checks.
+- Remove the Python implementation and tests from the source package.
+- Add an installer, executable-relative runtime lookup, source archives, and checksum manifests.
 
 ## 0.2
 
-Нативный C11-компилятор, строгие предупреждения, локальные модули и `.krh`, `!T`/`?`, динамические срезы, форматтер, bootstrap отдельного подмножества. [Миграция](docs/v0.2.md).
+Introduce the native compiler, strict C11 flags, local imports and headers, results, slices, formatting, and a subset bootstrap. See [migration notes](docs/v0.2.md).
 
 ## 0.1
 
-Первый прототип синтаксиса, типов, структур, методов и проверок ссылок. Историческая реализация не поставляется в 0.3.
+Initial syntax, types, structs, methods, and reference checks. The original implementation is no longer distributed.

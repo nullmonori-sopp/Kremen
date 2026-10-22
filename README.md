@@ -1,103 +1,86 @@
-# Кремень / Kremen 0.4.0
+# Kremen 0.4.2
 
-Кремень — компилируемый язык для системного программирования с синтаксисом в духе Go. Основной компилятор написан на C11; backend создаёт C11 и вызывает GCC/Clang. Для копирования больших буферов есть небольшой Asm-модуль x86-64 System V и переносимая реализация на C. В пакете нет Python и зависимости от него.
+Kremen is a small compiled language for learning and experimenting with systems programming. Its syntax is inspired by Go. It has explicit integer types, structs and methods, checked references, raw pointers, arrays, slices, results, and scoped resource cleanup.
 
-В версии 0.4 появился рабочий драйвер bootstrap на Kremen: `check`, `build`, `run`, `emit-c` и самопересборка. Bootstrap сам проверяет типы своего подмножества и воспроизводит C-код собственных компилятора и CLI. Команда `kremen selfhost` подключает его к основной установке.
+The main compiler is written in C11. It translates Kremen into C and asks a C compiler to produce an executable. A separate, smaller compiler and command-line driver are written in Kremen and can rebuild themselves. The [self-hosting guide](docs/selfhosting.md) explains that distinction.
 
-Полный язык сохраняет возможности 0.3: `defer`, `catch` для `!T`, `arenablock`, файловые операции, алгебраические типы `enum`, исчерпывающий `match`, кортежи, структуры и методы, ссылки с проверкой заимствований, указатели в `unsafe`, массивы, срезы, локальные импорты и форматтер.
+**New to programming? Start with [Your first program](docs/getting-started.md), then follow the [ten-lesson tutorial](docs/tutorial.md).** Every lesson has a complete source file and expected output. You do not need a library or an account to use the examples.
 
-## Установка из архива
+## Build and try it
 
-Нужны Linux/POSIX, C11-компилятор (`cc`, GCC), `make` и стандартные shell-утилиты. Проверенная платформа выпуска — Linux x86-64 с GCC. C-компилятор нужен также для `kremen build` и `kremen run`.
+The tested platform is Linux x86-64 with GCC. You need a C11 compiler, `make`, and standard POSIX shell tools. Python is not used. A C compiler is also needed whenever Kremen builds a program.
 
-```sh
-unzip kremen-v0.4.0.zip
-cd kremen
-sh install.sh
-export PATH="$HOME/.local/bin:$PATH"
-kremen --version
-kremen run examples/hello.kr
-```
-
-По умолчанию установка идёт в `$HOME/.local`. Другой каталог и удаление:
-
-```sh
-sh install.sh --prefix /absolute/path/to/kremen
-sh install.sh --prefix /absolute/path/to/kremen --uninstall
-```
-
-Инсталлятор собирает основной компилятор и bootstrap с драйвером, устанавливает runtime, исходники для самопересборки, документацию и примеры. Он не скачивает зависимости, не запускает `sudo` и не меняет настройки shell. Установку можно переносить целиком: ресурсы ищутся относительно исполняемого файла. Подробности: [docs/install.md](docs/install.md).
-
-## Работа из исходников
+From the unpacked `kremen` directory:
 
 ```sh
 make
-./build/kremen check examples/resources.kr
-./build/kremen run examples/resources.kr
-./build/kremen build examples/algebra.kr -o build/algebra
-./build/kremen emit-c examples/algebra.kr -o build/algebra.c
-./build/kremen fmt -w examples/algebra.kr
-./build/kremen fmt --check examples/algebra.kr
-make selfhost
-./build/kremen selfhost check selfhost/example.kr
-./build/kremen selfhost run selfhost/example.kr -- /tmp/kremen-example.txt
-./build/kremen selfhost bootstrap -o build/kremen-selfhost-next
-make test
-make test-sanitize
-make test-install
-make examples
-make dist
+./build/kremen run examples/tutorial/01_hello.kr
 ```
 
-По умолчанию и для компилятора, и для создаваемых программ включены `-std=c11 -Wall -Wextra -Wpedantic -Werror`; оптимизация — `-O3`. Проверки безопасности сохраняются при оптимизации. Для программы можно выбрать `-O0`…`-O3`, `--cc /path/to/cc` и `--root /project`. `make USE_ASM=0` собирает полностью C-вариант компилятора.
+You should see:
 
-Основной `check` не вызывает C-компилятор; `emit-c` требует только поставляемый runtime. У отдельного `selfhost check` после собственной типизации есть дополнительная проверка C backend. Форматтер читает stdin или один файл и пишет stdout; `-w` меняет файлы, `--check` проверяет каноническое оформление. Вводить несколько файлов можно с `-w` либо `--check`.
+```text
+Hello, Kremen!
+```
 
-## Пример
+To install both toolchains in your home directory:
+
+```sh
+sh install.sh
+export PATH="$HOME/.local/bin:$PATH"
+kremen --version
+```
+
+The installer builds locally, uses `$HOME/.local` by default, and does not edit your shell settings. For a different location, relocation, or removal, see [Installation](docs/install.md). The source archive contains `install.sh`; it does not contain prebuilt binaries.
+
+## A small program
 
 ```go
 package main
 
-type Answer enum {
-    Empty
-    Number(value i64)
-}
-
-func readAnswer(path string) !string {
-    var handle = fsOpen(path, "rb")?
-    defer fileClose(handle)
-    return fsReadAll(handle)
+func doubled(value i64) !i64 {
+    if value < 0 {
+        return fail(7)
+    }
+    return ok(value * 2)
 }
 
 func main() {
-    defer println("завершено")
-    var answer = Answer.Number(42)
-    match answer {
-        Empty => { println("пусто") }
-        Number(value) => { println(value) }
-    }
-    var (number, label) = (7, "кортеж")
-    println(number, label)
-    println(readAnswer("input.txt") catch code => errorMessage(code))
-    arenablock memory {
-        unsafe {
-            var values = arenaAlloc[i64](memory, 4)
-            values[0] = 9
-            println(values[0])
-        }
-    }
+    defer println("finished")
+    println(doubled(21) catch 0)
 }
 ```
 
-`defer` захватывает аргументы при регистрации и исполняется в обратном порядке при выходе из **текущего блока**, включая `return`, `break`, `continue`, `?` и `panic`. Это явная очистка ресурсов; автоматических пользовательских деструкторов типов нет. `catch` вычисляет запасное значение только при ошибке. `panic` выполняет отложенную очистку и завершает процесс; `recover` не реализован.
+This prints `42`, then `finished`. `!i64` means the function returns either an integer or an error code. `catch 0` supplies a fallback when it fails. `defer` schedules a call for the end of the current block. The [tutorial](docs/tutorial.md) introduces these ideas one at a time.
 
-## Документация и границы
+## Everyday commands
 
-- [Справочник языка](docs/language.md): синтаксис, типы, память и файловый API.
-- [Модель безопасности](docs/safety.md): гарантии и ограничения.
-- [Изменения 0.4](docs/v0.4.md), [возможности 0.3](docs/v0.3.md) и [история версий](CHANGELOG.md).
-- [Проверки выпуска](docs/validation.md) и [измерения](bench/README.md).
-- [Bootstrap на Kremen](selfhost/README.md): отдельное самокомпилируемое подмножество.
-- [Драйвер self-hosting и системное направление](docs/selfhosting.md).
+```sh
+./build/kremen check examples/tutorial/04_functions.kr
+./build/kremen build examples/tutorial/04_functions.kr -o build/answer
+./build/answer
+./build/kremen emit-c examples/tutorial/04_functions.kr -o build/answer.c
+./build/kremen fmt -w examples/tutorial/04_functions.kr
+./build/kremen fmt --check examples/tutorial/04_functions.kr
+```
 
-Основной компилятор полного языка пока остаётся на C. В `selfhost/` проверяются seed → stage1 → stage2 → stage3 и самопересборка компилятора вместе с драйвером; полный перенос всех возможностей языка ещё предстоит. C-toolchain и libc остаются зависимостями. Freestanding/ядра, потоки, GC, интерфейсы, наследование и произвольный C FFI пока не поддерживаются. Версия 0.4 — развивающийся прототип; совместимость ABI между выпусками не обещана.
+`check` checks Kremen without invoking a C compiler. `run` builds a temporary executable and runs it. `build` keeps the executable. `emit-c` lets you inspect the generated C, which includes the runtime. `fmt` gives the code its canonical layout.
+
+The default C flags are `-std=c11 -Wall -Wextra -Wpedantic -Werror -O3`. Safety checks stay enabled at every optimization level. The language also rejects unused bindings and shadowed names. An intentional unused name starts with `_`.
+
+## What changed
+
+Version 0.4.2 adds English learning material and source excerpts in compiler and runtime errors. It fixes diagnostic clipping on long lines and identifies the origin of conflicting borrows and local declarations. Runtime locations survive moving an executable without its source files. See [0.4.2 notes](docs/v0.4.2.md) for costs and limits.
+
+The previous release, 0.4.1, fixed borrowing through `catch`, read-only raw pointers, formatting around `else`, and bootstrap evaluation order. It also reduced temporary allocation and improved toolchain path handling. The [0.4.1 notes](docs/v0.4.1.md) explain the changes. [Repository update instructions](docs/repository-update.md) list the exact added and replaced files for both releases.
+
+## Where to go next
+
+- [Documentation map](docs/README.md): choose a learning path.
+- [Language reference](docs/language.md): syntax, types, built-ins, and limits.
+- [Understanding errors](docs/diagnostics.md): read a diagnostic and fix common mistakes.
+- [Safety and memory](docs/safety.md): what the compiler checks and what `unsafe` means.
+- [Self-hosting](docs/selfhosting.md) and [bootstrap reference](selfhost/README.md).
+- [Validation](docs/validation.md), [benchmarks](bench/README.md), and [changelog](CHANGELOG.md).
+
+Kremen is an experimental language. The full frontend still lives in `native/`; the self-hosted subset does not yet implement the full language. C tools, libc, and a host OS remain dependencies. Freestanding kernels, MMIO, threads, floating point, interfaces, inheritance, and a general C FFI are not implemented. Source and ABI compatibility may change between releases.

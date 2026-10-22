@@ -3,7 +3,8 @@
 set -eu
 
 SOURCE_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-PREFIX=${HOME:-/nonexistent}/.local
+PREFIX=
+if [ -n "${HOME:-}" ]; then PREFIX="$HOME/.local"; fi
 ACTION=install
 usage() {
     printf '%s\n' 'Usage: sh install.sh [--prefix /absolute/path] [--uninstall]'
@@ -82,7 +83,7 @@ mkdir -p "$WORK/bin" "$WORK/share/kremen/runtime" "$WORK/share/doc/kremen"
 install -m 755 "$SOURCE_ROOT/build/kremen" "$WORK/bin/kremen"
 install -m 755 "$SOURCE_ROOT/selfhost/build/kremen-selfhost" "$WORK/bin/kremen-selfhost"
 mkdir -p "$WORK/share/kremen/selfhost"
-for support in bootstrap.kr toolchain.kr stage0.c runtime.c runtime.h driver.c host.c host.h; do
+for support in bootstrap.kr toolchain.kr stage0.c runtime.c runtime.h driver.c host.c host.h platform.h; do
     install -m 644 "$SOURCE_ROOT/selfhost/$support" "$WORK/share/kremen/selfhost/$support"
 done
 install -m 644 "$SOURCE_ROOT/runtime/kremen_rt.h" "$WORK/share/kremen/runtime/kremen_rt.h"
@@ -94,6 +95,9 @@ for directory in docs bench selfhost; do
     for document in "$SOURCE_ROOT/$directory"/*.md; do
         install -m 644 "$document" "$WORK/share/doc/kremen/$directory/$(basename -- "$document")"
     done
+done
+for report in "$SOURCE_ROOT/bench"/*.txt; do
+    install -m 644 "$report" "$WORK/share/doc/kremen/bench/$(basename -- "$report")"
 done
 cp -R "$SOURCE_ROOT/examples" "$WORK/share/doc/kremen/examples"
 printf '%s\n' kremen-native-install-v1 > "$WORK/share/kremen/install.marker"
@@ -107,5 +111,5 @@ while IFS= read -r relative; do
     install -m "$mode" "$WORK/$relative" "$PREFIX/$relative"
 done < "$WORK/share/kremen/install.manifest"
 printf 'Installed Kremen %s in %s\n' "$(cat "$SOURCE_ROOT/VERSION")" "$PREFIX"
-printf 'Run: "%s/bin/kremen" --version\n' "$PREFIX"
-printf 'Add to your shell PATH if needed: export PATH="%s/bin:$PATH"\n' "$PREFIX"
+printf 'Compiler: %s/bin/kremen\n' "$PREFIX"
+printf 'Add this directory to your shell PATH if needed: %s/bin\n' "$PREFIX"
