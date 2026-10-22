@@ -14,6 +14,7 @@ typedef struct {
     Buffer out;
     GenType *types;
     size_t type_count, type_cap;
+    size_t *type_indices, type_index_count;
     unsigned indent, counter;
     char **loops;
     size_t *loop_scopes;
@@ -21,6 +22,7 @@ typedef struct {
     char **scope_marks;
     size_t scope_count;
     Node *function;
+    Tokens locations;
 } Generator;
 
 static char *expression(Generator *, Node *);
@@ -28,20 +30,51 @@ static char *lvalue(Generator *, Node *, Buffer *);
 static void statement(Generator *, Node *);
 static void cleanup_to(Generator *, size_t);
 
+static int location(Generator *g, Node *node)
+{
+    if (!node->location_id) {
+        if (g->locations.len == g->locations.cap) {
+            size_t capacity = g->locations.cap ? g->locations.cap * 2 : 32;
+            Token *tokens = km_alloc(g->ctx, capacity * sizeof *tokens);
+            if (g->locations.len) memcpy(tokens, g->locations.data, g->locations.len * sizeof *tokens);
+            g->locations.data = tokens; g->locations.cap = capacity;
+        }
+        /* Deferred callbacks use temporary AST copies. Own the token rather
+         * than retaining an address into the callback generator's C stack. */
+        g->locations.data[g->locations.len++] = node->tok;
+        node->location_id = (unsigned)g->locations.len;
+    }
+    return (int)node->location_id;
+}
+
+static char *c_string(Generator *g, const char *text)
+{
+    Buffer bytes = {0}; km_buf_puts(&bytes, "\"");
+    for (const unsigned char *p = (const unsigned char *)text; *p; p++)
+        km_buf_printf(&bytes, "\\%03o", (unsigned)*p);
+    km_buf_puts(&bytes, "\"");
+    char *result = km_strndup(g->ctx, bytes.data, bytes.len);
+    free(bytes.data); return result;
+}
+
 static void line(Generator *g, const char *format, ...)
 {
     va_list args, copy;
     va_start(args, format);
     va_copy(copy, args);
-    int length = vsnprintf(NULL, 0, format, copy);
-    va_end(copy);
+    char local[512];
+    int length = vsnprintf(local, sizeof local, format, args);
+    va_end(args);
     if (length < 0) {
-        va_end(args);
+        va_end(copy);
         abort();
     }
-    char *text = km_alloc(g->ctx, (size_t)length + 1);
-    (void)vsnprintf(text, (size_t)length + 1, format, args);
-    va_end(args);
+    char *text = local;
+    if ((size_t)length >= sizeof local) {
+        text = km_alloc(g->ctx, (size_t)length + 1);
+        (void)vsnprintf(text, (size_t)length + 1, format, copy);
+    }
+    va_end(copy);
     for (unsigned i = 0; i < g->indent; ++i) km_buf_puts(&g->out, "    ");
     km_buf_append(&g->out, text, (size_t)length);
     km_buf_puts(&g->out, "\n");
@@ -54,8 +87,13 @@ static char *fresh(Generator *g, const char *prefix)
 
 static size_t remember_type(Generator *g, Type *type)
 {
+    if (type->id < g->type_index_count && g->type_indices[type->id])
+        return g->type_indices[type->id] - 1;
     for (size_t i = 0; i < g->type_count; ++i) {
-        if (km_type_equal(g->types[i].type, type)) return i;
+        if (km_type_equal(g->types[i].type, type)) {
+            if (type->id < g->type_index_count) g->type_indices[type->id] = i + 1;
+            return i;
+        }
     }
     if (g->type_count == g->type_cap) {
         size_t capacity = g->type_cap ? g->type_cap * 2 : 32;
@@ -65,6 +103,7 @@ static size_t remember_type(Generator *g, Type *type)
         g->type_cap = capacity;
     }
     size_t index = g->type_count++;
+    if (type->id < g->type_index_count) g->type_indices[type->id] = index + 1;
     GenType *entry = &g->types[index];
     entry->type = type;
     entry->state = 0;
@@ -125,6 +164,7 @@ static void scan_type(Generator *g, Type *type)
 static void scan_node(Generator *g, Node *node)
 {
     if (!node) return;
+    node->location_id = 0;
     scan_type(g, node->type);
     scan_type(g, node->result);
     scan_type(g, node->typearg);
@@ -221,7 +261,7 @@ static char *int_suffix(Generator *g, Type *type)
 static char *checked_index(Generator *g, Node *node, char *value)
 {
     if (node->type->kind == TY_INT && !node->type->sign) {
-        return km_sprintf(g->ctx, "kr_cast_%s_i64(%s, %d)", int_suffix(g, node->type), value, node->tok.line);
+        return km_sprintf(g->ctx, "kr_cast_%s_i64(%s, %d)", int_suffix(g, node->type), value, location(g, node));
     }
     return value;
 }
@@ -243,7 +283,7 @@ static char *lvalue(Generator *g, Node *node, Buffer *guards)
         if (type->kind == TY_REF || type->kind == TY_PTR) {
             base = expression(g, node->base);
             if (type->kind == TY_PTR) {
-                base = km_sprintf(g->ctx, "((%s)kr_nonnull(%s, %d))", ctype(g, type), base, node->tok.line);
+                base = km_sprintf(g->ctx, "((%s)kr_nonnull(%s, %d))", ctype(g, type), base, location(g, node));
             }
             access = "->";
             type = type->elem;
@@ -253,7 +293,7 @@ static char *lvalue(Generator *g, Node *node, Buffer *guards)
         }
         if (type->kind == TY_RESULT) {
             if (strcmp(node->name, "value") == 0) {
-                line(g, "if (!(%s)%sok) kr_panic(\"access to failed result\", %d);", base, access, node->tok.line);
+                line(g, "if (!(%s)%sok) kr_panic(\"access to failed result\", %d);", base, access, location(g, node));
             }
             return km_sprintf(g->ctx, "(%s)%s%s", base, access, node->name);
         }
@@ -266,7 +306,7 @@ static char *lvalue(Generator *g, Node *node, Buffer *guards)
         if (type->kind == TY_REF || type->kind == TY_PTR) {
             base = expression(g, node->base);
             if (type->kind == TY_PTR) {
-                base = km_sprintf(g->ctx, "((%s)kr_nonnull(%s, %d))", ctype(g, type), base, node->tok.line);
+                base = km_sprintf(g->ctx, "((%s)kr_nonnull(%s, %d))", ctype(g, type), base, location(g, node));
             }
             base = km_sprintf(g->ctx, "(*%s)", base);
             type = type->elem;
@@ -285,17 +325,17 @@ static char *lvalue(Generator *g, Node *node, Buffer *guards)
         char *index = checked_index(g, node->index, expression(g, node->index));
         if (type->kind == TY_SLICE) {
             if (guards) {
-                km_buf_printf(guards, "(void)kr_slice_len(%s, %d);\n", base, node->tok.line);
+                km_buf_printf(guards, "(void)kr_slice_len(%s, %d);\n", base, location(g, node));
             }
-            return km_sprintf(g->ctx, "(*(%s *)kr_slice_at(%s, %s, sizeof(%s), %d))", ctype(g, type->elem), base, index, ctype(g, type->elem), node->tok.line);
+            return km_sprintf(g->ctx, "(*(%s *)kr_slice_at(%s, %s, sizeof(%s), %d))", ctype(g, type->elem), base, index, ctype(g, type->elem), location(g, node));
         }
-        return km_sprintf(g->ctx, "(%s).data[kr_idx(%s, %zu, %d)]", base, index, type->count, node->tok.line);
+        return km_sprintf(g->ctx, "(%s).data[kr_idx(%s, %zu, %d)]", base, index, type->count, location(g, node));
     }
     case N_UNARY:
         if (strcmp(node->op, "*") == 0) {
             char *pointer = expression(g, node->value);
             if (node->value->type->kind == TY_PTR) {
-                pointer = km_sprintf(g->ctx, "((%s)kr_nonnull(%s, %d))", ctype(g, node->value->type), pointer, node->tok.line);
+                pointer = km_sprintf(g->ctx, "((%s)kr_nonnull(%s, %d))", ctype(g, node->value->type), pointer, location(g, node));
             }
             return km_sprintf(g->ctx, "(*%s)", pointer);
         }
@@ -320,7 +360,6 @@ static const char *arithmetic(const char *op)
 static char *call(Generator *g, Node *node)
 {
     const char *builtin = node->builtin;
-    int source_line = node->tok.line;
     Buffer arguments = {0};
     char **values = km_alloc(g->ctx, (node->args.len + 1) * sizeof *values);
     if (!builtin && node->receiver) {
@@ -356,31 +395,31 @@ static char *call(Generator *g, Node *node)
             line(g, "(void)%s;", values[0]);
             return temporary(g, node->type, integer_literal(g, node->type, (uint64_t)type->count, false));
         }
-        return temporary(g, node->type, km_sprintf(g->ctx, "kr_%s_len(%s, %d)", type->kind == TY_SLICE ? "slice" : "str", values[0], source_line));
+        return temporary(g, node->type, km_sprintf(g->ctx, "kr_%s_len(%s, %d)", type->kind == TY_SLICE ? "slice" : "str", values[0], location(g, node)));
     }
-    if (builtin && !strcmp(builtin, "readInt")) return temporary(g, node->type, km_sprintf(g->ctx, "kr_read_int(%d)", source_line));
-    if (builtin && !strcmp(builtin, "readLine")) return temporary(g, node->type, km_sprintf(g->ctx, "kr_read_line(%d)", source_line));
+    if (builtin && !strcmp(builtin, "readInt")) return temporary(g, node->type, km_sprintf(g->ctx, "kr_read_int(%d)", location(g, node)));
+    if (builtin && !strcmp(builtin, "readLine")) return temporary(g, node->type, km_sprintf(g->ctx, "kr_read_line(%d)", location(g, node)));
     if (builtin && !strcmp(builtin, "readIntResult")) {
         char *result = temporary(g, node->type, "{0}");
         line(g, "%s.ok = kr_try_read_int(&%s.value, &%s.code);", result, result, result);
         return result;
     }
     if (builtin && !strcmp(builtin, "assert")) {
-        line(g, "kr_assert(%s, %d);", values[0], source_line);
+        line(g, "kr_assert(%s, %d);", values[0], location(g, node));
         return "";
     }
     if (builtin && !strcmp(builtin, "panic")) {
-        line(g, "kr_user_panic(%s, %d);", values[0], source_line);
+        line(g, "kr_user_panic(%s, %d);", values[0], location(g, node));
         return "";
     }
     if (builtin && !strcmp(builtin, "cast")) {
-        return temporary(g, node->type, km_sprintf(g->ctx, "kr_cast_%s_%s(%s, %d)", int_suffix(g, node->args.data[0]->type), int_suffix(g, node->type), values[0], source_line));
+        return temporary(g, node->type, km_sprintf(g->ctx, "kr_cast_%s_%s(%s, %d)", int_suffix(g, node->args.data[0]->type), int_suffix(g, node->type), values[0], location(g, node)));
     }
     if (builtin && !strcmp(builtin, "raw")) return temporary(g, node->type, values[0]);
-    if(builtin&&!strcmp(builtin,"arenaNew"))return temporary(g,node->type,km_sprintf(g->ctx,"kr_arena_new(%d)",source_line));
-    if(builtin&&(!strcmp(builtin,"arenaFree")||!strcmp(builtin,"arenaReset"))){line(g,"kr_arena_%s(%s, %d);",!strcmp(builtin,"arenaFree")?"free":"reset",values[0],source_line);return "";}
-    if(builtin&&!strcmp(builtin,"arenaAlloc"))return temporary(g,node->type,km_sprintf(g->ctx,"kr_arena_alloc(%s, %s, sizeof(%s), %d)",values[0],values[1],ctype(g,node->type->elem),source_line));
-    if(builtin&&!strcmp(builtin,"fileClose")){line(g,"kr_file_close(%s, %d);",values[0],source_line);return "";}
+    if(builtin&&!strcmp(builtin,"arenaNew"))return temporary(g,node->type,km_sprintf(g->ctx,"kr_arena_new(%d)",location(g, node)));
+    if(builtin&&(!strcmp(builtin,"arenaFree")||!strcmp(builtin,"arenaReset"))){line(g,"kr_arena_%s(%s, %d);",!strcmp(builtin,"arenaFree")?"free":"reset",values[0],location(g, node));return "";}
+    if(builtin&&!strcmp(builtin,"arenaAlloc"))return temporary(g,node->type,km_sprintf(g->ctx,"kr_arena_alloc(%s, %s, sizeof(%s), %d)",values[0],values[1],ctype(g,node->type->elem),location(g, node)));
+    if(builtin&&!strcmp(builtin,"fileClose")){line(g,"kr_file_close(%s, %d);",values[0],location(g, node));return "";}
     if(builtin&&!strcmp(builtin,"errorMessage"))return temporary(g,node->type,km_sprintf(g->ctx,"kr_error_message(%s)",values[0]));
     if(builtin&&!strncmp(builtin,"fs",2)){
         char *r=temporary(g,node->type,"{0}");
@@ -411,22 +450,22 @@ static char *call(Generator *g, Node *node)
     }
     if (builtin && !strcmp(builtin, "alloc")) {
         char *count = checked_index(g, node->args.data[0], values[0]);
-        return temporary(g, node->type, km_sprintf(g->ctx, "kr_slice_alloc(%s, sizeof(%s), %d)", count, ctype(g, node->type->elem), source_line));
+        return temporary(g, node->type, km_sprintf(g->ctx, "kr_slice_alloc(%s, sizeof(%s), %d)", count, ctype(g, node->type->elem), location(g, node)));
     }
     if (builtin && !strcmp(builtin, "free")) {
-        line(g, "kr_slice_free(%s, %d);", values[0], source_line);
+        line(g, "kr_slice_free(%s, %d);", values[0], location(g, node));
         return "";
     }
     if (builtin && !strcmp(builtin, "slice")) {
         char *low = checked_index(g, node->args.data[1], values[1]);
         char *high = checked_index(g, node->args.data[2], values[2]);
-        return temporary(g, node->type, km_sprintf(g->ctx, "kr_subslice(%s, %s, %s, %d)", values[0], low, high, source_line));
+        return temporary(g, node->type, km_sprintf(g->ctx, "kr_subslice(%s, %s, %s, %d)", values[0], low, high, location(g, node)));
     }
     if (builtin && !strcmp(builtin, "ok")) {
         return temporary(g, node->type, km_sprintf(g->ctx, "(%s){.ok = true, .value = %s, .code = 0}", ctype(g, node->type), values[0]));
     }
     if (builtin && !strcmp(builtin, "fail")) {
-        line(g, "if (%s <= 0) kr_panic(\"failure code must be positive\", %d);", values[0], source_line);
+        line(g, "if (%s <= 0) kr_panic(\"failure code must be positive\", %d);", values[0], location(g, node));
         return temporary(g, node->type, km_sprintf(g->ctx, "(%s){.ok = false, .code = %s}", ctype(g, node->type), values[0]));
     }
     if (builtin) km_error(g->ctx, node->tok, "E900", "unknown builtin in backend: %s", builtin);
@@ -442,7 +481,6 @@ static char *call(Generator *g, Node *node)
 static char *expression(Generator *g, Node *node)
 {
     Type *type = node->type;
-    int source_line = node->tok.line;
     switch (node->kind) {
     case N_INT:
         return temporary(g, type, integer_literal(g, type, node->integer, node->negative));
@@ -481,7 +519,7 @@ static char *expression(Generator *g, Node *node)
         }
         if (!strcmp(node->op, "*")) return temporary(g, type, lvalue(g, node, NULL));
         char *value = expression(g, node->value);
-        if (!strcmp(node->op, "-")) return temporary(g, type, km_sprintf(g->ctx, "kr_neg_%s(%s, %d)", int_suffix(g, type), value, source_line));
+        if (!strcmp(node->op, "-")) return temporary(g, type, km_sprintf(g->ctx, "kr_neg_%s(%s, %d)", int_suffix(g, type), value, location(g, node)));
         return temporary(g, type, km_sprintf(g->ctx, "(%s)(%s%s)", ctype(g, type), node->op, value));
     }
     case N_BINARY: {
@@ -498,7 +536,7 @@ static char *expression(Generator *g, Node *node)
         }
         char *right = expression(g, node->right);
         const char *operation = arithmetic(node->op);
-        if (operation) return temporary(g, type, km_sprintf(g->ctx, "kr_%s_%s(%s, %s, %d)", operation, int_suffix(g, type), left, right, source_line));
+        if (operation) return temporary(g, type, km_sprintf(g->ctx, "kr_%s_%s(%s, %s, %d)", operation, int_suffix(g, type), left, right, location(g, node)));
         if (node->left->type->kind == TY_STRING) {
             return temporary(g, type, km_sprintf(g->ctx, "%skr_str_eq(%s, %s)", !strcmp(node->op, "!=") ? "!" : "", left, right));
         }
@@ -630,7 +668,7 @@ static void statement(Generator *g, Node *node)
     case N_DEFER:register_defer(g,node);break;
     case N_ARENA: {
         line(g,"{");g->indent++;open_cleanup(g);
-        line(g,"kr_arena *%s = kr_arena_new(%d);",node->symbol->cname,node->tok.line);
+        line(g,"kr_arena *%s = kr_arena_new(%d);",node->symbol->cname,location(g, node));
         char *entry=fresh(g,"arena_cleanup");line(g,"kr_defer_node %s = {0};",entry);
         line(g,"kr_defer_push(&%s, kr_arena_defer, &%s);",entry,node->symbol->cname);
         block(g,node->body,false);close_cleanup(g);g->indent--;line(g,"}");break;
@@ -657,7 +695,7 @@ static void statement(Generator *g, Node *node)
             }
             block(g,arm->body,false);g->indent--;line(g,"}");
         }
-        if(!fallback)line(g,"else { kr_panic(\"invalid variant tag\", %d); }",node->tok.line);
+        if(!fallback)line(g,"else { kr_panic(\"invalid variant tag\", %d); }",location(g, node));
         break;
     }
     case N_VAR: {
@@ -685,7 +723,7 @@ static void statement(Generator *g, Node *node)
             size_t length = strlen(node->op);
             char *op = km_strndup(g->ctx, node->op, length - 1);
             const char *operation = arithmetic(op);
-            if (operation) value = km_sprintf(g->ctx, "kr_%s_%s(%s, %s, %d)", operation, int_suffix(g, target->type), previous, value, node->tok.line);
+            if (operation) value = km_sprintf(g->ctx, "kr_%s_%s(%s, %s, %d)", operation, int_suffix(g, target->type), previous, value, location(g, node));
             else value = km_sprintf(g->ctx, "(%s)(%s %s %s)", ctype(g, target->type), previous, op, value);
         }
         if (guards.len) {
@@ -776,6 +814,8 @@ char *km_codegen(Context *ctx)
 {
     Generator generator = {.ctx = ctx};
     Generator *g = &generator;
+    g->type_index_count = (size_t)ctx->next_type + 1;
+    g->type_indices = km_alloc(ctx,g->type_index_count*sizeof *g->type_indices);
     g->scope_marks=km_alloc(ctx,257*sizeof *g->scope_marks);
     Source *runtime = km_read_source(ctx, ctx->runtime_path, false);
     km_buf_puts(&g->out, "/* Generated by the native Kremen compiler. */\n");
@@ -804,14 +844,30 @@ char *km_codegen(Context *ctx)
         if (function->receiver) line(g, "(void)%s;", function->receiver->symbol->cname);
         for (size_t j = 0; j < function->params.len; ++j) line(g, "(void)%s;", function->params.data[j]->symbol->cname);
         block(g, function->body, false);
-        if (function->result->kind != TY_VOID) line(g, "kr_panic(\"unreachable end of function\", %d);", function->tok.line);
+        if (function->result->kind != TY_VOID) line(g, "kr_panic(\"unreachable end of function\", %d);", location(g, function));
         --g->indent;
         line(g, "}");
     }
     if (!entry) km_error(ctx, (Token){0}, "E900", "entry point is missing during code generation");
+    if (g->locations.len) {
+        line(g, "static const kr_location kr_locations[] = {");
+        g->indent++;
+        for (size_t i = 0; i < g->locations.len; i++) {
+            Token tok = g->locations.data[i];
+            DiagnosticSpan span; km_diagnostic_span(tok, &span);
+            line(g, "{%s, %s, %d, %d, %u, %u},", c_string(g, tok.src ? tok.src->path : "<program>"),
+                 c_string(g, span.text), tok.line, tok.col, span.caret, span.width);
+        }
+        g->indent--;
+        line(g, "};");
+    }
     line(g, "int main(void)");
     line(g, "{");
     ++g->indent;
+    if (g->locations.len) {
+        line(g, "kr_source_locations = kr_locations;");
+        line(g, "kr_source_location_count = sizeof kr_locations / sizeof kr_locations[0];");
+    }
     line(g, "%s();", entry->cname);
     line(g, "return 0;");
     --g->indent;
