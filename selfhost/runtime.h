@@ -17,5 +17,11 @@ const char *rt_arg(int64_t index);
 const char *rt_read(const char *path);
 int64_t rt_write(const char *path, const char *value);
 int64_t rt_error(const char *path, int64_t line, int64_t column, const char *message);
+int64_t rt_iadd(int64_t left, int64_t right, const char *path, int64_t line, int64_t column);
+int64_t rt_isub(int64_t left, int64_t right, const char *path, int64_t line, int64_t column);
+int64_t rt_imul(int64_t left, int64_t right, const char *path, int64_t line, int64_t column);
+int64_t rt_idiv(int64_t left, int64_t right, const char *path, int64_t line, int64_t column);
+int64_t rt_imod(int64_t left, int64_t right, const char *path, int64_t line, int64_t column);
+int64_t rt_ineg(int64_t value, const char *path, int64_t line, int64_t column);
 
 #endif

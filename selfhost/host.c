@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "platform.h"
 
 #ifndef KREMEN_SELFHOST_ROOT
 #define KREMEN_SELFHOST_ROOT "selfhost"
@@ -24,9 +25,9 @@ static HostDirectory *host_directories;
 static bool host_initialized;
 static const char *host_support;
 static const char *host_program;
-static const char *host_arguments[256];
-static size_t host_argument_count;
-static bool host_command_invalid;
+static const char **host_arguments;
+static size_t host_argument_count, host_argument_capacity;
+static bool host_command_invalid, host_command_started;
 
 static int64_t host_error(const char *operation, const char *path) {
     int code = errno;
@@ -34,6 +35,7 @@ static int64_t host_error(const char *operation, const char *path) {
     return 1;
 }
 static void host_cleanup(void) {
+    free(host_arguments); host_arguments = NULL; host_argument_capacity = 0;
     while (host_directories != NULL) {
         HostDirectory *item = host_directories;
         host_directories = item->next;
@@ -92,10 +94,7 @@ int64_t host_setenv(const char *name, const char *value) {
 const char *host_executable(void) {
     if (host_program != NULL) return host_program;
     char buffer[PATH_MAX];
-    ssize_t n = readlink("/proc/self/exe", buffer, sizeof buffer - 1);
-    if (n < 0 || (size_t)n >= sizeof buffer - 1) {
-        if (realpath(rt_arg(0), buffer) == NULL) { host_error("resolve executable", rt_arg(0)); return ""; }
-    } else buffer[n] = 0;
+    if (!km_platform_executable(rt_arg(0), buffer, sizeof buffer)) { host_error("resolve executable", rt_arg(0)); return ""; }
     host_program = host_keep(buffer);
     return host_program;
 }
@@ -104,7 +103,7 @@ static bool regular_file(const char *path) {
     return stat(path, &state) == 0 && S_ISREG(state.st_mode);
 }
 static bool support_directory(const char *path) {
-    static const char *names[] = {"runtime.c", "runtime.h", "driver.c", "host.c", "host.h", "bootstrap.kr", "toolchain.kr"};
+    static const char *names[] = {"runtime.c", "runtime.h", "driver.c", "host.c", "host.h", "platform.h", "bootstrap.kr", "toolchain.kr"};
     char buffer[PATH_MAX];
     for (size_t i = 0; i < sizeof names / sizeof *names; i++) {
         int n = snprintf(buffer, sizeof buffer, "%s/%s", path, names[i]);
@@ -191,14 +190,22 @@ int64_t host_publish(const char *temporary, const char *destination) {
     return 0;
 }
 int64_t host_exec_begin(const char *program) {
-    host_argument_count = 0; host_command_invalid = !*program;
+    host_init();
+    host_argument_count = 0; host_command_invalid = !*program; host_command_started = !host_command_invalid;
     if (host_command_invalid) { fputs("kremen selfhost: empty executable\n", stderr); return 1; }
-    host_arguments[host_argument_count++] = program;
-    return 0;
+    return host_exec_arg(program);
 }
 int64_t host_exec_arg(const char *argument) {
-    if (host_command_invalid || host_argument_count == 0 || host_argument_count >= sizeof host_arguments / sizeof *host_arguments - 1) {
-        host_command_invalid = true; fputs("kremen selfhost: command exceeds 255 arguments\n", stderr); return 1;
+    if (!host_command_started) { fputs("kremen selfhost: command has not been started\n", stderr); return 1; }
+    if (host_command_invalid) return 1;
+    if (host_argument_count + 1 >= host_argument_capacity) {
+        size_t capacity = host_argument_capacity ? host_argument_capacity * 2 : 16;
+        if (capacity <= host_argument_capacity || capacity > SIZE_MAX / sizeof *host_arguments) {
+            host_command_invalid = true; fputs("kremen selfhost: command argument size overflow\n", stderr); return 1;
+        }
+        const char **arguments = realloc(host_arguments, capacity * sizeof *arguments);
+        if (arguments == NULL) { host_command_invalid = true; fputs("kremen selfhost: out of memory for command arguments\n", stderr); return 1; }
+        host_arguments = arguments; host_argument_capacity = capacity;
     }
     host_arguments[host_argument_count++] = argument;
     return 0;
@@ -217,6 +224,7 @@ int64_t host_exec_run(void) {
     int status;
     while (waitpid(pid, &status, 0) < 0) { if (errno != EINTR) return host_error("waitpid", host_arguments[0]); }
     host_argument_count = 0;
+    host_command_started = false;
     if (WIFEXITED(status)) return WEXITSTATUS(status);
     return WIFSIGNALED(status) ? 128 + WTERMSIG(status) : 1;
 }

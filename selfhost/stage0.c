@@ -2,6 +2,15 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+int64_t rt_iadd(int64_t, int64_t, const char *, int64_t, int64_t);
+int64_t rt_isub(int64_t, int64_t, const char *, int64_t, int64_t);
+int64_t rt_imul(int64_t, int64_t, const char *, int64_t, int64_t);
+int64_t rt_idiv(int64_t, int64_t, const char *, int64_t, int64_t);
+int64_t rt_imod(int64_t, int64_t, const char *, int64_t, int64_t);
+int64_t rt_ineg(int64_t, const char *, int64_t, int64_t);
+
+static const char kr_bootstrap_value_source[] = "\142\157\157\164\163\164\162\141\160\056\153\162";
+
 int64_t rt_len(const char * value);
 int64_t rt_at(const char * value, int64_t index);
 const char * rt_slice(const char * value, int64_t start, int64_t end);
@@ -25,6 +34,13 @@ const char * declarations = "";
 const char * definitions = "";
 int64_t loop_depth = INT64_C(0);
 int64_t parse_depth = INT64_C(0);
+const char * semantic_prelude = "";
+int64_t semantic_counter = INT64_C(0);
+const char * semantic_source_literal = "";
+bool semantic_checked = false;
+int64_t expression_line = INT64_C(1);
+int64_t expression_column = INT64_C(1);
+int64_t fail_at(const char * message, int64_t at_line, int64_t at_column);
 int64_t fail(const char * message);
 int64_t enter(void);
 const char * leave(const char * value);
@@ -54,12 +70,19 @@ const char * semantic_lookup(const char * table, const char * name);
 const char * semantic_record(const char * table, const char * name, const char * value);
 const char * semantic_code(const char * ctype);
 const char * semantic_description(const char * code);
+int64_t semantic_same_at(const char * actual, const char * expected, int64_t at_line, int64_t at_column);
 int64_t semantic_same(const char * actual, const char * expected);
-const char * semantic_variable(const char * name);
+const char * semantic_variable(const char * name, int64_t at_line, int64_t at_column);
 int64_t semantic_bind_local(const char * name, const char * ctype);
 int64_t semantic_integer(const char * text);
 const char * semantic_string_range(const char * text, int64_t start, int64_t end);
 const char * semantic_string_literal(const char * text);
+const char * semantic_quote_bytes(const char * text);
+const char * semantic_location(int64_t where_line, int64_t where_column);
+bool semantic_emitting(void);
+const char * semantic_materialize(const char * code, const char * value);
+const char * semantic_take_prelude(void);
+const char * semantic_binary(const char * op, const char * left, const char * right, int64_t where_line, int64_t where_column);
 const char * primary(void);
 const char * expression(int64_t minimum);
 const char * variable(void);
@@ -72,202 +95,1084 @@ int64_t semantic_translation_unit(void);
 int64_t bootstrap_compile(const char * input, const char * destination);
 int64_t kr_main(void);
 
+int64_t fail_at(const char * message, int64_t at_line, int64_t at_column) {
+{
+const char * kr_bootstrap_value_1 = path;
+int64_t kr_bootstrap_value_2 = at_line;
+int64_t kr_bootstrap_value_3 = at_column;
+const char * kr_bootstrap_value_4 = message;
+int64_t kr_bootstrap_value_5 = rt_error(kr_bootstrap_value_1, kr_bootstrap_value_2, kr_bootstrap_value_3, kr_bootstrap_value_4);
+return kr_bootstrap_value_5;
+}
+}
 int64_t fail(const char * message) {
 {
-return rt_error(path, token_line, token_column, message);
+const char * kr_bootstrap_value_6 = path;
+int64_t kr_bootstrap_value_7 = token_line;
+int64_t kr_bootstrap_value_8 = token_column;
+const char * kr_bootstrap_value_9 = message;
+int64_t kr_bootstrap_value_10 = rt_error(kr_bootstrap_value_6, kr_bootstrap_value_7, kr_bootstrap_value_8, kr_bootstrap_value_9);
+return kr_bootstrap_value_10;
 }
 }
 int64_t enter(void) {
 {
-parse_depth = (parse_depth + INT64_C(1));
-if ((parse_depth > INT64_C(128))) {
-return fail("parser nesting limit (128) exceeded");
+int64_t kr_bootstrap_value_11 = parse_depth;
+int64_t kr_bootstrap_value_12 = rt_iadd(kr_bootstrap_value_11, INT64_C(1), kr_bootstrap_value_source, INT64_C(48), INT64_C(35));
+parse_depth = kr_bootstrap_value_12;
+int64_t kr_bootstrap_value_13 = parse_depth;
+bool kr_bootstrap_value_14 = (kr_bootstrap_value_13 > INT64_C(128));
+if (kr_bootstrap_value_14) {
+const char * kr_bootstrap_value_15 = "parser nesting limit (128) exceeded";
+int64_t kr_bootstrap_value_16 = fail(kr_bootstrap_value_15);
+return kr_bootstrap_value_16;
 }
 return INT64_C(0);
 }
 }
 const char * leave(const char * value) {
 {
-parse_depth = (parse_depth - INT64_C(1));
+int64_t kr_bootstrap_value_17 = parse_depth;
+int64_t kr_bootstrap_value_18 = rt_isub(kr_bootstrap_value_17, INT64_C(1), kr_bootstrap_value_source, INT64_C(58), INT64_C(35));
+parse_depth = kr_bootstrap_value_18;
 return value;
 }
 }
 int64_t peek(void) {
 {
-return rt_at(source, offset);
+const char * kr_bootstrap_value_19 = source;
+int64_t kr_bootstrap_value_20 = offset;
+int64_t kr_bootstrap_value_21 = rt_at(kr_bootstrap_value_19, kr_bootstrap_value_20);
+return kr_bootstrap_value_21;
 }
 }
 int64_t bump(void) {
 {
-if ((peek() == INT64_C(10))) {
-line = (line + INT64_C(1));
+int64_t kr_bootstrap_value_22 = peek();
+int64_t kr_bootstrap_value_23 = kr_bootstrap_value_22;
+bool kr_bootstrap_value_24 = (kr_bootstrap_value_23 == INT64_C(10));
+if (kr_bootstrap_value_24) {
+int64_t kr_bootstrap_value_25 = line;
+int64_t kr_bootstrap_value_26 = rt_iadd(kr_bootstrap_value_25, INT64_C(1), kr_bootstrap_value_source, INT64_C(72), INT64_C(25));
+line = kr_bootstrap_value_26;
 column = INT64_C(1);
 }
 else {
-column = (column + INT64_C(1));
+{
+int64_t kr_bootstrap_value_27 = column;
+int64_t kr_bootstrap_value_28 = rt_iadd(kr_bootstrap_value_27, INT64_C(1), kr_bootstrap_value_source, INT64_C(75), INT64_C(29));
+column = kr_bootstrap_value_28;
 }
-offset = (offset + INT64_C(1));
+}
+int64_t kr_bootstrap_value_29 = offset;
+int64_t kr_bootstrap_value_30 = rt_iadd(kr_bootstrap_value_29, INT64_C(1), kr_bootstrap_value_source, INT64_C(77), INT64_C(25));
+offset = kr_bootstrap_value_30;
 return INT64_C(0);
 }
 }
 bool is_digit(int64_t c) {
 {
-return ((c >= INT64_C(48)) && (c <= INT64_C(57)));
+int64_t kr_bootstrap_value_31 = c;
+bool kr_bootstrap_value_32 = (kr_bootstrap_value_31 >= INT64_C(48));
+bool kr_bootstrap_value_33 = kr_bootstrap_value_32;
+if (kr_bootstrap_value_33) {
+int64_t kr_bootstrap_value_34 = c;
+bool kr_bootstrap_value_35 = (kr_bootstrap_value_34 <= INT64_C(57));
+kr_bootstrap_value_33 = kr_bootstrap_value_35;
+}
+return kr_bootstrap_value_33;
 }
 }
 bool is_letter(int64_t c) {
 {
-return (((((c >= INT64_C(65)) && (c <= INT64_C(90)))) || (((c >= INT64_C(97)) && (c <= INT64_C(122))))) || (c == INT64_C(95)));
+int64_t kr_bootstrap_value_36 = c;
+bool kr_bootstrap_value_37 = (kr_bootstrap_value_36 >= INT64_C(65));
+bool kr_bootstrap_value_38 = kr_bootstrap_value_37;
+if (kr_bootstrap_value_38) {
+int64_t kr_bootstrap_value_39 = c;
+bool kr_bootstrap_value_40 = (kr_bootstrap_value_39 <= INT64_C(90));
+kr_bootstrap_value_38 = kr_bootstrap_value_40;
+}
+bool kr_bootstrap_value_41 = (kr_bootstrap_value_38);
+if (!kr_bootstrap_value_41) {
+int64_t kr_bootstrap_value_42 = c;
+bool kr_bootstrap_value_43 = (kr_bootstrap_value_42 >= INT64_C(97));
+bool kr_bootstrap_value_44 = kr_bootstrap_value_43;
+if (kr_bootstrap_value_44) {
+int64_t kr_bootstrap_value_45 = c;
+bool kr_bootstrap_value_46 = (kr_bootstrap_value_45 <= INT64_C(122));
+kr_bootstrap_value_44 = kr_bootstrap_value_46;
+}
+kr_bootstrap_value_41 = (kr_bootstrap_value_44);
+}
+bool kr_bootstrap_value_47 = kr_bootstrap_value_41;
+if (!kr_bootstrap_value_47) {
+int64_t kr_bootstrap_value_48 = c;
+bool kr_bootstrap_value_49 = (kr_bootstrap_value_48 == INT64_C(95));
+kr_bootstrap_value_47 = kr_bootstrap_value_49;
+}
+return kr_bootstrap_value_47;
 }
 }
 int64_t next(void) {
 {
 bool scanning = true;
-while (scanning) {
-while ((((((peek() == INT64_C(32)) || (peek() == INT64_C(9))) || (peek() == INT64_C(10))) || (peek() == INT64_C(13))) || (peek() == INT64_C(59)))) {
-bump();
+while (true) {
+if (!(scanning)) { break; }
+{
+while (true) {
+int64_t kr_bootstrap_value_50 = peek();
+int64_t kr_bootstrap_value_51 = kr_bootstrap_value_50;
+bool kr_bootstrap_value_52 = (kr_bootstrap_value_51 == INT64_C(32));
+bool kr_bootstrap_value_53 = kr_bootstrap_value_52;
+if (!kr_bootstrap_value_53) {
+int64_t kr_bootstrap_value_54 = peek();
+int64_t kr_bootstrap_value_55 = kr_bootstrap_value_54;
+bool kr_bootstrap_value_56 = (kr_bootstrap_value_55 == INT64_C(9));
+kr_bootstrap_value_53 = kr_bootstrap_value_56;
 }
-if (((peek() == INT64_C(47)) && (rt_at(source, (offset + INT64_C(1))) == INT64_C(47)))) {
-while (((peek() != INT64_C(10)) && (peek() >= INT64_C(0)))) {
-bump();
+bool kr_bootstrap_value_57 = kr_bootstrap_value_53;
+if (!kr_bootstrap_value_57) {
+int64_t kr_bootstrap_value_58 = peek();
+int64_t kr_bootstrap_value_59 = kr_bootstrap_value_58;
+bool kr_bootstrap_value_60 = (kr_bootstrap_value_59 == INT64_C(10));
+kr_bootstrap_value_57 = kr_bootstrap_value_60;
+}
+bool kr_bootstrap_value_61 = kr_bootstrap_value_57;
+if (!kr_bootstrap_value_61) {
+int64_t kr_bootstrap_value_62 = peek();
+int64_t kr_bootstrap_value_63 = kr_bootstrap_value_62;
+bool kr_bootstrap_value_64 = (kr_bootstrap_value_63 == INT64_C(13));
+kr_bootstrap_value_61 = kr_bootstrap_value_64;
+}
+bool kr_bootstrap_value_65 = kr_bootstrap_value_61;
+if (!kr_bootstrap_value_65) {
+int64_t kr_bootstrap_value_66 = peek();
+int64_t kr_bootstrap_value_67 = kr_bootstrap_value_66;
+bool kr_bootstrap_value_68 = (kr_bootstrap_value_67 == INT64_C(59));
+kr_bootstrap_value_65 = kr_bootstrap_value_68;
+}
+if (!(kr_bootstrap_value_65)) { break; }
+{
+int64_t kr_bootstrap_value_69 = bump();
+(void)(kr_bootstrap_value_69);
+}
+}
+int64_t kr_bootstrap_value_70 = peek();
+int64_t kr_bootstrap_value_71 = kr_bootstrap_value_70;
+bool kr_bootstrap_value_72 = (kr_bootstrap_value_71 == INT64_C(47));
+bool kr_bootstrap_value_73 = kr_bootstrap_value_72;
+if (kr_bootstrap_value_73) {
+const char * kr_bootstrap_value_74 = source;
+int64_t kr_bootstrap_value_75 = offset;
+int64_t kr_bootstrap_value_76 = rt_iadd(kr_bootstrap_value_75, INT64_C(1), kr_bootstrap_value_source, INT64_C(101), INT64_C(53));
+int64_t kr_bootstrap_value_77 = kr_bootstrap_value_76;
+int64_t kr_bootstrap_value_78 = rt_at(kr_bootstrap_value_74, kr_bootstrap_value_77);
+int64_t kr_bootstrap_value_79 = kr_bootstrap_value_78;
+bool kr_bootstrap_value_80 = (kr_bootstrap_value_79 == INT64_C(47));
+kr_bootstrap_value_73 = kr_bootstrap_value_80;
+}
+if (kr_bootstrap_value_73) {
+while (true) {
+int64_t kr_bootstrap_value_81 = peek();
+int64_t kr_bootstrap_value_82 = kr_bootstrap_value_81;
+bool kr_bootstrap_value_83 = (kr_bootstrap_value_82 != INT64_C(10));
+bool kr_bootstrap_value_84 = kr_bootstrap_value_83;
+if (kr_bootstrap_value_84) {
+int64_t kr_bootstrap_value_85 = peek();
+int64_t kr_bootstrap_value_86 = kr_bootstrap_value_85;
+bool kr_bootstrap_value_87 = (kr_bootstrap_value_86 >= INT64_C(0));
+kr_bootstrap_value_84 = kr_bootstrap_value_87;
+}
+if (!(kr_bootstrap_value_84)) { break; }
+{
+int64_t kr_bootstrap_value_88 = bump();
+(void)(kr_bootstrap_value_88);
+}
 }
 }
 else {
+{
 scanning = false;
+}
+}
 }
 }
 token_line = line;
 token_column = column;
 int64_t start = offset;
-int64_t c = peek();
+int64_t kr_bootstrap_value_89 = peek();
+int64_t c = kr_bootstrap_value_89;
 token_kind = INT64_C(0);
 token = "";
-if ((c < INT64_C(0))) {
+int64_t kr_bootstrap_value_90 = c;
+bool kr_bootstrap_value_91 = (kr_bootstrap_value_90 < INT64_C(0));
+if (kr_bootstrap_value_91) {
 return INT64_C(0);
 }
-if (is_letter(c)) {
-bump();
-while ((is_letter(peek()) || is_digit(peek()))) {
-bump();
+int64_t kr_bootstrap_value_92 = c;
+bool kr_bootstrap_value_93 = is_letter(kr_bootstrap_value_92);
+if (kr_bootstrap_value_93) {
+int64_t kr_bootstrap_value_94 = bump();
+(void)(kr_bootstrap_value_94);
+while (true) {
+int64_t kr_bootstrap_value_95 = peek();
+int64_t kr_bootstrap_value_96 = kr_bootstrap_value_95;
+bool kr_bootstrap_value_97 = is_letter(kr_bootstrap_value_96);
+bool kr_bootstrap_value_98 = kr_bootstrap_value_97;
+if (!kr_bootstrap_value_98) {
+int64_t kr_bootstrap_value_99 = peek();
+int64_t kr_bootstrap_value_100 = kr_bootstrap_value_99;
+bool kr_bootstrap_value_101 = is_digit(kr_bootstrap_value_100);
+kr_bootstrap_value_98 = kr_bootstrap_value_101;
+}
+if (!(kr_bootstrap_value_98)) { break; }
+{
+int64_t kr_bootstrap_value_102 = bump();
+(void)(kr_bootstrap_value_102);
+}
 }
 token_kind = INT64_C(1);
 }
-else if (is_digit(c)) {
-bump();
-while (is_digit(peek())) {
-bump();
+else {
+int64_t kr_bootstrap_value_103 = c;
+bool kr_bootstrap_value_104 = is_digit(kr_bootstrap_value_103);
+if (kr_bootstrap_value_104) {
+int64_t kr_bootstrap_value_105 = bump();
+(void)(kr_bootstrap_value_105);
+while (true) {
+int64_t kr_bootstrap_value_106 = peek();
+int64_t kr_bootstrap_value_107 = kr_bootstrap_value_106;
+bool kr_bootstrap_value_108 = is_digit(kr_bootstrap_value_107);
+if (!(kr_bootstrap_value_108)) { break; }
+{
+int64_t kr_bootstrap_value_109 = bump();
+(void)(kr_bootstrap_value_109);
 }
-if (((c == INT64_C(48)) && ((offset - start) > INT64_C(1)))) {
-return fail("decimal integer literals must not have leading zeros");
+}
+int64_t kr_bootstrap_value_110 = c;
+bool kr_bootstrap_value_111 = (kr_bootstrap_value_110 == INT64_C(48));
+bool kr_bootstrap_value_112 = kr_bootstrap_value_111;
+if (kr_bootstrap_value_112) {
+int64_t kr_bootstrap_value_113 = offset;
+int64_t kr_bootstrap_value_114 = rt_isub(kr_bootstrap_value_113, start, kr_bootstrap_value_source, INT64_C(129), INT64_C(34));
+int64_t kr_bootstrap_value_115 = kr_bootstrap_value_114;
+bool kr_bootstrap_value_116 = (kr_bootstrap_value_115 > INT64_C(1));
+kr_bootstrap_value_112 = kr_bootstrap_value_116;
+}
+if (kr_bootstrap_value_112) {
+const char * kr_bootstrap_value_117 = "decimal integer literals must not have leading zeros";
+int64_t kr_bootstrap_value_118 = fail(kr_bootstrap_value_117);
+return kr_bootstrap_value_118;
 }
 token_kind = INT64_C(2);
 }
-else if ((c == INT64_C(34))) {
-bump();
-while (((peek() != INT64_C(34)) && (peek() >= INT64_C(0)))) {
-if (((peek() == INT64_C(10)) || (peek() == INT64_C(13)))) {
-return fail("newline inside string literal");
+else {
+int64_t kr_bootstrap_value_119 = c;
+bool kr_bootstrap_value_120 = (kr_bootstrap_value_119 == INT64_C(34));
+if (kr_bootstrap_value_120) {
+int64_t kr_bootstrap_value_121 = bump();
+(void)(kr_bootstrap_value_121);
+while (true) {
+int64_t kr_bootstrap_value_122 = peek();
+int64_t kr_bootstrap_value_123 = kr_bootstrap_value_122;
+bool kr_bootstrap_value_124 = (kr_bootstrap_value_123 != INT64_C(34));
+bool kr_bootstrap_value_125 = kr_bootstrap_value_124;
+if (kr_bootstrap_value_125) {
+int64_t kr_bootstrap_value_126 = peek();
+int64_t kr_bootstrap_value_127 = kr_bootstrap_value_126;
+bool kr_bootstrap_value_128 = (kr_bootstrap_value_127 >= INT64_C(0));
+kr_bootstrap_value_125 = kr_bootstrap_value_128;
 }
-if ((peek() == INT64_C(92))) {
-bump();
-if ((((((peek() != INT64_C(110)) && (peek() != INT64_C(114))) && (peek() != INT64_C(116))) && (peek() != INT64_C(92))) && (peek() != INT64_C(34)))) {
-return fail("unsupported string escape (use n, r, t, backslash or quote)");
+if (!(kr_bootstrap_value_125)) { break; }
+{
+int64_t kr_bootstrap_value_129 = peek();
+int64_t kr_bootstrap_value_130 = kr_bootstrap_value_129;
+bool kr_bootstrap_value_131 = (kr_bootstrap_value_130 == INT64_C(10));
+bool kr_bootstrap_value_132 = kr_bootstrap_value_131;
+if (!kr_bootstrap_value_132) {
+int64_t kr_bootstrap_value_133 = peek();
+int64_t kr_bootstrap_value_134 = kr_bootstrap_value_133;
+bool kr_bootstrap_value_135 = (kr_bootstrap_value_134 == INT64_C(13));
+kr_bootstrap_value_132 = kr_bootstrap_value_135;
+}
+if (kr_bootstrap_value_132) {
+const char * kr_bootstrap_value_136 = "newline inside string literal";
+int64_t kr_bootstrap_value_137 = fail(kr_bootstrap_value_136);
+return kr_bootstrap_value_137;
+}
+int64_t kr_bootstrap_value_138 = peek();
+int64_t kr_bootstrap_value_139 = kr_bootstrap_value_138;
+bool kr_bootstrap_value_140 = (kr_bootstrap_value_139 == INT64_C(92));
+if (kr_bootstrap_value_140) {
+int64_t kr_bootstrap_value_141 = bump();
+(void)(kr_bootstrap_value_141);
+int64_t kr_bootstrap_value_142 = peek();
+int64_t kr_bootstrap_value_143 = kr_bootstrap_value_142;
+bool kr_bootstrap_value_144 = (kr_bootstrap_value_143 != INT64_C(110));
+bool kr_bootstrap_value_145 = kr_bootstrap_value_144;
+if (kr_bootstrap_value_145) {
+int64_t kr_bootstrap_value_146 = peek();
+int64_t kr_bootstrap_value_147 = kr_bootstrap_value_146;
+bool kr_bootstrap_value_148 = (kr_bootstrap_value_147 != INT64_C(114));
+kr_bootstrap_value_145 = kr_bootstrap_value_148;
+}
+bool kr_bootstrap_value_149 = kr_bootstrap_value_145;
+if (kr_bootstrap_value_149) {
+int64_t kr_bootstrap_value_150 = peek();
+int64_t kr_bootstrap_value_151 = kr_bootstrap_value_150;
+bool kr_bootstrap_value_152 = (kr_bootstrap_value_151 != INT64_C(116));
+kr_bootstrap_value_149 = kr_bootstrap_value_152;
+}
+bool kr_bootstrap_value_153 = kr_bootstrap_value_149;
+if (kr_bootstrap_value_153) {
+int64_t kr_bootstrap_value_154 = peek();
+int64_t kr_bootstrap_value_155 = kr_bootstrap_value_154;
+bool kr_bootstrap_value_156 = (kr_bootstrap_value_155 != INT64_C(92));
+kr_bootstrap_value_153 = kr_bootstrap_value_156;
+}
+bool kr_bootstrap_value_157 = kr_bootstrap_value_153;
+if (kr_bootstrap_value_157) {
+int64_t kr_bootstrap_value_158 = peek();
+int64_t kr_bootstrap_value_159 = kr_bootstrap_value_158;
+bool kr_bootstrap_value_160 = (kr_bootstrap_value_159 != INT64_C(34));
+kr_bootstrap_value_157 = kr_bootstrap_value_160;
+}
+if (kr_bootstrap_value_157) {
+const char * kr_bootstrap_value_161 = "unsupported string escape (use n, r, t, backslash or quote)";
+int64_t kr_bootstrap_value_162 = fail(kr_bootstrap_value_161);
+return kr_bootstrap_value_162;
 }
 }
-bump();
+int64_t kr_bootstrap_value_163 = bump();
+(void)(kr_bootstrap_value_163);
 }
-if ((peek() != INT64_C(34))) {
-return fail("unterminated string literal");
 }
-bump();
+int64_t kr_bootstrap_value_164 = peek();
+int64_t kr_bootstrap_value_165 = kr_bootstrap_value_164;
+bool kr_bootstrap_value_166 = (kr_bootstrap_value_165 != INT64_C(34));
+if (kr_bootstrap_value_166) {
+const char * kr_bootstrap_value_167 = "unterminated string literal";
+int64_t kr_bootstrap_value_168 = fail(kr_bootstrap_value_167);
+return kr_bootstrap_value_168;
+}
+int64_t kr_bootstrap_value_169 = bump();
+(void)(kr_bootstrap_value_169);
 token_kind = INT64_C(3);
 }
 else {
-bump();
-const char * pair = rt_slice(source, start, offset);
-int64_t following = peek();
-if (((((((c == INT64_C(61)) || (c == INT64_C(33))) || (c == INT64_C(60))) || (c == INT64_C(62)))) && (following == INT64_C(61)))) {
-bump();
+{
+int64_t kr_bootstrap_value_170 = bump();
+(void)(kr_bootstrap_value_170);
+const char * kr_bootstrap_value_171 = source;
+int64_t kr_bootstrap_value_172 = start;
+int64_t kr_bootstrap_value_173 = offset;
+const char * kr_bootstrap_value_174 = rt_slice(kr_bootstrap_value_171, kr_bootstrap_value_172, kr_bootstrap_value_173);
+const char * pair = kr_bootstrap_value_174;
+int64_t kr_bootstrap_value_175 = peek();
+int64_t following = kr_bootstrap_value_175;
+int64_t kr_bootstrap_value_176 = c;
+bool kr_bootstrap_value_177 = (kr_bootstrap_value_176 == INT64_C(61));
+bool kr_bootstrap_value_178 = kr_bootstrap_value_177;
+if (!kr_bootstrap_value_178) {
+int64_t kr_bootstrap_value_179 = c;
+bool kr_bootstrap_value_180 = (kr_bootstrap_value_179 == INT64_C(33));
+kr_bootstrap_value_178 = kr_bootstrap_value_180;
 }
-else if (((((c == INT64_C(38)) && (following == INT64_C(38)))) || (((c == INT64_C(124)) && (following == INT64_C(124)))))) {
-bump();
+bool kr_bootstrap_value_181 = kr_bootstrap_value_178;
+if (!kr_bootstrap_value_181) {
+int64_t kr_bootstrap_value_182 = c;
+bool kr_bootstrap_value_183 = (kr_bootstrap_value_182 == INT64_C(60));
+kr_bootstrap_value_181 = kr_bootstrap_value_183;
 }
-else if (((((((((((((((c != INT64_C(40)) && (c != INT64_C(41))) && (c != INT64_C(123))) && (c != INT64_C(125))) && (c != INT64_C(61))) && (c != INT64_C(43))) && (c != INT64_C(45))) && (c != INT64_C(42))) && (c != INT64_C(47))) && (c != INT64_C(37))) && (c != INT64_C(60))) && (c != INT64_C(62))) && (c != INT64_C(33))) && (c != INT64_C(44)))) {
-return fail(rt_cat("unexpected character: ", pair));
+bool kr_bootstrap_value_184 = kr_bootstrap_value_181;
+if (!kr_bootstrap_value_184) {
+int64_t kr_bootstrap_value_185 = c;
+bool kr_bootstrap_value_186 = (kr_bootstrap_value_185 == INT64_C(62));
+kr_bootstrap_value_184 = kr_bootstrap_value_186;
+}
+bool kr_bootstrap_value_187 = (kr_bootstrap_value_184);
+if (kr_bootstrap_value_187) {
+int64_t kr_bootstrap_value_188 = following;
+bool kr_bootstrap_value_189 = (kr_bootstrap_value_188 == INT64_C(61));
+kr_bootstrap_value_187 = kr_bootstrap_value_189;
+}
+if (kr_bootstrap_value_187) {
+int64_t kr_bootstrap_value_190 = bump();
+(void)(kr_bootstrap_value_190);
+}
+else {
+int64_t kr_bootstrap_value_191 = c;
+bool kr_bootstrap_value_192 = (kr_bootstrap_value_191 == INT64_C(38));
+bool kr_bootstrap_value_193 = kr_bootstrap_value_192;
+if (kr_bootstrap_value_193) {
+int64_t kr_bootstrap_value_194 = following;
+bool kr_bootstrap_value_195 = (kr_bootstrap_value_194 == INT64_C(38));
+kr_bootstrap_value_193 = kr_bootstrap_value_195;
+}
+bool kr_bootstrap_value_196 = (kr_bootstrap_value_193);
+if (!kr_bootstrap_value_196) {
+int64_t kr_bootstrap_value_197 = c;
+bool kr_bootstrap_value_198 = (kr_bootstrap_value_197 == INT64_C(124));
+bool kr_bootstrap_value_199 = kr_bootstrap_value_198;
+if (kr_bootstrap_value_199) {
+int64_t kr_bootstrap_value_200 = following;
+bool kr_bootstrap_value_201 = (kr_bootstrap_value_200 == INT64_C(124));
+kr_bootstrap_value_199 = kr_bootstrap_value_201;
+}
+kr_bootstrap_value_196 = (kr_bootstrap_value_199);
+}
+if (kr_bootstrap_value_196) {
+int64_t kr_bootstrap_value_202 = bump();
+(void)(kr_bootstrap_value_202);
+}
+else {
+int64_t kr_bootstrap_value_203 = c;
+bool kr_bootstrap_value_204 = (kr_bootstrap_value_203 != INT64_C(40));
+bool kr_bootstrap_value_205 = kr_bootstrap_value_204;
+if (kr_bootstrap_value_205) {
+int64_t kr_bootstrap_value_206 = c;
+bool kr_bootstrap_value_207 = (kr_bootstrap_value_206 != INT64_C(41));
+kr_bootstrap_value_205 = kr_bootstrap_value_207;
+}
+bool kr_bootstrap_value_208 = kr_bootstrap_value_205;
+if (kr_bootstrap_value_208) {
+int64_t kr_bootstrap_value_209 = c;
+bool kr_bootstrap_value_210 = (kr_bootstrap_value_209 != INT64_C(123));
+kr_bootstrap_value_208 = kr_bootstrap_value_210;
+}
+bool kr_bootstrap_value_211 = kr_bootstrap_value_208;
+if (kr_bootstrap_value_211) {
+int64_t kr_bootstrap_value_212 = c;
+bool kr_bootstrap_value_213 = (kr_bootstrap_value_212 != INT64_C(125));
+kr_bootstrap_value_211 = kr_bootstrap_value_213;
+}
+bool kr_bootstrap_value_214 = kr_bootstrap_value_211;
+if (kr_bootstrap_value_214) {
+int64_t kr_bootstrap_value_215 = c;
+bool kr_bootstrap_value_216 = (kr_bootstrap_value_215 != INT64_C(61));
+kr_bootstrap_value_214 = kr_bootstrap_value_216;
+}
+bool kr_bootstrap_value_217 = kr_bootstrap_value_214;
+if (kr_bootstrap_value_217) {
+int64_t kr_bootstrap_value_218 = c;
+bool kr_bootstrap_value_219 = (kr_bootstrap_value_218 != INT64_C(43));
+kr_bootstrap_value_217 = kr_bootstrap_value_219;
+}
+bool kr_bootstrap_value_220 = kr_bootstrap_value_217;
+if (kr_bootstrap_value_220) {
+int64_t kr_bootstrap_value_221 = c;
+bool kr_bootstrap_value_222 = (kr_bootstrap_value_221 != INT64_C(45));
+kr_bootstrap_value_220 = kr_bootstrap_value_222;
+}
+bool kr_bootstrap_value_223 = kr_bootstrap_value_220;
+if (kr_bootstrap_value_223) {
+int64_t kr_bootstrap_value_224 = c;
+bool kr_bootstrap_value_225 = (kr_bootstrap_value_224 != INT64_C(42));
+kr_bootstrap_value_223 = kr_bootstrap_value_225;
+}
+bool kr_bootstrap_value_226 = kr_bootstrap_value_223;
+if (kr_bootstrap_value_226) {
+int64_t kr_bootstrap_value_227 = c;
+bool kr_bootstrap_value_228 = (kr_bootstrap_value_227 != INT64_C(47));
+kr_bootstrap_value_226 = kr_bootstrap_value_228;
+}
+bool kr_bootstrap_value_229 = kr_bootstrap_value_226;
+if (kr_bootstrap_value_229) {
+int64_t kr_bootstrap_value_230 = c;
+bool kr_bootstrap_value_231 = (kr_bootstrap_value_230 != INT64_C(37));
+kr_bootstrap_value_229 = kr_bootstrap_value_231;
+}
+bool kr_bootstrap_value_232 = kr_bootstrap_value_229;
+if (kr_bootstrap_value_232) {
+int64_t kr_bootstrap_value_233 = c;
+bool kr_bootstrap_value_234 = (kr_bootstrap_value_233 != INT64_C(60));
+kr_bootstrap_value_232 = kr_bootstrap_value_234;
+}
+bool kr_bootstrap_value_235 = kr_bootstrap_value_232;
+if (kr_bootstrap_value_235) {
+int64_t kr_bootstrap_value_236 = c;
+bool kr_bootstrap_value_237 = (kr_bootstrap_value_236 != INT64_C(62));
+kr_bootstrap_value_235 = kr_bootstrap_value_237;
+}
+bool kr_bootstrap_value_238 = kr_bootstrap_value_235;
+if (kr_bootstrap_value_238) {
+int64_t kr_bootstrap_value_239 = c;
+bool kr_bootstrap_value_240 = (kr_bootstrap_value_239 != INT64_C(33));
+kr_bootstrap_value_238 = kr_bootstrap_value_240;
+}
+bool kr_bootstrap_value_241 = kr_bootstrap_value_238;
+if (kr_bootstrap_value_241) {
+int64_t kr_bootstrap_value_242 = c;
+bool kr_bootstrap_value_243 = (kr_bootstrap_value_242 != INT64_C(44));
+kr_bootstrap_value_241 = kr_bootstrap_value_243;
+}
+if (kr_bootstrap_value_241) {
+const char * kr_bootstrap_value_244 = "unexpected character: ";
+const char * kr_bootstrap_value_245 = pair;
+const char * kr_bootstrap_value_246 = rt_cat(kr_bootstrap_value_244, kr_bootstrap_value_245);
+const char * kr_bootstrap_value_247 = kr_bootstrap_value_246;
+int64_t kr_bootstrap_value_248 = fail(kr_bootstrap_value_247);
+return kr_bootstrap_value_248;
+}
+}
 }
 token_kind = INT64_C(4);
 }
-token = rt_slice(source, start, offset);
+}
+}
+}
+const char * kr_bootstrap_value_249 = source;
+int64_t kr_bootstrap_value_250 = start;
+int64_t kr_bootstrap_value_251 = offset;
+const char * kr_bootstrap_value_252 = rt_slice(kr_bootstrap_value_249, kr_bootstrap_value_250, kr_bootstrap_value_251);
+token = kr_bootstrap_value_252;
 return INT64_C(0);
 }
 }
 int64_t take(const char * expected) {
 {
-if ((!rt_equal(token, expected))) {
-return fail(rt_cat(rt_cat("expected '", expected), rt_cat("', found '", rt_cat(token, "'"))));
+const char * kr_bootstrap_value_253 = token;
+const char * kr_bootstrap_value_254 = expected;
+bool kr_bootstrap_value_255 = rt_equal(kr_bootstrap_value_253, kr_bootstrap_value_254);
+bool kr_bootstrap_value_256 = (!kr_bootstrap_value_255);
+if (kr_bootstrap_value_256) {
+const char * kr_bootstrap_value_257 = "expected '";
+const char * kr_bootstrap_value_258 = expected;
+const char * kr_bootstrap_value_259 = rt_cat(kr_bootstrap_value_257, kr_bootstrap_value_258);
+const char * kr_bootstrap_value_260 = kr_bootstrap_value_259;
+const char * kr_bootstrap_value_261 = "', found '";
+const char * kr_bootstrap_value_262 = token;
+const char * kr_bootstrap_value_263 = "'";
+const char * kr_bootstrap_value_264 = rt_cat(kr_bootstrap_value_262, kr_bootstrap_value_263);
+const char * kr_bootstrap_value_265 = kr_bootstrap_value_264;
+const char * kr_bootstrap_value_266 = rt_cat(kr_bootstrap_value_261, kr_bootstrap_value_265);
+const char * kr_bootstrap_value_267 = kr_bootstrap_value_266;
+const char * kr_bootstrap_value_268 = rt_cat(kr_bootstrap_value_260, kr_bootstrap_value_267);
+const char * kr_bootstrap_value_269 = kr_bootstrap_value_268;
+int64_t kr_bootstrap_value_270 = fail(kr_bootstrap_value_269);
+return kr_bootstrap_value_270;
 }
-return next();
+int64_t kr_bootstrap_value_271 = next();
+return kr_bootstrap_value_271;
 }
 }
 const char * identifier(void) {
 {
-if ((token_kind != INT64_C(1))) {
-fail("expected an identifier");
+int64_t kr_bootstrap_value_272 = token_kind;
+bool kr_bootstrap_value_273 = (kr_bootstrap_value_272 != INT64_C(1));
+if (kr_bootstrap_value_273) {
+const char * kr_bootstrap_value_274 = "expected an identifier";
+int64_t kr_bootstrap_value_275 = fail(kr_bootstrap_value_274);
+(void)(kr_bootstrap_value_275);
 }
 const char * name = token;
-if ((rt_equal(name, "kr_main") || semantic_reserved_identifier(name))) {
-fail("identifier belongs to a reserved C header/backend family");
+const char * kr_bootstrap_value_276 = name;
+const char * kr_bootstrap_value_277 = "kr_main";
+bool kr_bootstrap_value_278 = rt_equal(kr_bootstrap_value_276, kr_bootstrap_value_277);
+bool kr_bootstrap_value_279 = kr_bootstrap_value_278;
+if (!kr_bootstrap_value_279) {
+const char * kr_bootstrap_value_280 = name;
+bool kr_bootstrap_value_281 = semantic_reserved_identifier(kr_bootstrap_value_280);
+kr_bootstrap_value_279 = kr_bootstrap_value_281;
 }
-if ((((((((((((((rt_equal(name, "true") || rt_equal(name, "false")) || rt_equal(name, "i64")) || rt_equal(name, "bool")) || rt_equal(name, "string")) || rt_equal(name, "var")) || rt_equal(name, "func")) || rt_equal(name, "unsafe")) || rt_equal(name, "if")) || rt_equal(name, "else")) || rt_equal(name, "for")) || rt_equal(name, "return")) || rt_equal(name, "break")) || rt_equal(name, "continue"))) {
-fail("expected an identifier, found a reserved language word");
+if (kr_bootstrap_value_279) {
+const char * kr_bootstrap_value_282 = "identifier belongs to a reserved C header/backend family";
+int64_t kr_bootstrap_value_283 = fail(kr_bootstrap_value_282);
+(void)(kr_bootstrap_value_283);
 }
-if (rt_equal(name, "main")) {
+const char * kr_bootstrap_value_284 = name;
+const char * kr_bootstrap_value_285 = "true";
+bool kr_bootstrap_value_286 = rt_equal(kr_bootstrap_value_284, kr_bootstrap_value_285);
+bool kr_bootstrap_value_287 = kr_bootstrap_value_286;
+if (!kr_bootstrap_value_287) {
+const char * kr_bootstrap_value_288 = name;
+const char * kr_bootstrap_value_289 = "false";
+bool kr_bootstrap_value_290 = rt_equal(kr_bootstrap_value_288, kr_bootstrap_value_289);
+kr_bootstrap_value_287 = kr_bootstrap_value_290;
+}
+bool kr_bootstrap_value_291 = kr_bootstrap_value_287;
+if (!kr_bootstrap_value_291) {
+const char * kr_bootstrap_value_292 = name;
+const char * kr_bootstrap_value_293 = "i64";
+bool kr_bootstrap_value_294 = rt_equal(kr_bootstrap_value_292, kr_bootstrap_value_293);
+kr_bootstrap_value_291 = kr_bootstrap_value_294;
+}
+bool kr_bootstrap_value_295 = kr_bootstrap_value_291;
+if (!kr_bootstrap_value_295) {
+const char * kr_bootstrap_value_296 = name;
+const char * kr_bootstrap_value_297 = "bool";
+bool kr_bootstrap_value_298 = rt_equal(kr_bootstrap_value_296, kr_bootstrap_value_297);
+kr_bootstrap_value_295 = kr_bootstrap_value_298;
+}
+bool kr_bootstrap_value_299 = kr_bootstrap_value_295;
+if (!kr_bootstrap_value_299) {
+const char * kr_bootstrap_value_300 = name;
+const char * kr_bootstrap_value_301 = "string";
+bool kr_bootstrap_value_302 = rt_equal(kr_bootstrap_value_300, kr_bootstrap_value_301);
+kr_bootstrap_value_299 = kr_bootstrap_value_302;
+}
+bool kr_bootstrap_value_303 = kr_bootstrap_value_299;
+if (!kr_bootstrap_value_303) {
+const char * kr_bootstrap_value_304 = name;
+const char * kr_bootstrap_value_305 = "var";
+bool kr_bootstrap_value_306 = rt_equal(kr_bootstrap_value_304, kr_bootstrap_value_305);
+kr_bootstrap_value_303 = kr_bootstrap_value_306;
+}
+bool kr_bootstrap_value_307 = kr_bootstrap_value_303;
+if (!kr_bootstrap_value_307) {
+const char * kr_bootstrap_value_308 = name;
+const char * kr_bootstrap_value_309 = "func";
+bool kr_bootstrap_value_310 = rt_equal(kr_bootstrap_value_308, kr_bootstrap_value_309);
+kr_bootstrap_value_307 = kr_bootstrap_value_310;
+}
+bool kr_bootstrap_value_311 = kr_bootstrap_value_307;
+if (!kr_bootstrap_value_311) {
+const char * kr_bootstrap_value_312 = name;
+const char * kr_bootstrap_value_313 = "unsafe";
+bool kr_bootstrap_value_314 = rt_equal(kr_bootstrap_value_312, kr_bootstrap_value_313);
+kr_bootstrap_value_311 = kr_bootstrap_value_314;
+}
+bool kr_bootstrap_value_315 = kr_bootstrap_value_311;
+if (!kr_bootstrap_value_315) {
+const char * kr_bootstrap_value_316 = name;
+const char * kr_bootstrap_value_317 = "if";
+bool kr_bootstrap_value_318 = rt_equal(kr_bootstrap_value_316, kr_bootstrap_value_317);
+kr_bootstrap_value_315 = kr_bootstrap_value_318;
+}
+bool kr_bootstrap_value_319 = kr_bootstrap_value_315;
+if (!kr_bootstrap_value_319) {
+const char * kr_bootstrap_value_320 = name;
+const char * kr_bootstrap_value_321 = "else";
+bool kr_bootstrap_value_322 = rt_equal(kr_bootstrap_value_320, kr_bootstrap_value_321);
+kr_bootstrap_value_319 = kr_bootstrap_value_322;
+}
+bool kr_bootstrap_value_323 = kr_bootstrap_value_319;
+if (!kr_bootstrap_value_323) {
+const char * kr_bootstrap_value_324 = name;
+const char * kr_bootstrap_value_325 = "for";
+bool kr_bootstrap_value_326 = rt_equal(kr_bootstrap_value_324, kr_bootstrap_value_325);
+kr_bootstrap_value_323 = kr_bootstrap_value_326;
+}
+bool kr_bootstrap_value_327 = kr_bootstrap_value_323;
+if (!kr_bootstrap_value_327) {
+const char * kr_bootstrap_value_328 = name;
+const char * kr_bootstrap_value_329 = "return";
+bool kr_bootstrap_value_330 = rt_equal(kr_bootstrap_value_328, kr_bootstrap_value_329);
+kr_bootstrap_value_327 = kr_bootstrap_value_330;
+}
+bool kr_bootstrap_value_331 = kr_bootstrap_value_327;
+if (!kr_bootstrap_value_331) {
+const char * kr_bootstrap_value_332 = name;
+const char * kr_bootstrap_value_333 = "break";
+bool kr_bootstrap_value_334 = rt_equal(kr_bootstrap_value_332, kr_bootstrap_value_333);
+kr_bootstrap_value_331 = kr_bootstrap_value_334;
+}
+bool kr_bootstrap_value_335 = kr_bootstrap_value_331;
+if (!kr_bootstrap_value_335) {
+const char * kr_bootstrap_value_336 = name;
+const char * kr_bootstrap_value_337 = "continue";
+bool kr_bootstrap_value_338 = rt_equal(kr_bootstrap_value_336, kr_bootstrap_value_337);
+kr_bootstrap_value_335 = kr_bootstrap_value_338;
+}
+if (kr_bootstrap_value_335) {
+const char * kr_bootstrap_value_339 = "expected an identifier, found a reserved language word";
+int64_t kr_bootstrap_value_340 = fail(kr_bootstrap_value_339);
+(void)(kr_bootstrap_value_340);
+}
+const char * kr_bootstrap_value_341 = name;
+const char * kr_bootstrap_value_342 = "main";
+bool kr_bootstrap_value_343 = rt_equal(kr_bootstrap_value_341, kr_bootstrap_value_342);
+if (kr_bootstrap_value_343) {
 name = "kr_main";
 }
-if (((((((((((((((((((((((((((((((((((((rt_equal(name, "auto") || rt_equal(name, "register")) || rt_equal(name, "typedef")) || rt_equal(name, "sizeof")) || rt_equal(name, "goto")) || rt_equal(name, "switch")) || rt_equal(name, "case")) || rt_equal(name, "default")) || rt_equal(name, "static")) || rt_equal(name, "union")) || rt_equal(name, "enum")) || rt_equal(name, "volatile")) || rt_equal(name, "restrict")) || rt_equal(name, "int")) || rt_equal(name, "char")) || rt_equal(name, "long")) || rt_equal(name, "short")) || rt_equal(name, "float")) || rt_equal(name, "double")) || rt_equal(name, "signed")) || rt_equal(name, "unsigned")) || rt_equal(name, "const")) || rt_equal(name, "void")) || rt_equal(name, "struct")) || rt_equal(name, "extern")) || rt_equal(name, "while")) || rt_equal(name, "do")) || rt_equal(name, "_Bool")) || rt_equal(name, "_Alignas")) || rt_equal(name, "_Alignof")) || rt_equal(name, "_Atomic")) || rt_equal(name, "_Complex")) || rt_equal(name, "_Generic")) || rt_equal(name, "_Imaginary")) || rt_equal(name, "_Noreturn")) || rt_equal(name, "_Static_assert")) || rt_equal(name, "_Thread_local"))) {
-fail("identifier is reserved by the bootstrap C backend");
+const char * kr_bootstrap_value_344 = name;
+const char * kr_bootstrap_value_345 = "auto";
+bool kr_bootstrap_value_346 = rt_equal(kr_bootstrap_value_344, kr_bootstrap_value_345);
+bool kr_bootstrap_value_347 = kr_bootstrap_value_346;
+if (!kr_bootstrap_value_347) {
+const char * kr_bootstrap_value_348 = name;
+const char * kr_bootstrap_value_349 = "register";
+bool kr_bootstrap_value_350 = rt_equal(kr_bootstrap_value_348, kr_bootstrap_value_349);
+kr_bootstrap_value_347 = kr_bootstrap_value_350;
 }
-next();
+bool kr_bootstrap_value_351 = kr_bootstrap_value_347;
+if (!kr_bootstrap_value_351) {
+const char * kr_bootstrap_value_352 = name;
+const char * kr_bootstrap_value_353 = "typedef";
+bool kr_bootstrap_value_354 = rt_equal(kr_bootstrap_value_352, kr_bootstrap_value_353);
+kr_bootstrap_value_351 = kr_bootstrap_value_354;
+}
+bool kr_bootstrap_value_355 = kr_bootstrap_value_351;
+if (!kr_bootstrap_value_355) {
+const char * kr_bootstrap_value_356 = name;
+const char * kr_bootstrap_value_357 = "sizeof";
+bool kr_bootstrap_value_358 = rt_equal(kr_bootstrap_value_356, kr_bootstrap_value_357);
+kr_bootstrap_value_355 = kr_bootstrap_value_358;
+}
+bool kr_bootstrap_value_359 = kr_bootstrap_value_355;
+if (!kr_bootstrap_value_359) {
+const char * kr_bootstrap_value_360 = name;
+const char * kr_bootstrap_value_361 = "goto";
+bool kr_bootstrap_value_362 = rt_equal(kr_bootstrap_value_360, kr_bootstrap_value_361);
+kr_bootstrap_value_359 = kr_bootstrap_value_362;
+}
+bool kr_bootstrap_value_363 = kr_bootstrap_value_359;
+if (!kr_bootstrap_value_363) {
+const char * kr_bootstrap_value_364 = name;
+const char * kr_bootstrap_value_365 = "switch";
+bool kr_bootstrap_value_366 = rt_equal(kr_bootstrap_value_364, kr_bootstrap_value_365);
+kr_bootstrap_value_363 = kr_bootstrap_value_366;
+}
+bool kr_bootstrap_value_367 = kr_bootstrap_value_363;
+if (!kr_bootstrap_value_367) {
+const char * kr_bootstrap_value_368 = name;
+const char * kr_bootstrap_value_369 = "case";
+bool kr_bootstrap_value_370 = rt_equal(kr_bootstrap_value_368, kr_bootstrap_value_369);
+kr_bootstrap_value_367 = kr_bootstrap_value_370;
+}
+bool kr_bootstrap_value_371 = kr_bootstrap_value_367;
+if (!kr_bootstrap_value_371) {
+const char * kr_bootstrap_value_372 = name;
+const char * kr_bootstrap_value_373 = "default";
+bool kr_bootstrap_value_374 = rt_equal(kr_bootstrap_value_372, kr_bootstrap_value_373);
+kr_bootstrap_value_371 = kr_bootstrap_value_374;
+}
+bool kr_bootstrap_value_375 = kr_bootstrap_value_371;
+if (!kr_bootstrap_value_375) {
+const char * kr_bootstrap_value_376 = name;
+const char * kr_bootstrap_value_377 = "static";
+bool kr_bootstrap_value_378 = rt_equal(kr_bootstrap_value_376, kr_bootstrap_value_377);
+kr_bootstrap_value_375 = kr_bootstrap_value_378;
+}
+bool kr_bootstrap_value_379 = kr_bootstrap_value_375;
+if (!kr_bootstrap_value_379) {
+const char * kr_bootstrap_value_380 = name;
+const char * kr_bootstrap_value_381 = "union";
+bool kr_bootstrap_value_382 = rt_equal(kr_bootstrap_value_380, kr_bootstrap_value_381);
+kr_bootstrap_value_379 = kr_bootstrap_value_382;
+}
+bool kr_bootstrap_value_383 = kr_bootstrap_value_379;
+if (!kr_bootstrap_value_383) {
+const char * kr_bootstrap_value_384 = name;
+const char * kr_bootstrap_value_385 = "enum";
+bool kr_bootstrap_value_386 = rt_equal(kr_bootstrap_value_384, kr_bootstrap_value_385);
+kr_bootstrap_value_383 = kr_bootstrap_value_386;
+}
+bool kr_bootstrap_value_387 = kr_bootstrap_value_383;
+if (!kr_bootstrap_value_387) {
+const char * kr_bootstrap_value_388 = name;
+const char * kr_bootstrap_value_389 = "volatile";
+bool kr_bootstrap_value_390 = rt_equal(kr_bootstrap_value_388, kr_bootstrap_value_389);
+kr_bootstrap_value_387 = kr_bootstrap_value_390;
+}
+bool kr_bootstrap_value_391 = kr_bootstrap_value_387;
+if (!kr_bootstrap_value_391) {
+const char * kr_bootstrap_value_392 = name;
+const char * kr_bootstrap_value_393 = "restrict";
+bool kr_bootstrap_value_394 = rt_equal(kr_bootstrap_value_392, kr_bootstrap_value_393);
+kr_bootstrap_value_391 = kr_bootstrap_value_394;
+}
+bool kr_bootstrap_value_395 = kr_bootstrap_value_391;
+if (!kr_bootstrap_value_395) {
+const char * kr_bootstrap_value_396 = name;
+const char * kr_bootstrap_value_397 = "int";
+bool kr_bootstrap_value_398 = rt_equal(kr_bootstrap_value_396, kr_bootstrap_value_397);
+kr_bootstrap_value_395 = kr_bootstrap_value_398;
+}
+bool kr_bootstrap_value_399 = kr_bootstrap_value_395;
+if (!kr_bootstrap_value_399) {
+const char * kr_bootstrap_value_400 = name;
+const char * kr_bootstrap_value_401 = "char";
+bool kr_bootstrap_value_402 = rt_equal(kr_bootstrap_value_400, kr_bootstrap_value_401);
+kr_bootstrap_value_399 = kr_bootstrap_value_402;
+}
+bool kr_bootstrap_value_403 = kr_bootstrap_value_399;
+if (!kr_bootstrap_value_403) {
+const char * kr_bootstrap_value_404 = name;
+const char * kr_bootstrap_value_405 = "long";
+bool kr_bootstrap_value_406 = rt_equal(kr_bootstrap_value_404, kr_bootstrap_value_405);
+kr_bootstrap_value_403 = kr_bootstrap_value_406;
+}
+bool kr_bootstrap_value_407 = kr_bootstrap_value_403;
+if (!kr_bootstrap_value_407) {
+const char * kr_bootstrap_value_408 = name;
+const char * kr_bootstrap_value_409 = "short";
+bool kr_bootstrap_value_410 = rt_equal(kr_bootstrap_value_408, kr_bootstrap_value_409);
+kr_bootstrap_value_407 = kr_bootstrap_value_410;
+}
+bool kr_bootstrap_value_411 = kr_bootstrap_value_407;
+if (!kr_bootstrap_value_411) {
+const char * kr_bootstrap_value_412 = name;
+const char * kr_bootstrap_value_413 = "float";
+bool kr_bootstrap_value_414 = rt_equal(kr_bootstrap_value_412, kr_bootstrap_value_413);
+kr_bootstrap_value_411 = kr_bootstrap_value_414;
+}
+bool kr_bootstrap_value_415 = kr_bootstrap_value_411;
+if (!kr_bootstrap_value_415) {
+const char * kr_bootstrap_value_416 = name;
+const char * kr_bootstrap_value_417 = "double";
+bool kr_bootstrap_value_418 = rt_equal(kr_bootstrap_value_416, kr_bootstrap_value_417);
+kr_bootstrap_value_415 = kr_bootstrap_value_418;
+}
+bool kr_bootstrap_value_419 = kr_bootstrap_value_415;
+if (!kr_bootstrap_value_419) {
+const char * kr_bootstrap_value_420 = name;
+const char * kr_bootstrap_value_421 = "signed";
+bool kr_bootstrap_value_422 = rt_equal(kr_bootstrap_value_420, kr_bootstrap_value_421);
+kr_bootstrap_value_419 = kr_bootstrap_value_422;
+}
+bool kr_bootstrap_value_423 = kr_bootstrap_value_419;
+if (!kr_bootstrap_value_423) {
+const char * kr_bootstrap_value_424 = name;
+const char * kr_bootstrap_value_425 = "unsigned";
+bool kr_bootstrap_value_426 = rt_equal(kr_bootstrap_value_424, kr_bootstrap_value_425);
+kr_bootstrap_value_423 = kr_bootstrap_value_426;
+}
+bool kr_bootstrap_value_427 = kr_bootstrap_value_423;
+if (!kr_bootstrap_value_427) {
+const char * kr_bootstrap_value_428 = name;
+const char * kr_bootstrap_value_429 = "const";
+bool kr_bootstrap_value_430 = rt_equal(kr_bootstrap_value_428, kr_bootstrap_value_429);
+kr_bootstrap_value_427 = kr_bootstrap_value_430;
+}
+bool kr_bootstrap_value_431 = kr_bootstrap_value_427;
+if (!kr_bootstrap_value_431) {
+const char * kr_bootstrap_value_432 = name;
+const char * kr_bootstrap_value_433 = "void";
+bool kr_bootstrap_value_434 = rt_equal(kr_bootstrap_value_432, kr_bootstrap_value_433);
+kr_bootstrap_value_431 = kr_bootstrap_value_434;
+}
+bool kr_bootstrap_value_435 = kr_bootstrap_value_431;
+if (!kr_bootstrap_value_435) {
+const char * kr_bootstrap_value_436 = name;
+const char * kr_bootstrap_value_437 = "struct";
+bool kr_bootstrap_value_438 = rt_equal(kr_bootstrap_value_436, kr_bootstrap_value_437);
+kr_bootstrap_value_435 = kr_bootstrap_value_438;
+}
+bool kr_bootstrap_value_439 = kr_bootstrap_value_435;
+if (!kr_bootstrap_value_439) {
+const char * kr_bootstrap_value_440 = name;
+const char * kr_bootstrap_value_441 = "extern";
+bool kr_bootstrap_value_442 = rt_equal(kr_bootstrap_value_440, kr_bootstrap_value_441);
+kr_bootstrap_value_439 = kr_bootstrap_value_442;
+}
+bool kr_bootstrap_value_443 = kr_bootstrap_value_439;
+if (!kr_bootstrap_value_443) {
+const char * kr_bootstrap_value_444 = name;
+const char * kr_bootstrap_value_445 = "while";
+bool kr_bootstrap_value_446 = rt_equal(kr_bootstrap_value_444, kr_bootstrap_value_445);
+kr_bootstrap_value_443 = kr_bootstrap_value_446;
+}
+bool kr_bootstrap_value_447 = kr_bootstrap_value_443;
+if (!kr_bootstrap_value_447) {
+const char * kr_bootstrap_value_448 = name;
+const char * kr_bootstrap_value_449 = "do";
+bool kr_bootstrap_value_450 = rt_equal(kr_bootstrap_value_448, kr_bootstrap_value_449);
+kr_bootstrap_value_447 = kr_bootstrap_value_450;
+}
+bool kr_bootstrap_value_451 = kr_bootstrap_value_447;
+if (!kr_bootstrap_value_451) {
+const char * kr_bootstrap_value_452 = name;
+const char * kr_bootstrap_value_453 = "_Bool";
+bool kr_bootstrap_value_454 = rt_equal(kr_bootstrap_value_452, kr_bootstrap_value_453);
+kr_bootstrap_value_451 = kr_bootstrap_value_454;
+}
+bool kr_bootstrap_value_455 = kr_bootstrap_value_451;
+if (!kr_bootstrap_value_455) {
+const char * kr_bootstrap_value_456 = name;
+const char * kr_bootstrap_value_457 = "_Alignas";
+bool kr_bootstrap_value_458 = rt_equal(kr_bootstrap_value_456, kr_bootstrap_value_457);
+kr_bootstrap_value_455 = kr_bootstrap_value_458;
+}
+bool kr_bootstrap_value_459 = kr_bootstrap_value_455;
+if (!kr_bootstrap_value_459) {
+const char * kr_bootstrap_value_460 = name;
+const char * kr_bootstrap_value_461 = "_Alignof";
+bool kr_bootstrap_value_462 = rt_equal(kr_bootstrap_value_460, kr_bootstrap_value_461);
+kr_bootstrap_value_459 = kr_bootstrap_value_462;
+}
+bool kr_bootstrap_value_463 = kr_bootstrap_value_459;
+if (!kr_bootstrap_value_463) {
+const char * kr_bootstrap_value_464 = name;
+const char * kr_bootstrap_value_465 = "_Atomic";
+bool kr_bootstrap_value_466 = rt_equal(kr_bootstrap_value_464, kr_bootstrap_value_465);
+kr_bootstrap_value_463 = kr_bootstrap_value_466;
+}
+bool kr_bootstrap_value_467 = kr_bootstrap_value_463;
+if (!kr_bootstrap_value_467) {
+const char * kr_bootstrap_value_468 = name;
+const char * kr_bootstrap_value_469 = "_Complex";
+bool kr_bootstrap_value_470 = rt_equal(kr_bootstrap_value_468, kr_bootstrap_value_469);
+kr_bootstrap_value_467 = kr_bootstrap_value_470;
+}
+bool kr_bootstrap_value_471 = kr_bootstrap_value_467;
+if (!kr_bootstrap_value_471) {
+const char * kr_bootstrap_value_472 = name;
+const char * kr_bootstrap_value_473 = "_Generic";
+bool kr_bootstrap_value_474 = rt_equal(kr_bootstrap_value_472, kr_bootstrap_value_473);
+kr_bootstrap_value_471 = kr_bootstrap_value_474;
+}
+bool kr_bootstrap_value_475 = kr_bootstrap_value_471;
+if (!kr_bootstrap_value_475) {
+const char * kr_bootstrap_value_476 = name;
+const char * kr_bootstrap_value_477 = "_Imaginary";
+bool kr_bootstrap_value_478 = rt_equal(kr_bootstrap_value_476, kr_bootstrap_value_477);
+kr_bootstrap_value_475 = kr_bootstrap_value_478;
+}
+bool kr_bootstrap_value_479 = kr_bootstrap_value_475;
+if (!kr_bootstrap_value_479) {
+const char * kr_bootstrap_value_480 = name;
+const char * kr_bootstrap_value_481 = "_Noreturn";
+bool kr_bootstrap_value_482 = rt_equal(kr_bootstrap_value_480, kr_bootstrap_value_481);
+kr_bootstrap_value_479 = kr_bootstrap_value_482;
+}
+bool kr_bootstrap_value_483 = kr_bootstrap_value_479;
+if (!kr_bootstrap_value_483) {
+const char * kr_bootstrap_value_484 = name;
+const char * kr_bootstrap_value_485 = "_Static_assert";
+bool kr_bootstrap_value_486 = rt_equal(kr_bootstrap_value_484, kr_bootstrap_value_485);
+kr_bootstrap_value_483 = kr_bootstrap_value_486;
+}
+bool kr_bootstrap_value_487 = kr_bootstrap_value_483;
+if (!kr_bootstrap_value_487) {
+const char * kr_bootstrap_value_488 = name;
+const char * kr_bootstrap_value_489 = "_Thread_local";
+bool kr_bootstrap_value_490 = rt_equal(kr_bootstrap_value_488, kr_bootstrap_value_489);
+kr_bootstrap_value_487 = kr_bootstrap_value_490;
+}
+if (kr_bootstrap_value_487) {
+const char * kr_bootstrap_value_491 = "identifier is reserved by the bootstrap C backend";
+int64_t kr_bootstrap_value_492 = fail(kr_bootstrap_value_491);
+(void)(kr_bootstrap_value_492);
+}
+int64_t kr_bootstrap_value_493 = next();
+(void)(kr_bootstrap_value_493);
 return name;
 }
 }
 const char * type_name(void) {
 {
 const char * result = "";
-if (rt_equal(token, "i64")) {
+const char * kr_bootstrap_value_494 = token;
+const char * kr_bootstrap_value_495 = "i64";
+bool kr_bootstrap_value_496 = rt_equal(kr_bootstrap_value_494, kr_bootstrap_value_495);
+if (kr_bootstrap_value_496) {
 result = "int64_t";
 }
-else if (rt_equal(token, "bool")) {
+else {
+const char * kr_bootstrap_value_497 = token;
+const char * kr_bootstrap_value_498 = "bool";
+bool kr_bootstrap_value_499 = rt_equal(kr_bootstrap_value_497, kr_bootstrap_value_498);
+if (kr_bootstrap_value_499) {
 result = "bool";
 }
-else if (rt_equal(token, "string")) {
+else {
+const char * kr_bootstrap_value_500 = token;
+const char * kr_bootstrap_value_501 = "string";
+bool kr_bootstrap_value_502 = rt_equal(kr_bootstrap_value_500, kr_bootstrap_value_501);
+if (kr_bootstrap_value_502) {
 result = "const char *";
 }
 else {
-fail("expected bootstrap type i64, bool or string");
+{
+const char * kr_bootstrap_value_503 = "expected bootstrap type i64, bool or string";
+int64_t kr_bootstrap_value_504 = fail(kr_bootstrap_value_503);
+(void)(kr_bootstrap_value_504);
 }
-next();
+}
+}
+}
+int64_t kr_bootstrap_value_505 = next();
+(void)(kr_bootstrap_value_505);
 return result;
 }
 }
 int64_t precedence(const char * op) {
 {
-if (rt_equal(op, "||")) {
+const char * kr_bootstrap_value_506 = op;
+const char * kr_bootstrap_value_507 = "||";
+bool kr_bootstrap_value_508 = rt_equal(kr_bootstrap_value_506, kr_bootstrap_value_507);
+if (kr_bootstrap_value_508) {
 return INT64_C(1);
 }
-if (rt_equal(op, "&&")) {
+const char * kr_bootstrap_value_509 = op;
+const char * kr_bootstrap_value_510 = "&&";
+bool kr_bootstrap_value_511 = rt_equal(kr_bootstrap_value_509, kr_bootstrap_value_510);
+if (kr_bootstrap_value_511) {
 return INT64_C(2);
 }
-if ((rt_equal(op, "==") || rt_equal(op, "!="))) {
+const char * kr_bootstrap_value_512 = op;
+const char * kr_bootstrap_value_513 = "==";
+bool kr_bootstrap_value_514 = rt_equal(kr_bootstrap_value_512, kr_bootstrap_value_513);
+bool kr_bootstrap_value_515 = kr_bootstrap_value_514;
+if (!kr_bootstrap_value_515) {
+const char * kr_bootstrap_value_516 = op;
+const char * kr_bootstrap_value_517 = "!=";
+bool kr_bootstrap_value_518 = rt_equal(kr_bootstrap_value_516, kr_bootstrap_value_517);
+kr_bootstrap_value_515 = kr_bootstrap_value_518;
+}
+if (kr_bootstrap_value_515) {
 return INT64_C(3);
 }
-if ((((rt_equal(op, "<") || rt_equal(op, "<=")) || rt_equal(op, ">")) || rt_equal(op, ">="))) {
+const char * kr_bootstrap_value_519 = op;
+const char * kr_bootstrap_value_520 = "<";
+bool kr_bootstrap_value_521 = rt_equal(kr_bootstrap_value_519, kr_bootstrap_value_520);
+bool kr_bootstrap_value_522 = kr_bootstrap_value_521;
+if (!kr_bootstrap_value_522) {
+const char * kr_bootstrap_value_523 = op;
+const char * kr_bootstrap_value_524 = "<=";
+bool kr_bootstrap_value_525 = rt_equal(kr_bootstrap_value_523, kr_bootstrap_value_524);
+kr_bootstrap_value_522 = kr_bootstrap_value_525;
+}
+bool kr_bootstrap_value_526 = kr_bootstrap_value_522;
+if (!kr_bootstrap_value_526) {
+const char * kr_bootstrap_value_527 = op;
+const char * kr_bootstrap_value_528 = ">";
+bool kr_bootstrap_value_529 = rt_equal(kr_bootstrap_value_527, kr_bootstrap_value_528);
+kr_bootstrap_value_526 = kr_bootstrap_value_529;
+}
+bool kr_bootstrap_value_530 = kr_bootstrap_value_526;
+if (!kr_bootstrap_value_530) {
+const char * kr_bootstrap_value_531 = op;
+const char * kr_bootstrap_value_532 = ">=";
+bool kr_bootstrap_value_533 = rt_equal(kr_bootstrap_value_531, kr_bootstrap_value_532);
+kr_bootstrap_value_530 = kr_bootstrap_value_533;
+}
+if (kr_bootstrap_value_530) {
 return INT64_C(4);
 }
-if ((rt_equal(op, "+") || rt_equal(op, "-"))) {
+const char * kr_bootstrap_value_534 = op;
+const char * kr_bootstrap_value_535 = "+";
+bool kr_bootstrap_value_536 = rt_equal(kr_bootstrap_value_534, kr_bootstrap_value_535);
+bool kr_bootstrap_value_537 = kr_bootstrap_value_536;
+if (!kr_bootstrap_value_537) {
+const char * kr_bootstrap_value_538 = op;
+const char * kr_bootstrap_value_539 = "-";
+bool kr_bootstrap_value_540 = rt_equal(kr_bootstrap_value_538, kr_bootstrap_value_539);
+kr_bootstrap_value_537 = kr_bootstrap_value_540;
+}
+if (kr_bootstrap_value_537) {
 return INT64_C(5);
 }
-if (((rt_equal(op, "*") || rt_equal(op, "/")) || rt_equal(op, "%"))) {
+const char * kr_bootstrap_value_541 = op;
+const char * kr_bootstrap_value_542 = "*";
+bool kr_bootstrap_value_543 = rt_equal(kr_bootstrap_value_541, kr_bootstrap_value_542);
+bool kr_bootstrap_value_544 = kr_bootstrap_value_543;
+if (!kr_bootstrap_value_544) {
+const char * kr_bootstrap_value_545 = op;
+const char * kr_bootstrap_value_546 = "/";
+bool kr_bootstrap_value_547 = rt_equal(kr_bootstrap_value_545, kr_bootstrap_value_546);
+kr_bootstrap_value_544 = kr_bootstrap_value_547;
+}
+bool kr_bootstrap_value_548 = kr_bootstrap_value_544;
+if (!kr_bootstrap_value_548) {
+const char * kr_bootstrap_value_549 = op;
+const char * kr_bootstrap_value_550 = "%";
+bool kr_bootstrap_value_551 = rt_equal(kr_bootstrap_value_549, kr_bootstrap_value_550);
+kr_bootstrap_value_548 = kr_bootstrap_value_551;
+}
+if (kr_bootstrap_value_548) {
 return INT64_C(6);
 }
 return INT64_C(0);
@@ -275,34 +1180,236 @@ return INT64_C(0);
 }
 bool semantic_prefix(const char * value, const char * prefix) {
 {
-int64_t length = rt_len(prefix);
-if ((rt_len(value) < length)) {
+const char * kr_bootstrap_value_552 = prefix;
+int64_t kr_bootstrap_value_553 = rt_len(kr_bootstrap_value_552);
+int64_t length = kr_bootstrap_value_553;
+const char * kr_bootstrap_value_554 = value;
+int64_t kr_bootstrap_value_555 = rt_len(kr_bootstrap_value_554);
+int64_t kr_bootstrap_value_556 = kr_bootstrap_value_555;
+bool kr_bootstrap_value_557 = (kr_bootstrap_value_556 < length);
+if (kr_bootstrap_value_557) {
 return false;
 }
 int64_t index = INT64_C(0);
-while ((index < length)) {
-if ((rt_at(value, index) != rt_at(prefix, index))) {
+while (true) {
+int64_t kr_bootstrap_value_558 = index;
+bool kr_bootstrap_value_559 = (kr_bootstrap_value_558 < length);
+if (!(kr_bootstrap_value_559)) { break; }
+{
+const char * kr_bootstrap_value_560 = value;
+int64_t kr_bootstrap_value_561 = index;
+int64_t kr_bootstrap_value_562 = rt_at(kr_bootstrap_value_560, kr_bootstrap_value_561);
+int64_t kr_bootstrap_value_563 = kr_bootstrap_value_562;
+const char * kr_bootstrap_value_564 = prefix;
+int64_t kr_bootstrap_value_565 = index;
+int64_t kr_bootstrap_value_566 = rt_at(kr_bootstrap_value_564, kr_bootstrap_value_565);
+bool kr_bootstrap_value_567 = (kr_bootstrap_value_563 != kr_bootstrap_value_566);
+if (kr_bootstrap_value_567) {
 return false;
 }
-index = (index + INT64_C(1));
+int64_t kr_bootstrap_value_568 = index;
+int64_t kr_bootstrap_value_569 = rt_iadd(kr_bootstrap_value_568, INT64_C(1), kr_bootstrap_value_source, INT64_C(264), INT64_C(27));
+index = kr_bootstrap_value_569;
+}
 }
 return true;
 }
 }
 bool semantic_reserved_identifier(const char * name) {
 {
-if (((((((((semantic_prefix(name, "INT") || semantic_prefix(name, "UINT")) || semantic_prefix(name, "SIZE_")) || semantic_prefix(name, "PTRDIFF_")) || semantic_prefix(name, "SIG_ATOMIC_")) || semantic_prefix(name, "WCHAR_")) || semantic_prefix(name, "WINT_")) || semantic_prefix(name, "_")) || rt_equal(name, "NULL"))) {
+const char * kr_bootstrap_value_570 = name;
+const char * kr_bootstrap_value_571 = "INT";
+bool kr_bootstrap_value_572 = semantic_prefix(kr_bootstrap_value_570, kr_bootstrap_value_571);
+bool kr_bootstrap_value_573 = kr_bootstrap_value_572;
+if (!kr_bootstrap_value_573) {
+const char * kr_bootstrap_value_574 = name;
+const char * kr_bootstrap_value_575 = "UINT";
+bool kr_bootstrap_value_576 = semantic_prefix(kr_bootstrap_value_574, kr_bootstrap_value_575);
+kr_bootstrap_value_573 = kr_bootstrap_value_576;
+}
+bool kr_bootstrap_value_577 = kr_bootstrap_value_573;
+if (!kr_bootstrap_value_577) {
+const char * kr_bootstrap_value_578 = name;
+const char * kr_bootstrap_value_579 = "SIZE_";
+bool kr_bootstrap_value_580 = semantic_prefix(kr_bootstrap_value_578, kr_bootstrap_value_579);
+kr_bootstrap_value_577 = kr_bootstrap_value_580;
+}
+bool kr_bootstrap_value_581 = kr_bootstrap_value_577;
+if (!kr_bootstrap_value_581) {
+const char * kr_bootstrap_value_582 = name;
+const char * kr_bootstrap_value_583 = "PTRDIFF_";
+bool kr_bootstrap_value_584 = semantic_prefix(kr_bootstrap_value_582, kr_bootstrap_value_583);
+kr_bootstrap_value_581 = kr_bootstrap_value_584;
+}
+bool kr_bootstrap_value_585 = kr_bootstrap_value_581;
+if (!kr_bootstrap_value_585) {
+const char * kr_bootstrap_value_586 = name;
+const char * kr_bootstrap_value_587 = "SIG_ATOMIC_";
+bool kr_bootstrap_value_588 = semantic_prefix(kr_bootstrap_value_586, kr_bootstrap_value_587);
+kr_bootstrap_value_585 = kr_bootstrap_value_588;
+}
+bool kr_bootstrap_value_589 = kr_bootstrap_value_585;
+if (!kr_bootstrap_value_589) {
+const char * kr_bootstrap_value_590 = name;
+const char * kr_bootstrap_value_591 = "WCHAR_";
+bool kr_bootstrap_value_592 = semantic_prefix(kr_bootstrap_value_590, kr_bootstrap_value_591);
+kr_bootstrap_value_589 = kr_bootstrap_value_592;
+}
+bool kr_bootstrap_value_593 = kr_bootstrap_value_589;
+if (!kr_bootstrap_value_593) {
+const char * kr_bootstrap_value_594 = name;
+const char * kr_bootstrap_value_595 = "WINT_";
+bool kr_bootstrap_value_596 = semantic_prefix(kr_bootstrap_value_594, kr_bootstrap_value_595);
+kr_bootstrap_value_593 = kr_bootstrap_value_596;
+}
+bool kr_bootstrap_value_597 = kr_bootstrap_value_593;
+if (!kr_bootstrap_value_597) {
+const char * kr_bootstrap_value_598 = name;
+const char * kr_bootstrap_value_599 = "_";
+bool kr_bootstrap_value_600 = semantic_prefix(kr_bootstrap_value_598, kr_bootstrap_value_599);
+kr_bootstrap_value_597 = kr_bootstrap_value_600;
+}
+bool kr_bootstrap_value_601 = kr_bootstrap_value_597;
+if (!kr_bootstrap_value_601) {
+const char * kr_bootstrap_value_602 = name;
+const char * kr_bootstrap_value_603 = "kr_bootstrap_value_";
+bool kr_bootstrap_value_604 = semantic_prefix(kr_bootstrap_value_602, kr_bootstrap_value_603);
+kr_bootstrap_value_601 = kr_bootstrap_value_604;
+}
+bool kr_bootstrap_value_605 = kr_bootstrap_value_601;
+if (!kr_bootstrap_value_605) {
+const char * kr_bootstrap_value_606 = name;
+const char * kr_bootstrap_value_607 = "NULL";
+bool kr_bootstrap_value_608 = rt_equal(kr_bootstrap_value_606, kr_bootstrap_value_607);
+kr_bootstrap_value_605 = kr_bootstrap_value_608;
+}
+if (kr_bootstrap_value_605) {
 return true;
 }
-if (semantic_prefix(name, "int")) {
-const char * suffix = rt_slice(name, INT64_C(3), rt_len(name));
-if ((((is_digit(rt_at(suffix, INT64_C(0))) || (rt_at(suffix, INT64_C(0)) == INT64_C(95))) || rt_equal(suffix, "max_t")) || rt_equal(suffix, "ptr_t"))) {
+const char * kr_bootstrap_value_609 = name;
+const char * kr_bootstrap_value_610 = "rt_iadd";
+bool kr_bootstrap_value_611 = rt_equal(kr_bootstrap_value_609, kr_bootstrap_value_610);
+bool kr_bootstrap_value_612 = kr_bootstrap_value_611;
+if (!kr_bootstrap_value_612) {
+const char * kr_bootstrap_value_613 = name;
+const char * kr_bootstrap_value_614 = "rt_isub";
+bool kr_bootstrap_value_615 = rt_equal(kr_bootstrap_value_613, kr_bootstrap_value_614);
+kr_bootstrap_value_612 = kr_bootstrap_value_615;
+}
+bool kr_bootstrap_value_616 = kr_bootstrap_value_612;
+if (!kr_bootstrap_value_616) {
+const char * kr_bootstrap_value_617 = name;
+const char * kr_bootstrap_value_618 = "rt_imul";
+bool kr_bootstrap_value_619 = rt_equal(kr_bootstrap_value_617, kr_bootstrap_value_618);
+kr_bootstrap_value_616 = kr_bootstrap_value_619;
+}
+bool kr_bootstrap_value_620 = kr_bootstrap_value_616;
+if (!kr_bootstrap_value_620) {
+const char * kr_bootstrap_value_621 = name;
+const char * kr_bootstrap_value_622 = "rt_idiv";
+bool kr_bootstrap_value_623 = rt_equal(kr_bootstrap_value_621, kr_bootstrap_value_622);
+kr_bootstrap_value_620 = kr_bootstrap_value_623;
+}
+bool kr_bootstrap_value_624 = kr_bootstrap_value_620;
+if (!kr_bootstrap_value_624) {
+const char * kr_bootstrap_value_625 = name;
+const char * kr_bootstrap_value_626 = "rt_imod";
+bool kr_bootstrap_value_627 = rt_equal(kr_bootstrap_value_625, kr_bootstrap_value_626);
+kr_bootstrap_value_624 = kr_bootstrap_value_627;
+}
+bool kr_bootstrap_value_628 = kr_bootstrap_value_624;
+if (!kr_bootstrap_value_628) {
+const char * kr_bootstrap_value_629 = name;
+const char * kr_bootstrap_value_630 = "rt_ineg";
+bool kr_bootstrap_value_631 = rt_equal(kr_bootstrap_value_629, kr_bootstrap_value_630);
+kr_bootstrap_value_628 = kr_bootstrap_value_631;
+}
+if (kr_bootstrap_value_628) {
+return true;
+}
+const char * kr_bootstrap_value_632 = name;
+const char * kr_bootstrap_value_633 = "int";
+bool kr_bootstrap_value_634 = semantic_prefix(kr_bootstrap_value_632, kr_bootstrap_value_633);
+if (kr_bootstrap_value_634) {
+const char * kr_bootstrap_value_635 = name;
+int64_t kr_bootstrap_value_636 = INT64_C(3);
+const char * kr_bootstrap_value_637 = name;
+int64_t kr_bootstrap_value_638 = rt_len(kr_bootstrap_value_637);
+int64_t kr_bootstrap_value_639 = kr_bootstrap_value_638;
+const char * kr_bootstrap_value_640 = rt_slice(kr_bootstrap_value_635, kr_bootstrap_value_636, kr_bootstrap_value_639);
+const char * suffix = kr_bootstrap_value_640;
+const char * kr_bootstrap_value_641 = suffix;
+int64_t kr_bootstrap_value_642 = INT64_C(0);
+int64_t kr_bootstrap_value_643 = rt_at(kr_bootstrap_value_641, kr_bootstrap_value_642);
+int64_t kr_bootstrap_value_644 = kr_bootstrap_value_643;
+bool kr_bootstrap_value_645 = is_digit(kr_bootstrap_value_644);
+bool kr_bootstrap_value_646 = kr_bootstrap_value_645;
+if (!kr_bootstrap_value_646) {
+const char * kr_bootstrap_value_647 = suffix;
+int64_t kr_bootstrap_value_648 = INT64_C(0);
+int64_t kr_bootstrap_value_649 = rt_at(kr_bootstrap_value_647, kr_bootstrap_value_648);
+int64_t kr_bootstrap_value_650 = kr_bootstrap_value_649;
+bool kr_bootstrap_value_651 = (kr_bootstrap_value_650 == INT64_C(95));
+kr_bootstrap_value_646 = kr_bootstrap_value_651;
+}
+bool kr_bootstrap_value_652 = kr_bootstrap_value_646;
+if (!kr_bootstrap_value_652) {
+const char * kr_bootstrap_value_653 = suffix;
+const char * kr_bootstrap_value_654 = "max_t";
+bool kr_bootstrap_value_655 = rt_equal(kr_bootstrap_value_653, kr_bootstrap_value_654);
+kr_bootstrap_value_652 = kr_bootstrap_value_655;
+}
+bool kr_bootstrap_value_656 = kr_bootstrap_value_652;
+if (!kr_bootstrap_value_656) {
+const char * kr_bootstrap_value_657 = suffix;
+const char * kr_bootstrap_value_658 = "ptr_t";
+bool kr_bootstrap_value_659 = rt_equal(kr_bootstrap_value_657, kr_bootstrap_value_658);
+kr_bootstrap_value_656 = kr_bootstrap_value_659;
+}
+if (kr_bootstrap_value_656) {
 return true;
 }
 }
-if (semantic_prefix(name, "uint")) {
-const char * suffix = rt_slice(name, INT64_C(4), rt_len(name));
-if ((((is_digit(rt_at(suffix, INT64_C(0))) || (rt_at(suffix, INT64_C(0)) == INT64_C(95))) || rt_equal(suffix, "max_t")) || rt_equal(suffix, "ptr_t"))) {
+const char * kr_bootstrap_value_660 = name;
+const char * kr_bootstrap_value_661 = "uint";
+bool kr_bootstrap_value_662 = semantic_prefix(kr_bootstrap_value_660, kr_bootstrap_value_661);
+if (kr_bootstrap_value_662) {
+const char * kr_bootstrap_value_663 = name;
+int64_t kr_bootstrap_value_664 = INT64_C(4);
+const char * kr_bootstrap_value_665 = name;
+int64_t kr_bootstrap_value_666 = rt_len(kr_bootstrap_value_665);
+int64_t kr_bootstrap_value_667 = kr_bootstrap_value_666;
+const char * kr_bootstrap_value_668 = rt_slice(kr_bootstrap_value_663, kr_bootstrap_value_664, kr_bootstrap_value_667);
+const char * suffix = kr_bootstrap_value_668;
+const char * kr_bootstrap_value_669 = suffix;
+int64_t kr_bootstrap_value_670 = INT64_C(0);
+int64_t kr_bootstrap_value_671 = rt_at(kr_bootstrap_value_669, kr_bootstrap_value_670);
+int64_t kr_bootstrap_value_672 = kr_bootstrap_value_671;
+bool kr_bootstrap_value_673 = is_digit(kr_bootstrap_value_672);
+bool kr_bootstrap_value_674 = kr_bootstrap_value_673;
+if (!kr_bootstrap_value_674) {
+const char * kr_bootstrap_value_675 = suffix;
+int64_t kr_bootstrap_value_676 = INT64_C(0);
+int64_t kr_bootstrap_value_677 = rt_at(kr_bootstrap_value_675, kr_bootstrap_value_676);
+int64_t kr_bootstrap_value_678 = kr_bootstrap_value_677;
+bool kr_bootstrap_value_679 = (kr_bootstrap_value_678 == INT64_C(95));
+kr_bootstrap_value_674 = kr_bootstrap_value_679;
+}
+bool kr_bootstrap_value_680 = kr_bootstrap_value_674;
+if (!kr_bootstrap_value_680) {
+const char * kr_bootstrap_value_681 = suffix;
+const char * kr_bootstrap_value_682 = "max_t";
+bool kr_bootstrap_value_683 = rt_equal(kr_bootstrap_value_681, kr_bootstrap_value_682);
+kr_bootstrap_value_680 = kr_bootstrap_value_683;
+}
+bool kr_bootstrap_value_684 = kr_bootstrap_value_680;
+if (!kr_bootstrap_value_684) {
+const char * kr_bootstrap_value_685 = suffix;
+const char * kr_bootstrap_value_686 = "ptr_t";
+bool kr_bootstrap_value_687 = rt_equal(kr_bootstrap_value_685, kr_bootstrap_value_686);
+kr_bootstrap_value_684 = kr_bootstrap_value_687;
+}
+if (kr_bootstrap_value_684) {
 return true;
 }
 }
@@ -311,42 +1418,120 @@ return false;
 }
 const char * semantic_lookup(const char * table, const char * name) {
 {
-int64_t wanted = rt_len(name);
-int64_t length = rt_len(table);
+const char * kr_bootstrap_value_688 = name;
+int64_t kr_bootstrap_value_689 = rt_len(kr_bootstrap_value_688);
+int64_t wanted = kr_bootstrap_value_689;
+const char * kr_bootstrap_value_690 = table;
+int64_t kr_bootstrap_value_691 = rt_len(kr_bootstrap_value_690);
+int64_t length = kr_bootstrap_value_691;
 int64_t position = INT64_C(0);
-while ((position < length)) {
+while (true) {
+int64_t kr_bootstrap_value_692 = position;
+bool kr_bootstrap_value_693 = (kr_bootstrap_value_692 < length);
+if (!(kr_bootstrap_value_693)) { break; }
+{
 int64_t start = position;
-while (((position < length) && (rt_at(table, position) != INT64_C(58)))) {
-position = (position + INT64_C(1));
+while (true) {
+int64_t kr_bootstrap_value_694 = position;
+bool kr_bootstrap_value_695 = (kr_bootstrap_value_694 < length);
+bool kr_bootstrap_value_696 = kr_bootstrap_value_695;
+if (kr_bootstrap_value_696) {
+const char * kr_bootstrap_value_697 = table;
+int64_t kr_bootstrap_value_698 = position;
+int64_t kr_bootstrap_value_699 = rt_at(kr_bootstrap_value_697, kr_bootstrap_value_698);
+int64_t kr_bootstrap_value_700 = kr_bootstrap_value_699;
+bool kr_bootstrap_value_701 = (kr_bootstrap_value_700 != INT64_C(58));
+kr_bootstrap_value_696 = kr_bootstrap_value_701;
+}
+if (!(kr_bootstrap_value_696)) { break; }
+{
+int64_t kr_bootstrap_value_702 = position;
+int64_t kr_bootstrap_value_703 = rt_iadd(kr_bootstrap_value_702, INT64_C(1), kr_bootstrap_value_source, INT64_C(299), INT64_C(37));
+position = kr_bootstrap_value_703;
+}
 }
 bool matched = false;
-if (((position - start) == wanted)) {
-matched = rt_equal(rt_slice(table, start, position), name);
+int64_t kr_bootstrap_value_704 = position;
+int64_t kr_bootstrap_value_705 = rt_isub(kr_bootstrap_value_704, start, kr_bootstrap_value_source, INT64_C(302), INT64_C(25));
+int64_t kr_bootstrap_value_706 = kr_bootstrap_value_705;
+bool kr_bootstrap_value_707 = (kr_bootstrap_value_706 == wanted);
+if (kr_bootstrap_value_707) {
+const char * kr_bootstrap_value_708 = table;
+int64_t kr_bootstrap_value_709 = start;
+int64_t kr_bootstrap_value_710 = position;
+const char * kr_bootstrap_value_711 = rt_slice(kr_bootstrap_value_708, kr_bootstrap_value_709, kr_bootstrap_value_710);
+const char * kr_bootstrap_value_712 = kr_bootstrap_value_711;
+const char * kr_bootstrap_value_713 = name;
+bool kr_bootstrap_value_714 = rt_equal(kr_bootstrap_value_712, kr_bootstrap_value_713);
+matched = kr_bootstrap_value_714;
 }
-position = (position + INT64_C(1));
+int64_t kr_bootstrap_value_715 = position;
+int64_t kr_bootstrap_value_716 = rt_iadd(kr_bootstrap_value_715, INT64_C(1), kr_bootstrap_value_source, INT64_C(305), INT64_C(33));
+position = kr_bootstrap_value_716;
 start = position;
-while (((position < length) && (rt_at(table, position) != INT64_C(10)))) {
-position = (position + INT64_C(1));
+while (true) {
+int64_t kr_bootstrap_value_717 = position;
+bool kr_bootstrap_value_718 = (kr_bootstrap_value_717 < length);
+bool kr_bootstrap_value_719 = kr_bootstrap_value_718;
+if (kr_bootstrap_value_719) {
+const char * kr_bootstrap_value_720 = table;
+int64_t kr_bootstrap_value_721 = position;
+int64_t kr_bootstrap_value_722 = rt_at(kr_bootstrap_value_720, kr_bootstrap_value_721);
+int64_t kr_bootstrap_value_723 = kr_bootstrap_value_722;
+bool kr_bootstrap_value_724 = (kr_bootstrap_value_723 != INT64_C(10));
+kr_bootstrap_value_719 = kr_bootstrap_value_724;
+}
+if (!(kr_bootstrap_value_719)) { break; }
+{
+int64_t kr_bootstrap_value_725 = position;
+int64_t kr_bootstrap_value_726 = rt_iadd(kr_bootstrap_value_725, INT64_C(1), kr_bootstrap_value_source, INT64_C(308), INT64_C(37));
+position = kr_bootstrap_value_726;
+}
 }
 if (matched) {
-return rt_slice(table, start, position);
+const char * kr_bootstrap_value_727 = table;
+int64_t kr_bootstrap_value_728 = start;
+int64_t kr_bootstrap_value_729 = position;
+const char * kr_bootstrap_value_730 = rt_slice(kr_bootstrap_value_727, kr_bootstrap_value_728, kr_bootstrap_value_729);
+return kr_bootstrap_value_730;
 }
-position = (position + INT64_C(1));
+int64_t kr_bootstrap_value_731 = position;
+int64_t kr_bootstrap_value_732 = rt_iadd(kr_bootstrap_value_731, INT64_C(1), kr_bootstrap_value_source, INT64_C(313), INT64_C(33));
+position = kr_bootstrap_value_732;
+}
 }
 return "";
 }
 }
 const char * semantic_record(const char * table, const char * name, const char * value) {
 {
-return rt_cat(table, rt_cat(name, rt_cat(":", rt_cat(value, "\n"))));
+const char * kr_bootstrap_value_733 = table;
+const char * kr_bootstrap_value_734 = name;
+const char * kr_bootstrap_value_735 = ":";
+const char * kr_bootstrap_value_736 = value;
+const char * kr_bootstrap_value_737 = "\n";
+const char * kr_bootstrap_value_738 = rt_cat(kr_bootstrap_value_736, kr_bootstrap_value_737);
+const char * kr_bootstrap_value_739 = kr_bootstrap_value_738;
+const char * kr_bootstrap_value_740 = rt_cat(kr_bootstrap_value_735, kr_bootstrap_value_739);
+const char * kr_bootstrap_value_741 = kr_bootstrap_value_740;
+const char * kr_bootstrap_value_742 = rt_cat(kr_bootstrap_value_734, kr_bootstrap_value_741);
+const char * kr_bootstrap_value_743 = kr_bootstrap_value_742;
+const char * kr_bootstrap_value_744 = rt_cat(kr_bootstrap_value_733, kr_bootstrap_value_743);
+return kr_bootstrap_value_744;
 }
 }
 const char * semantic_code(const char * ctype) {
 {
-if (rt_equal(ctype, "int64_t")) {
+const char * kr_bootstrap_value_745 = ctype;
+const char * kr_bootstrap_value_746 = "int64_t";
+bool kr_bootstrap_value_747 = rt_equal(kr_bootstrap_value_745, kr_bootstrap_value_746);
+if (kr_bootstrap_value_747) {
 return "i";
 }
-if (rt_equal(ctype, "bool")) {
+const char * kr_bootstrap_value_748 = ctype;
+const char * kr_bootstrap_value_749 = "bool";
+bool kr_bootstrap_value_750 = rt_equal(kr_bootstrap_value_748, kr_bootstrap_value_749);
+if (kr_bootstrap_value_750) {
 return "b";
 }
 return "s";
@@ -354,38 +1539,112 @@ return "s";
 }
 const char * semantic_description(const char * code) {
 {
-if (rt_equal(code, "i")) {
+const char * kr_bootstrap_value_751 = code;
+const char * kr_bootstrap_value_752 = "i";
+bool kr_bootstrap_value_753 = rt_equal(kr_bootstrap_value_751, kr_bootstrap_value_752);
+if (kr_bootstrap_value_753) {
 return "i64";
 }
-if (rt_equal(code, "b")) {
+const char * kr_bootstrap_value_754 = code;
+const char * kr_bootstrap_value_755 = "b";
+bool kr_bootstrap_value_756 = rt_equal(kr_bootstrap_value_754, kr_bootstrap_value_755);
+if (kr_bootstrap_value_756) {
 return "bool";
 }
-if (rt_equal(code, "s")) {
+const char * kr_bootstrap_value_757 = code;
+const char * kr_bootstrap_value_758 = "s";
+bool kr_bootstrap_value_759 = rt_equal(kr_bootstrap_value_757, kr_bootstrap_value_758);
+if (kr_bootstrap_value_759) {
 return "string";
 }
 return "invalid type";
 }
 }
-int64_t semantic_same(const char * actual, const char * expected) {
+int64_t semantic_same_at(const char * actual, const char * expected, int64_t at_line, int64_t at_column) {
 {
-if (((!semantic_collecting) && (!rt_equal(actual, expected)))) {
-return fail(rt_cat("type mismatch: expected ", rt_cat(semantic_description(expected), rt_cat(", found ", semantic_description(actual)))));
+bool kr_bootstrap_value_760 = (!semantic_collecting);
+bool kr_bootstrap_value_761 = kr_bootstrap_value_760;
+if (kr_bootstrap_value_761) {
+const char * kr_bootstrap_value_762 = actual;
+const char * kr_bootstrap_value_763 = expected;
+bool kr_bootstrap_value_764 = rt_equal(kr_bootstrap_value_762, kr_bootstrap_value_763);
+bool kr_bootstrap_value_765 = (!kr_bootstrap_value_764);
+kr_bootstrap_value_761 = kr_bootstrap_value_765;
+}
+if (kr_bootstrap_value_761) {
+const char * kr_bootstrap_value_766 = "type mismatch: expected ";
+const char * kr_bootstrap_value_767 = expected;
+const char * kr_bootstrap_value_768 = semantic_description(kr_bootstrap_value_767);
+const char * kr_bootstrap_value_769 = kr_bootstrap_value_768;
+const char * kr_bootstrap_value_770 = ", found ";
+const char * kr_bootstrap_value_771 = actual;
+const char * kr_bootstrap_value_772 = semantic_description(kr_bootstrap_value_771);
+const char * kr_bootstrap_value_773 = kr_bootstrap_value_772;
+const char * kr_bootstrap_value_774 = rt_cat(kr_bootstrap_value_770, kr_bootstrap_value_773);
+const char * kr_bootstrap_value_775 = kr_bootstrap_value_774;
+const char * kr_bootstrap_value_776 = rt_cat(kr_bootstrap_value_769, kr_bootstrap_value_775);
+const char * kr_bootstrap_value_777 = kr_bootstrap_value_776;
+const char * kr_bootstrap_value_778 = rt_cat(kr_bootstrap_value_766, kr_bootstrap_value_777);
+const char * kr_bootstrap_value_779 = kr_bootstrap_value_778;
+int64_t kr_bootstrap_value_780 = at_line;
+int64_t kr_bootstrap_value_781 = at_column;
+int64_t kr_bootstrap_value_782 = fail_at(kr_bootstrap_value_779, kr_bootstrap_value_780, kr_bootstrap_value_781);
+return kr_bootstrap_value_782;
 }
 return INT64_C(0);
 }
 }
-const char * semantic_variable(const char * name) {
+int64_t semantic_same(const char * actual, const char * expected) {
 {
-const char * found = semantic_lookup(semantic_locals, name);
-if (rt_equal(found, "")) {
-found = semantic_lookup(semantic_globals, name);
+const char * kr_bootstrap_value_783 = actual;
+const char * kr_bootstrap_value_784 = expected;
+int64_t kr_bootstrap_value_785 = expression_line;
+int64_t kr_bootstrap_value_786 = expression_column;
+int64_t kr_bootstrap_value_787 = semantic_same_at(kr_bootstrap_value_783, kr_bootstrap_value_784, kr_bootstrap_value_785, kr_bootstrap_value_786);
+return kr_bootstrap_value_787;
 }
-if ((!semantic_collecting)) {
-if (rt_equal(found, "")) {
-fail(rt_cat("undefined name: ", name));
 }
-if ((rt_at(found, INT64_C(0)) != INT64_C(86))) {
-fail("function names are only valid in calls");
+const char * semantic_variable(const char * name, int64_t at_line, int64_t at_column) {
+{
+const char * kr_bootstrap_value_788 = semantic_locals;
+const char * kr_bootstrap_value_789 = name;
+const char * kr_bootstrap_value_790 = semantic_lookup(kr_bootstrap_value_788, kr_bootstrap_value_789);
+const char * found = kr_bootstrap_value_790;
+const char * kr_bootstrap_value_791 = found;
+const char * kr_bootstrap_value_792 = "";
+bool kr_bootstrap_value_793 = rt_equal(kr_bootstrap_value_791, kr_bootstrap_value_792);
+if (kr_bootstrap_value_793) {
+const char * kr_bootstrap_value_794 = semantic_globals;
+const char * kr_bootstrap_value_795 = name;
+const char * kr_bootstrap_value_796 = semantic_lookup(kr_bootstrap_value_794, kr_bootstrap_value_795);
+found = kr_bootstrap_value_796;
+}
+bool kr_bootstrap_value_797 = (!semantic_collecting);
+if (kr_bootstrap_value_797) {
+const char * kr_bootstrap_value_798 = found;
+const char * kr_bootstrap_value_799 = "";
+bool kr_bootstrap_value_800 = rt_equal(kr_bootstrap_value_798, kr_bootstrap_value_799);
+if (kr_bootstrap_value_800) {
+const char * kr_bootstrap_value_801 = "undefined name: ";
+const char * kr_bootstrap_value_802 = name;
+const char * kr_bootstrap_value_803 = rt_cat(kr_bootstrap_value_801, kr_bootstrap_value_802);
+const char * kr_bootstrap_value_804 = kr_bootstrap_value_803;
+int64_t kr_bootstrap_value_805 = at_line;
+int64_t kr_bootstrap_value_806 = at_column;
+int64_t kr_bootstrap_value_807 = fail_at(kr_bootstrap_value_804, kr_bootstrap_value_805, kr_bootstrap_value_806);
+(void)(kr_bootstrap_value_807);
+}
+const char * kr_bootstrap_value_808 = found;
+int64_t kr_bootstrap_value_809 = INT64_C(0);
+int64_t kr_bootstrap_value_810 = rt_at(kr_bootstrap_value_808, kr_bootstrap_value_809);
+int64_t kr_bootstrap_value_811 = kr_bootstrap_value_810;
+bool kr_bootstrap_value_812 = (kr_bootstrap_value_811 != INT64_C(86));
+if (kr_bootstrap_value_812) {
+const char * kr_bootstrap_value_813 = "function names are only valid in calls";
+int64_t kr_bootstrap_value_814 = at_line;
+int64_t kr_bootstrap_value_815 = at_column;
+int64_t kr_bootstrap_value_816 = fail_at(kr_bootstrap_value_813, kr_bootstrap_value_814, kr_bootstrap_value_815);
+(void)(kr_bootstrap_value_816);
 }
 }
 return found;
@@ -393,32 +1652,80 @@ return found;
 }
 int64_t semantic_bind_local(const char * name, const char * ctype) {
 {
-if ((!rt_equal(semantic_lookup(semantic_locals, name), ""))) {
-return fail(rt_cat("duplicate or shadowed local name: ", name));
+const char * kr_bootstrap_value_817 = semantic_locals;
+const char * kr_bootstrap_value_818 = name;
+const char * kr_bootstrap_value_819 = semantic_lookup(kr_bootstrap_value_817, kr_bootstrap_value_818);
+const char * kr_bootstrap_value_820 = kr_bootstrap_value_819;
+const char * kr_bootstrap_value_821 = "";
+bool kr_bootstrap_value_822 = rt_equal(kr_bootstrap_value_820, kr_bootstrap_value_821);
+bool kr_bootstrap_value_823 = (!kr_bootstrap_value_822);
+if (kr_bootstrap_value_823) {
+const char * kr_bootstrap_value_824 = "duplicate or shadowed local name: ";
+const char * kr_bootstrap_value_825 = name;
+const char * kr_bootstrap_value_826 = rt_cat(kr_bootstrap_value_824, kr_bootstrap_value_825);
+const char * kr_bootstrap_value_827 = kr_bootstrap_value_826;
+int64_t kr_bootstrap_value_828 = fail(kr_bootstrap_value_827);
+return kr_bootstrap_value_828;
 }
-semantic_locals = semantic_record(semantic_locals, name, rt_cat("V", semantic_code(ctype)));
+const char * kr_bootstrap_value_829 = semantic_locals;
+const char * kr_bootstrap_value_830 = name;
+const char * kr_bootstrap_value_831 = "V";
+const char * kr_bootstrap_value_832 = ctype;
+const char * kr_bootstrap_value_833 = semantic_code(kr_bootstrap_value_832);
+const char * kr_bootstrap_value_834 = kr_bootstrap_value_833;
+const char * kr_bootstrap_value_835 = rt_cat(kr_bootstrap_value_831, kr_bootstrap_value_834);
+const char * kr_bootstrap_value_836 = kr_bootstrap_value_835;
+const char * kr_bootstrap_value_837 = semantic_record(kr_bootstrap_value_829, kr_bootstrap_value_830, kr_bootstrap_value_836);
+semantic_locals = kr_bootstrap_value_837;
 return INT64_C(0);
 }
 }
 int64_t semantic_integer(const char * text) {
 {
-int64_t length = rt_len(text);
-if ((length > INT64_C(19))) {
-return fail("integer literal is outside i64 range");
+const char * kr_bootstrap_value_838 = text;
+int64_t kr_bootstrap_value_839 = rt_len(kr_bootstrap_value_838);
+int64_t length = kr_bootstrap_value_839;
+int64_t kr_bootstrap_value_840 = length;
+bool kr_bootstrap_value_841 = (kr_bootstrap_value_840 > INT64_C(19));
+if (kr_bootstrap_value_841) {
+const char * kr_bootstrap_value_842 = "integer literal is outside i64 range";
+int64_t kr_bootstrap_value_843 = fail(kr_bootstrap_value_842);
+return kr_bootstrap_value_843;
 }
-if ((length == INT64_C(19))) {
+int64_t kr_bootstrap_value_844 = length;
+bool kr_bootstrap_value_845 = (kr_bootstrap_value_844 == INT64_C(19));
+if (kr_bootstrap_value_845) {
 const char * limit = "9223372036854775807";
 int64_t index = INT64_C(0);
-while ((index < length)) {
-int64_t digit = rt_at(text, index);
-int64_t maximum = rt_at(limit, index);
-if ((digit > maximum)) {
-return fail("integer literal is outside i64 range");
+while (true) {
+int64_t kr_bootstrap_value_846 = index;
+bool kr_bootstrap_value_847 = (kr_bootstrap_value_846 < length);
+if (!(kr_bootstrap_value_847)) { break; }
+{
+const char * kr_bootstrap_value_848 = text;
+int64_t kr_bootstrap_value_849 = index;
+int64_t kr_bootstrap_value_850 = rt_at(kr_bootstrap_value_848, kr_bootstrap_value_849);
+int64_t digit = kr_bootstrap_value_850;
+const char * kr_bootstrap_value_851 = limit;
+int64_t kr_bootstrap_value_852 = index;
+int64_t kr_bootstrap_value_853 = rt_at(kr_bootstrap_value_851, kr_bootstrap_value_852);
+int64_t maximum = kr_bootstrap_value_853;
+int64_t kr_bootstrap_value_854 = digit;
+bool kr_bootstrap_value_855 = (kr_bootstrap_value_854 > maximum);
+if (kr_bootstrap_value_855) {
+const char * kr_bootstrap_value_856 = "integer literal is outside i64 range";
+int64_t kr_bootstrap_value_857 = fail(kr_bootstrap_value_856);
+return kr_bootstrap_value_857;
 }
-if ((digit < maximum)) {
+int64_t kr_bootstrap_value_858 = digit;
+bool kr_bootstrap_value_859 = (kr_bootstrap_value_858 < maximum);
+if (kr_bootstrap_value_859) {
 return INT64_C(0);
 }
-index = (index + INT64_C(1));
+int64_t kr_bootstrap_value_860 = index;
+int64_t kr_bootstrap_value_861 = rt_iadd(kr_bootstrap_value_860, INT64_C(1), kr_bootstrap_value_source, INT64_C(391), INT64_C(31));
+index = kr_bootstrap_value_861;
+}
 }
 }
 return INT64_C(0);
@@ -426,418 +1733,1685 @@ return INT64_C(0);
 }
 const char * semantic_string_range(const char * text, int64_t start, int64_t end) {
 {
-if (((end - start) > INT64_C(64))) {
-int64_t middle = (start + (((end - start)) / INT64_C(2)));
-return rt_cat(semantic_string_range(text, start, middle), semantic_string_range(text, middle, end));
+int64_t kr_bootstrap_value_862 = end;
+int64_t kr_bootstrap_value_863 = rt_isub(kr_bootstrap_value_862, start, kr_bootstrap_value_source, INT64_C(400), INT64_C(16));
+int64_t kr_bootstrap_value_864 = kr_bootstrap_value_863;
+bool kr_bootstrap_value_865 = (kr_bootstrap_value_864 > INT64_C(64));
+if (kr_bootstrap_value_865) {
+int64_t kr_bootstrap_value_866 = start;
+int64_t kr_bootstrap_value_867 = end;
+int64_t kr_bootstrap_value_868 = rt_isub(kr_bootstrap_value_867, start, kr_bootstrap_value_source, INT64_C(401), INT64_C(43));
+int64_t kr_bootstrap_value_869 = (kr_bootstrap_value_868);
+int64_t kr_bootstrap_value_870 = rt_idiv(kr_bootstrap_value_869, INT64_C(2), kr_bootstrap_value_source, INT64_C(401), INT64_C(52));
+int64_t kr_bootstrap_value_871 = rt_iadd(kr_bootstrap_value_866, kr_bootstrap_value_870, kr_bootstrap_value_source, INT64_C(401), INT64_C(36));
+int64_t middle = kr_bootstrap_value_871;
+const char * kr_bootstrap_value_872 = text;
+int64_t kr_bootstrap_value_873 = start;
+int64_t kr_bootstrap_value_874 = middle;
+const char * kr_bootstrap_value_875 = semantic_string_range(kr_bootstrap_value_872, kr_bootstrap_value_873, kr_bootstrap_value_874);
+const char * kr_bootstrap_value_876 = kr_bootstrap_value_875;
+const char * kr_bootstrap_value_877 = text;
+int64_t kr_bootstrap_value_878 = middle;
+int64_t kr_bootstrap_value_879 = end;
+const char * kr_bootstrap_value_880 = semantic_string_range(kr_bootstrap_value_877, kr_bootstrap_value_878, kr_bootstrap_value_879);
+const char * kr_bootstrap_value_881 = kr_bootstrap_value_880;
+const char * kr_bootstrap_value_882 = rt_cat(kr_bootstrap_value_876, kr_bootstrap_value_881);
+return kr_bootstrap_value_882;
 }
 const char * result = "";
 int64_t position = start;
 int64_t copied = start;
-while ((position < end)) {
-if ((rt_at(text, position) == INT64_C(63))) {
-result = rt_cat(result, rt_cat(rt_slice(text, copied, position), "\\\?"));
-copied = (position + INT64_C(1));
+while (true) {
+int64_t kr_bootstrap_value_883 = position;
+bool kr_bootstrap_value_884 = (kr_bootstrap_value_883 < end);
+if (!(kr_bootstrap_value_884)) { break; }
+{
+const char * kr_bootstrap_value_885 = text;
+int64_t kr_bootstrap_value_886 = position;
+int64_t kr_bootstrap_value_887 = rt_at(kr_bootstrap_value_885, kr_bootstrap_value_886);
+int64_t kr_bootstrap_value_888 = kr_bootstrap_value_887;
+bool kr_bootstrap_value_889 = (kr_bootstrap_value_888 == INT64_C(63));
+if (kr_bootstrap_value_889) {
+const char * kr_bootstrap_value_890 = result;
+const char * kr_bootstrap_value_891 = text;
+int64_t kr_bootstrap_value_892 = copied;
+int64_t kr_bootstrap_value_893 = position;
+const char * kr_bootstrap_value_894 = rt_slice(kr_bootstrap_value_891, kr_bootstrap_value_892, kr_bootstrap_value_893);
+const char * kr_bootstrap_value_895 = kr_bootstrap_value_894;
+const char * kr_bootstrap_value_896 = "\\\?";
+const char * kr_bootstrap_value_897 = rt_cat(kr_bootstrap_value_895, kr_bootstrap_value_896);
+const char * kr_bootstrap_value_898 = kr_bootstrap_value_897;
+const char * kr_bootstrap_value_899 = rt_cat(kr_bootstrap_value_890, kr_bootstrap_value_898);
+result = kr_bootstrap_value_899;
+int64_t kr_bootstrap_value_900 = position;
+int64_t kr_bootstrap_value_901 = rt_iadd(kr_bootstrap_value_900, INT64_C(1), kr_bootstrap_value_source, INT64_C(410), INT64_C(35));
+copied = kr_bootstrap_value_901;
 }
-position = (position + INT64_C(1));
+int64_t kr_bootstrap_value_902 = position;
+int64_t kr_bootstrap_value_903 = rt_iadd(kr_bootstrap_value_902, INT64_C(1), kr_bootstrap_value_source, INT64_C(412), INT64_C(33));
+position = kr_bootstrap_value_903;
 }
-return rt_cat(result, rt_slice(text, copied, end));
+}
+const char * kr_bootstrap_value_904 = result;
+const char * kr_bootstrap_value_905 = text;
+int64_t kr_bootstrap_value_906 = copied;
+int64_t kr_bootstrap_value_907 = end;
+const char * kr_bootstrap_value_908 = rt_slice(kr_bootstrap_value_905, kr_bootstrap_value_906, kr_bootstrap_value_907);
+const char * kr_bootstrap_value_909 = kr_bootstrap_value_908;
+const char * kr_bootstrap_value_910 = rt_cat(kr_bootstrap_value_904, kr_bootstrap_value_909);
+return kr_bootstrap_value_910;
 }
 }
 const char * semantic_string_literal(const char * text) {
 {
-int64_t length = rt_len(text);
+const char * kr_bootstrap_value_911 = text;
+int64_t kr_bootstrap_value_912 = rt_len(kr_bootstrap_value_911);
+int64_t length = kr_bootstrap_value_912;
 int64_t position = INT64_C(0);
-while ((position < length)) {
-if ((rt_at(text, position) == INT64_C(63))) {
-return semantic_string_range(text, INT64_C(0), length);
+while (true) {
+int64_t kr_bootstrap_value_913 = position;
+bool kr_bootstrap_value_914 = (kr_bootstrap_value_913 < length);
+if (!(kr_bootstrap_value_914)) { break; }
+{
+const char * kr_bootstrap_value_915 = text;
+int64_t kr_bootstrap_value_916 = position;
+int64_t kr_bootstrap_value_917 = rt_at(kr_bootstrap_value_915, kr_bootstrap_value_916);
+int64_t kr_bootstrap_value_918 = kr_bootstrap_value_917;
+bool kr_bootstrap_value_919 = (kr_bootstrap_value_918 == INT64_C(63));
+if (kr_bootstrap_value_919) {
+const char * kr_bootstrap_value_920 = text;
+int64_t kr_bootstrap_value_921 = INT64_C(0);
+int64_t kr_bootstrap_value_922 = length;
+const char * kr_bootstrap_value_923 = semantic_string_range(kr_bootstrap_value_920, kr_bootstrap_value_921, kr_bootstrap_value_922);
+return kr_bootstrap_value_923;
 }
-position = (position + INT64_C(1));
+int64_t kr_bootstrap_value_924 = position;
+int64_t kr_bootstrap_value_925 = rt_iadd(kr_bootstrap_value_924, INT64_C(1), kr_bootstrap_value_source, INT64_C(424), INT64_C(33));
+position = kr_bootstrap_value_925;
+}
 }
 return text;
 }
 }
+const char * semantic_quote_bytes(const char * text) {
+{
+const char * result = "\"";
+int64_t index = INT64_C(0);
+while (true) {
+int64_t kr_bootstrap_value_926 = index;
+const char * kr_bootstrap_value_927 = text;
+int64_t kr_bootstrap_value_928 = rt_len(kr_bootstrap_value_927);
+bool kr_bootstrap_value_929 = (kr_bootstrap_value_926 < kr_bootstrap_value_928);
+if (!(kr_bootstrap_value_929)) { break; }
+{
+const char * kr_bootstrap_value_930 = text;
+int64_t kr_bootstrap_value_931 = index;
+int64_t kr_bootstrap_value_932 = rt_at(kr_bootstrap_value_930, kr_bootstrap_value_931);
+int64_t byte = kr_bootstrap_value_932;
+const char * kr_bootstrap_value_933 = result;
+const char * kr_bootstrap_value_934 = "\\";
+int64_t kr_bootstrap_value_935 = byte;
+int64_t kr_bootstrap_value_936 = rt_idiv(kr_bootstrap_value_935, INT64_C(64), kr_bootstrap_value_source, INT64_C(436), INT64_C(72));
+int64_t kr_bootstrap_value_937 = kr_bootstrap_value_936;
+const char * kr_bootstrap_value_938 = rt_number(kr_bootstrap_value_937);
+const char * kr_bootstrap_value_939 = kr_bootstrap_value_938;
+int64_t kr_bootstrap_value_940 = byte;
+int64_t kr_bootstrap_value_941 = rt_idiv(kr_bootstrap_value_940, INT64_C(8), kr_bootstrap_value_source, INT64_C(436), INT64_C(101));
+int64_t kr_bootstrap_value_942 = kr_bootstrap_value_941;
+int64_t kr_bootstrap_value_943 = rt_imod(kr_bootstrap_value_942, INT64_C(8), kr_bootstrap_value_source, INT64_C(436), INT64_C(105));
+int64_t kr_bootstrap_value_944 = kr_bootstrap_value_943;
+const char * kr_bootstrap_value_945 = rt_number(kr_bootstrap_value_944);
+const char * kr_bootstrap_value_946 = kr_bootstrap_value_945;
+int64_t kr_bootstrap_value_947 = byte;
+int64_t kr_bootstrap_value_948 = rt_imod(kr_bootstrap_value_947, INT64_C(8), kr_bootstrap_value_source, INT64_C(436), INT64_C(126));
+int64_t kr_bootstrap_value_949 = kr_bootstrap_value_948;
+const char * kr_bootstrap_value_950 = rt_number(kr_bootstrap_value_949);
+const char * kr_bootstrap_value_951 = kr_bootstrap_value_950;
+const char * kr_bootstrap_value_952 = rt_cat(kr_bootstrap_value_946, kr_bootstrap_value_951);
+const char * kr_bootstrap_value_953 = kr_bootstrap_value_952;
+const char * kr_bootstrap_value_954 = rt_cat(kr_bootstrap_value_939, kr_bootstrap_value_953);
+const char * kr_bootstrap_value_955 = kr_bootstrap_value_954;
+const char * kr_bootstrap_value_956 = rt_cat(kr_bootstrap_value_934, kr_bootstrap_value_955);
+const char * kr_bootstrap_value_957 = kr_bootstrap_value_956;
+const char * kr_bootstrap_value_958 = rt_cat(kr_bootstrap_value_933, kr_bootstrap_value_957);
+result = kr_bootstrap_value_958;
+int64_t kr_bootstrap_value_959 = index;
+int64_t kr_bootstrap_value_960 = rt_iadd(kr_bootstrap_value_959, INT64_C(1), kr_bootstrap_value_source, INT64_C(437), INT64_C(27));
+index = kr_bootstrap_value_960;
+}
+}
+const char * kr_bootstrap_value_961 = result;
+const char * kr_bootstrap_value_962 = "\"";
+const char * kr_bootstrap_value_963 = rt_cat(kr_bootstrap_value_961, kr_bootstrap_value_962);
+return kr_bootstrap_value_963;
+}
+}
+const char * semantic_location(int64_t where_line, int64_t where_column) {
+{
+semantic_checked = true;
+const char * kr_bootstrap_value_964 = "kr_bootstrap_value_source";
+const char * kr_bootstrap_value_965 = ", INT64_C(";
+int64_t kr_bootstrap_value_966 = where_line;
+const char * kr_bootstrap_value_967 = rt_number(kr_bootstrap_value_966);
+const char * kr_bootstrap_value_968 = kr_bootstrap_value_967;
+const char * kr_bootstrap_value_969 = "), INT64_C(";
+int64_t kr_bootstrap_value_970 = where_column;
+const char * kr_bootstrap_value_971 = rt_number(kr_bootstrap_value_970);
+const char * kr_bootstrap_value_972 = kr_bootstrap_value_971;
+const char * kr_bootstrap_value_973 = ")";
+const char * kr_bootstrap_value_974 = rt_cat(kr_bootstrap_value_972, kr_bootstrap_value_973);
+const char * kr_bootstrap_value_975 = kr_bootstrap_value_974;
+const char * kr_bootstrap_value_976 = rt_cat(kr_bootstrap_value_969, kr_bootstrap_value_975);
+const char * kr_bootstrap_value_977 = kr_bootstrap_value_976;
+const char * kr_bootstrap_value_978 = rt_cat(kr_bootstrap_value_968, kr_bootstrap_value_977);
+const char * kr_bootstrap_value_979 = kr_bootstrap_value_978;
+const char * kr_bootstrap_value_980 = rt_cat(kr_bootstrap_value_965, kr_bootstrap_value_979);
+const char * kr_bootstrap_value_981 = kr_bootstrap_value_980;
+const char * kr_bootstrap_value_982 = rt_cat(kr_bootstrap_value_964, kr_bootstrap_value_981);
+return kr_bootstrap_value_982;
+}
+}
+bool semantic_emitting(void) {
+bool kr_bootstrap_value_983 = (!semantic_collecting);
+bool kr_bootstrap_value_984 = kr_bootstrap_value_983;
+if (kr_bootstrap_value_984) {
+kr_bootstrap_value_984 = semantic_in_function;
+}
+return kr_bootstrap_value_984;
+}
+const char * semantic_materialize(const char * code, const char * value) {
+{
+bool kr_bootstrap_value_985 = semantic_emitting();
+bool kr_bootstrap_value_986 = (!kr_bootstrap_value_985);
+if (kr_bootstrap_value_986) {
+return value;
+}
+int64_t kr_bootstrap_value_987 = semantic_counter;
+int64_t kr_bootstrap_value_988 = rt_iadd(kr_bootstrap_value_987, INT64_C(1), kr_bootstrap_value_source, INT64_C(457), INT64_C(45));
+semantic_counter = kr_bootstrap_value_988;
+const char * kr_bootstrap_value_989 = "kr_bootstrap_value_";
+int64_t kr_bootstrap_value_990 = semantic_counter;
+const char * kr_bootstrap_value_991 = rt_number(kr_bootstrap_value_990);
+const char * kr_bootstrap_value_992 = kr_bootstrap_value_991;
+const char * kr_bootstrap_value_993 = rt_cat(kr_bootstrap_value_989, kr_bootstrap_value_992);
+const char * name = kr_bootstrap_value_993;
+const char * ctype = "int64_t";
+const char * kr_bootstrap_value_994 = code;
+const char * kr_bootstrap_value_995 = "b";
+bool kr_bootstrap_value_996 = rt_equal(kr_bootstrap_value_994, kr_bootstrap_value_995);
+if (kr_bootstrap_value_996) {
+ctype = "bool";
+}
+const char * kr_bootstrap_value_997 = code;
+const char * kr_bootstrap_value_998 = "s";
+bool kr_bootstrap_value_999 = rt_equal(kr_bootstrap_value_997, kr_bootstrap_value_998);
+if (kr_bootstrap_value_999) {
+ctype = "const char *";
+}
+const char * kr_bootstrap_value_1000 = semantic_prelude;
+const char * kr_bootstrap_value_1001 = ctype;
+const char * kr_bootstrap_value_1002 = " ";
+const char * kr_bootstrap_value_1003 = name;
+const char * kr_bootstrap_value_1004 = " = ";
+const char * kr_bootstrap_value_1005 = value;
+const char * kr_bootstrap_value_1006 = ";\n";
+const char * kr_bootstrap_value_1007 = rt_cat(kr_bootstrap_value_1005, kr_bootstrap_value_1006);
+const char * kr_bootstrap_value_1008 = kr_bootstrap_value_1007;
+const char * kr_bootstrap_value_1009 = rt_cat(kr_bootstrap_value_1004, kr_bootstrap_value_1008);
+const char * kr_bootstrap_value_1010 = kr_bootstrap_value_1009;
+const char * kr_bootstrap_value_1011 = rt_cat(kr_bootstrap_value_1003, kr_bootstrap_value_1010);
+const char * kr_bootstrap_value_1012 = kr_bootstrap_value_1011;
+const char * kr_bootstrap_value_1013 = rt_cat(kr_bootstrap_value_1002, kr_bootstrap_value_1012);
+const char * kr_bootstrap_value_1014 = kr_bootstrap_value_1013;
+const char * kr_bootstrap_value_1015 = rt_cat(kr_bootstrap_value_1001, kr_bootstrap_value_1014);
+const char * kr_bootstrap_value_1016 = kr_bootstrap_value_1015;
+const char * kr_bootstrap_value_1017 = rt_cat(kr_bootstrap_value_1000, kr_bootstrap_value_1016);
+semantic_prelude = kr_bootstrap_value_1017;
+return name;
+}
+}
+const char * semantic_take_prelude(void) {
+{
+const char * result = semantic_prelude;
+semantic_prelude = "";
+return result;
+}
+}
+const char * semantic_binary(const char * op, const char * left, const char * right, int64_t where_line, int64_t where_column) {
+{
+bool kr_bootstrap_value_1018 = semantic_emitting();
+if (kr_bootstrap_value_1018) {
+const char * helper = "";
+const char * kr_bootstrap_value_1019 = op;
+const char * kr_bootstrap_value_1020 = "+";
+bool kr_bootstrap_value_1021 = rt_equal(kr_bootstrap_value_1019, kr_bootstrap_value_1020);
+if (kr_bootstrap_value_1021) {
+helper = "rt_iadd";
+}
+const char * kr_bootstrap_value_1022 = op;
+const char * kr_bootstrap_value_1023 = "-";
+bool kr_bootstrap_value_1024 = rt_equal(kr_bootstrap_value_1022, kr_bootstrap_value_1023);
+if (kr_bootstrap_value_1024) {
+helper = "rt_isub";
+}
+const char * kr_bootstrap_value_1025 = op;
+const char * kr_bootstrap_value_1026 = "*";
+bool kr_bootstrap_value_1027 = rt_equal(kr_bootstrap_value_1025, kr_bootstrap_value_1026);
+if (kr_bootstrap_value_1027) {
+helper = "rt_imul";
+}
+const char * kr_bootstrap_value_1028 = op;
+const char * kr_bootstrap_value_1029 = "/";
+bool kr_bootstrap_value_1030 = rt_equal(kr_bootstrap_value_1028, kr_bootstrap_value_1029);
+if (kr_bootstrap_value_1030) {
+helper = "rt_idiv";
+}
+const char * kr_bootstrap_value_1031 = op;
+const char * kr_bootstrap_value_1032 = "%";
+bool kr_bootstrap_value_1033 = rt_equal(kr_bootstrap_value_1031, kr_bootstrap_value_1032);
+if (kr_bootstrap_value_1033) {
+helper = "rt_imod";
+}
+const char * kr_bootstrap_value_1034 = helper;
+const char * kr_bootstrap_value_1035 = "";
+bool kr_bootstrap_value_1036 = rt_equal(kr_bootstrap_value_1034, kr_bootstrap_value_1035);
+bool kr_bootstrap_value_1037 = (!kr_bootstrap_value_1036);
+if (kr_bootstrap_value_1037) {
+const char * kr_bootstrap_value_1038 = helper;
+const char * kr_bootstrap_value_1039 = "(";
+const char * kr_bootstrap_value_1040 = left;
+const char * kr_bootstrap_value_1041 = ", ";
+const char * kr_bootstrap_value_1042 = right;
+const char * kr_bootstrap_value_1043 = ", ";
+int64_t kr_bootstrap_value_1044 = where_line;
+int64_t kr_bootstrap_value_1045 = where_column;
+const char * kr_bootstrap_value_1046 = semantic_location(kr_bootstrap_value_1044, kr_bootstrap_value_1045);
+const char * kr_bootstrap_value_1047 = kr_bootstrap_value_1046;
+const char * kr_bootstrap_value_1048 = ")";
+const char * kr_bootstrap_value_1049 = rt_cat(kr_bootstrap_value_1047, kr_bootstrap_value_1048);
+const char * kr_bootstrap_value_1050 = kr_bootstrap_value_1049;
+const char * kr_bootstrap_value_1051 = rt_cat(kr_bootstrap_value_1043, kr_bootstrap_value_1050);
+const char * kr_bootstrap_value_1052 = kr_bootstrap_value_1051;
+const char * kr_bootstrap_value_1053 = rt_cat(kr_bootstrap_value_1042, kr_bootstrap_value_1052);
+const char * kr_bootstrap_value_1054 = kr_bootstrap_value_1053;
+const char * kr_bootstrap_value_1055 = rt_cat(kr_bootstrap_value_1041, kr_bootstrap_value_1054);
+const char * kr_bootstrap_value_1056 = kr_bootstrap_value_1055;
+const char * kr_bootstrap_value_1057 = rt_cat(kr_bootstrap_value_1040, kr_bootstrap_value_1056);
+const char * kr_bootstrap_value_1058 = kr_bootstrap_value_1057;
+const char * kr_bootstrap_value_1059 = rt_cat(kr_bootstrap_value_1039, kr_bootstrap_value_1058);
+const char * kr_bootstrap_value_1060 = kr_bootstrap_value_1059;
+const char * kr_bootstrap_value_1061 = rt_cat(kr_bootstrap_value_1038, kr_bootstrap_value_1060);
+return kr_bootstrap_value_1061;
+}
+}
+const char * kr_bootstrap_value_1062 = "(";
+const char * kr_bootstrap_value_1063 = left;
+const char * kr_bootstrap_value_1064 = " ";
+const char * kr_bootstrap_value_1065 = op;
+const char * kr_bootstrap_value_1066 = " ";
+const char * kr_bootstrap_value_1067 = right;
+const char * kr_bootstrap_value_1068 = ")";
+const char * kr_bootstrap_value_1069 = rt_cat(kr_bootstrap_value_1067, kr_bootstrap_value_1068);
+const char * kr_bootstrap_value_1070 = kr_bootstrap_value_1069;
+const char * kr_bootstrap_value_1071 = rt_cat(kr_bootstrap_value_1066, kr_bootstrap_value_1070);
+const char * kr_bootstrap_value_1072 = kr_bootstrap_value_1071;
+const char * kr_bootstrap_value_1073 = rt_cat(kr_bootstrap_value_1065, kr_bootstrap_value_1072);
+const char * kr_bootstrap_value_1074 = kr_bootstrap_value_1073;
+const char * kr_bootstrap_value_1075 = rt_cat(kr_bootstrap_value_1064, kr_bootstrap_value_1074);
+const char * kr_bootstrap_value_1076 = kr_bootstrap_value_1075;
+const char * kr_bootstrap_value_1077 = rt_cat(kr_bootstrap_value_1063, kr_bootstrap_value_1076);
+const char * kr_bootstrap_value_1078 = kr_bootstrap_value_1077;
+const char * kr_bootstrap_value_1079 = rt_cat(kr_bootstrap_value_1062, kr_bootstrap_value_1078);
+return kr_bootstrap_value_1079;
+}
+}
 const char * primary(void) {
 {
-enter();
+int64_t kr_bootstrap_value_1080 = enter();
+(void)(kr_bootstrap_value_1080);
 const char * value = "";
-if (((rt_equal(token, "!") || rt_equal(token, "-")) || rt_equal(token, "+"))) {
+const char * kr_bootstrap_value_1081 = token;
+const char * kr_bootstrap_value_1082 = "!";
+bool kr_bootstrap_value_1083 = rt_equal(kr_bootstrap_value_1081, kr_bootstrap_value_1082);
+bool kr_bootstrap_value_1084 = kr_bootstrap_value_1083;
+if (!kr_bootstrap_value_1084) {
+const char * kr_bootstrap_value_1085 = token;
+const char * kr_bootstrap_value_1086 = "-";
+bool kr_bootstrap_value_1087 = rt_equal(kr_bootstrap_value_1085, kr_bootstrap_value_1086);
+kr_bootstrap_value_1084 = kr_bootstrap_value_1087;
+}
+bool kr_bootstrap_value_1088 = kr_bootstrap_value_1084;
+if (!kr_bootstrap_value_1088) {
+const char * kr_bootstrap_value_1089 = token;
+const char * kr_bootstrap_value_1090 = "+";
+bool kr_bootstrap_value_1091 = rt_equal(kr_bootstrap_value_1089, kr_bootstrap_value_1090);
+kr_bootstrap_value_1088 = kr_bootstrap_value_1091;
+}
+if (kr_bootstrap_value_1088) {
 const char * unary = token;
-next();
-if (((rt_equal(unary, "-") && (token_kind == INT64_C(2))) && rt_equal(token, "9223372036854775808"))) {
-next();
+int64_t where_line = token_line;
+int64_t where_column = token_column;
+int64_t kr_bootstrap_value_1092 = next();
+(void)(kr_bootstrap_value_1092);
+const char * kr_bootstrap_value_1093 = unary;
+const char * kr_bootstrap_value_1094 = "-";
+bool kr_bootstrap_value_1095 = rt_equal(kr_bootstrap_value_1093, kr_bootstrap_value_1094);
+bool kr_bootstrap_value_1096 = kr_bootstrap_value_1095;
+if (kr_bootstrap_value_1096) {
+int64_t kr_bootstrap_value_1097 = token_kind;
+bool kr_bootstrap_value_1098 = (kr_bootstrap_value_1097 == INT64_C(2));
+kr_bootstrap_value_1096 = kr_bootstrap_value_1098;
+}
+bool kr_bootstrap_value_1099 = kr_bootstrap_value_1096;
+if (kr_bootstrap_value_1099) {
+const char * kr_bootstrap_value_1100 = token;
+const char * kr_bootstrap_value_1101 = "9223372036854775808";
+bool kr_bootstrap_value_1102 = rt_equal(kr_bootstrap_value_1100, kr_bootstrap_value_1101);
+kr_bootstrap_value_1099 = kr_bootstrap_value_1102;
+}
+if (kr_bootstrap_value_1099) {
+int64_t kr_bootstrap_value_1103 = next();
+(void)(kr_bootstrap_value_1103);
 semantic_expression_type = "i";
 semantic_lvalue = false;
 semantic_call = false;
 semantic_constant = true;
-return leave("(-INT64_C(9223372036854775807) - INT64_C(1))");
+const char * kr_bootstrap_value_1104 = "(-INT64_C(9223372036854775807) - INT64_C(1))";
+const char * kr_bootstrap_value_1105 = leave(kr_bootstrap_value_1104);
+return kr_bootstrap_value_1105;
 }
-value = primary();
-if (rt_equal(unary, "!")) {
-semantic_same(semantic_expression_type, "b");
+const char * kr_bootstrap_value_1106 = primary();
+value = kr_bootstrap_value_1106;
+const char * kr_bootstrap_value_1107 = unary;
+const char * kr_bootstrap_value_1108 = "!";
+bool kr_bootstrap_value_1109 = rt_equal(kr_bootstrap_value_1107, kr_bootstrap_value_1108);
+if (kr_bootstrap_value_1109) {
+const char * kr_bootstrap_value_1110 = semantic_expression_type;
+const char * kr_bootstrap_value_1111 = "b";
+int64_t kr_bootstrap_value_1112 = where_line;
+int64_t kr_bootstrap_value_1113 = where_column;
+int64_t kr_bootstrap_value_1114 = semantic_same_at(kr_bootstrap_value_1110, kr_bootstrap_value_1111, kr_bootstrap_value_1112, kr_bootstrap_value_1113);
+(void)(kr_bootstrap_value_1114);
 semantic_expression_type = "b";
 }
 else {
-semantic_same(semantic_expression_type, "i");
+{
+const char * kr_bootstrap_value_1115 = semantic_expression_type;
+const char * kr_bootstrap_value_1116 = "i";
+int64_t kr_bootstrap_value_1117 = where_line;
+int64_t kr_bootstrap_value_1118 = where_column;
+int64_t kr_bootstrap_value_1119 = semantic_same_at(kr_bootstrap_value_1115, kr_bootstrap_value_1116, kr_bootstrap_value_1117, kr_bootstrap_value_1118);
+(void)(kr_bootstrap_value_1119);
 semantic_expression_type = "i";
+}
 }
 semantic_lvalue = false;
 semantic_call = false;
-return leave(rt_cat(rt_cat("(", unary), rt_cat(value, ")")));
+bool kr_bootstrap_value_1120 = semantic_emitting();
+bool kr_bootstrap_value_1121 = kr_bootstrap_value_1120;
+if (kr_bootstrap_value_1121) {
+const char * kr_bootstrap_value_1122 = unary;
+const char * kr_bootstrap_value_1123 = "-";
+bool kr_bootstrap_value_1124 = rt_equal(kr_bootstrap_value_1122, kr_bootstrap_value_1123);
+kr_bootstrap_value_1121 = kr_bootstrap_value_1124;
 }
-if (rt_equal(token, "(")) {
-next();
-value = expression(INT64_C(1));
-take(")");
-return leave(rt_cat("(", rt_cat(value, ")")));
+if (kr_bootstrap_value_1121) {
+const char * kr_bootstrap_value_1125 = "rt_ineg(";
+const char * kr_bootstrap_value_1126 = value;
+const char * kr_bootstrap_value_1127 = ", ";
+int64_t kr_bootstrap_value_1128 = where_line;
+int64_t kr_bootstrap_value_1129 = where_column;
+const char * kr_bootstrap_value_1130 = semantic_location(kr_bootstrap_value_1128, kr_bootstrap_value_1129);
+const char * kr_bootstrap_value_1131 = kr_bootstrap_value_1130;
+const char * kr_bootstrap_value_1132 = ")";
+const char * kr_bootstrap_value_1133 = rt_cat(kr_bootstrap_value_1131, kr_bootstrap_value_1132);
+const char * kr_bootstrap_value_1134 = kr_bootstrap_value_1133;
+const char * kr_bootstrap_value_1135 = rt_cat(kr_bootstrap_value_1127, kr_bootstrap_value_1134);
+const char * kr_bootstrap_value_1136 = kr_bootstrap_value_1135;
+const char * kr_bootstrap_value_1137 = rt_cat(kr_bootstrap_value_1126, kr_bootstrap_value_1136);
+const char * kr_bootstrap_value_1138 = kr_bootstrap_value_1137;
+const char * kr_bootstrap_value_1139 = rt_cat(kr_bootstrap_value_1125, kr_bootstrap_value_1138);
+value = kr_bootstrap_value_1139;
+}
+else {
+{
+const char * kr_bootstrap_value_1140 = "(";
+const char * kr_bootstrap_value_1141 = unary;
+const char * kr_bootstrap_value_1142 = rt_cat(kr_bootstrap_value_1140, kr_bootstrap_value_1141);
+const char * kr_bootstrap_value_1143 = kr_bootstrap_value_1142;
+const char * kr_bootstrap_value_1144 = value;
+const char * kr_bootstrap_value_1145 = ")";
+const char * kr_bootstrap_value_1146 = rt_cat(kr_bootstrap_value_1144, kr_bootstrap_value_1145);
+const char * kr_bootstrap_value_1147 = kr_bootstrap_value_1146;
+const char * kr_bootstrap_value_1148 = rt_cat(kr_bootstrap_value_1143, kr_bootstrap_value_1147);
+value = kr_bootstrap_value_1148;
+}
+}
+const char * kr_bootstrap_value_1149 = semantic_expression_type;
+const char * kr_bootstrap_value_1150 = value;
+const char * kr_bootstrap_value_1151 = semantic_materialize(kr_bootstrap_value_1149, kr_bootstrap_value_1150);
+const char * kr_bootstrap_value_1152 = kr_bootstrap_value_1151;
+const char * kr_bootstrap_value_1153 = leave(kr_bootstrap_value_1152);
+return kr_bootstrap_value_1153;
+}
+const char * kr_bootstrap_value_1154 = token;
+const char * kr_bootstrap_value_1155 = "(";
+bool kr_bootstrap_value_1156 = rt_equal(kr_bootstrap_value_1154, kr_bootstrap_value_1155);
+if (kr_bootstrap_value_1156) {
+int64_t kr_bootstrap_value_1157 = next();
+(void)(kr_bootstrap_value_1157);
+int64_t kr_bootstrap_value_1158 = INT64_C(1);
+const char * kr_bootstrap_value_1159 = expression(kr_bootstrap_value_1158);
+value = kr_bootstrap_value_1159;
+const char * kr_bootstrap_value_1160 = ")";
+int64_t kr_bootstrap_value_1161 = take(kr_bootstrap_value_1160);
+(void)(kr_bootstrap_value_1161);
+const char * kr_bootstrap_value_1162 = "(";
+const char * kr_bootstrap_value_1163 = value;
+const char * kr_bootstrap_value_1164 = ")";
+const char * kr_bootstrap_value_1165 = rt_cat(kr_bootstrap_value_1163, kr_bootstrap_value_1164);
+const char * kr_bootstrap_value_1166 = kr_bootstrap_value_1165;
+const char * kr_bootstrap_value_1167 = rt_cat(kr_bootstrap_value_1162, kr_bootstrap_value_1166);
+const char * kr_bootstrap_value_1168 = kr_bootstrap_value_1167;
+const char * kr_bootstrap_value_1169 = leave(kr_bootstrap_value_1168);
+return kr_bootstrap_value_1169;
 }
 semantic_lvalue = false;
 semantic_call = false;
 semantic_constant = true;
-if ((token_kind == INT64_C(2))) {
-semantic_integer(token);
-value = rt_cat("INT64_C(", rt_cat(token, ")"));
+int64_t kr_bootstrap_value_1170 = token_kind;
+bool kr_bootstrap_value_1171 = (kr_bootstrap_value_1170 == INT64_C(2));
+if (kr_bootstrap_value_1171) {
+const char * kr_bootstrap_value_1172 = token;
+int64_t kr_bootstrap_value_1173 = semantic_integer(kr_bootstrap_value_1172);
+(void)(kr_bootstrap_value_1173);
+const char * kr_bootstrap_value_1174 = "INT64_C(";
+const char * kr_bootstrap_value_1175 = token;
+const char * kr_bootstrap_value_1176 = ")";
+const char * kr_bootstrap_value_1177 = rt_cat(kr_bootstrap_value_1175, kr_bootstrap_value_1176);
+const char * kr_bootstrap_value_1178 = kr_bootstrap_value_1177;
+const char * kr_bootstrap_value_1179 = rt_cat(kr_bootstrap_value_1174, kr_bootstrap_value_1178);
+value = kr_bootstrap_value_1179;
 semantic_expression_type = "i";
-next();
+int64_t kr_bootstrap_value_1180 = next();
+(void)(kr_bootstrap_value_1180);
 }
-else if ((token_kind == INT64_C(3))) {
-value = semantic_string_literal(token);
+else {
+int64_t kr_bootstrap_value_1181 = token_kind;
+bool kr_bootstrap_value_1182 = (kr_bootstrap_value_1181 == INT64_C(3));
+if (kr_bootstrap_value_1182) {
+const char * kr_bootstrap_value_1183 = token;
+const char * kr_bootstrap_value_1184 = semantic_string_literal(kr_bootstrap_value_1183);
+value = kr_bootstrap_value_1184;
 semantic_expression_type = "s";
-next();
+int64_t kr_bootstrap_value_1185 = next();
+(void)(kr_bootstrap_value_1185);
 }
-else if ((rt_equal(token, "true") || rt_equal(token, "false"))) {
+else {
+const char * kr_bootstrap_value_1186 = token;
+const char * kr_bootstrap_value_1187 = "true";
+bool kr_bootstrap_value_1188 = rt_equal(kr_bootstrap_value_1186, kr_bootstrap_value_1187);
+bool kr_bootstrap_value_1189 = kr_bootstrap_value_1188;
+if (!kr_bootstrap_value_1189) {
+const char * kr_bootstrap_value_1190 = token;
+const char * kr_bootstrap_value_1191 = "false";
+bool kr_bootstrap_value_1192 = rt_equal(kr_bootstrap_value_1190, kr_bootstrap_value_1191);
+kr_bootstrap_value_1189 = kr_bootstrap_value_1192;
+}
+if (kr_bootstrap_value_1189) {
 value = token;
 semantic_expression_type = "b";
-next();
+int64_t kr_bootstrap_value_1193 = next();
+(void)(kr_bootstrap_value_1193);
 }
-else if ((token_kind == INT64_C(1))) {
-const char * name = identifier();
+else {
+int64_t kr_bootstrap_value_1194 = token_kind;
+bool kr_bootstrap_value_1195 = (kr_bootstrap_value_1194 == INT64_C(1));
+if (kr_bootstrap_value_1195) {
+int64_t name_line = token_line;
+int64_t name_column = token_column;
+const char * kr_bootstrap_value_1196 = identifier();
+const char * name = kr_bootstrap_value_1196;
 semantic_constant = false;
-if (rt_equal(token, "(")) {
-const char * signature = semantic_lookup(semantic_globals, name);
-if ((!semantic_collecting)) {
-if ((!rt_equal(semantic_lookup(semantic_locals, name), ""))) {
-fail(rt_cat("local value is not callable: ", name));
+const char * kr_bootstrap_value_1197 = token;
+const char * kr_bootstrap_value_1198 = "(";
+bool kr_bootstrap_value_1199 = rt_equal(kr_bootstrap_value_1197, kr_bootstrap_value_1198);
+if (kr_bootstrap_value_1199) {
+const char * kr_bootstrap_value_1200 = semantic_globals;
+const char * kr_bootstrap_value_1201 = name;
+const char * kr_bootstrap_value_1202 = semantic_lookup(kr_bootstrap_value_1200, kr_bootstrap_value_1201);
+const char * signature = kr_bootstrap_value_1202;
+bool kr_bootstrap_value_1203 = (!semantic_collecting);
+if (kr_bootstrap_value_1203) {
+const char * kr_bootstrap_value_1204 = semantic_locals;
+const char * kr_bootstrap_value_1205 = name;
+const char * kr_bootstrap_value_1206 = semantic_lookup(kr_bootstrap_value_1204, kr_bootstrap_value_1205);
+const char * kr_bootstrap_value_1207 = kr_bootstrap_value_1206;
+const char * kr_bootstrap_value_1208 = "";
+bool kr_bootstrap_value_1209 = rt_equal(kr_bootstrap_value_1207, kr_bootstrap_value_1208);
+bool kr_bootstrap_value_1210 = (!kr_bootstrap_value_1209);
+if (kr_bootstrap_value_1210) {
+const char * kr_bootstrap_value_1211 = "local value is not callable: ";
+const char * kr_bootstrap_value_1212 = name;
+const char * kr_bootstrap_value_1213 = rt_cat(kr_bootstrap_value_1211, kr_bootstrap_value_1212);
+const char * kr_bootstrap_value_1214 = kr_bootstrap_value_1213;
+int64_t kr_bootstrap_value_1215 = name_line;
+int64_t kr_bootstrap_value_1216 = name_column;
+int64_t kr_bootstrap_value_1217 = fail_at(kr_bootstrap_value_1214, kr_bootstrap_value_1215, kr_bootstrap_value_1216);
+(void)(kr_bootstrap_value_1217);
 }
-if (rt_equal(signature, "")) {
-fail(rt_cat("undefined function: ", name));
+const char * kr_bootstrap_value_1218 = signature;
+const char * kr_bootstrap_value_1219 = "";
+bool kr_bootstrap_value_1220 = rt_equal(kr_bootstrap_value_1218, kr_bootstrap_value_1219);
+if (kr_bootstrap_value_1220) {
+const char * kr_bootstrap_value_1221 = "undefined function: ";
+const char * kr_bootstrap_value_1222 = name;
+const char * kr_bootstrap_value_1223 = rt_cat(kr_bootstrap_value_1221, kr_bootstrap_value_1222);
+const char * kr_bootstrap_value_1224 = kr_bootstrap_value_1223;
+int64_t kr_bootstrap_value_1225 = name_line;
+int64_t kr_bootstrap_value_1226 = name_column;
+int64_t kr_bootstrap_value_1227 = fail_at(kr_bootstrap_value_1224, kr_bootstrap_value_1225, kr_bootstrap_value_1226);
+(void)(kr_bootstrap_value_1227);
 }
-if ((rt_at(signature, INT64_C(0)) != INT64_C(70))) {
-fail(rt_cat("value is not callable: ", name));
+const char * kr_bootstrap_value_1228 = signature;
+int64_t kr_bootstrap_value_1229 = INT64_C(0);
+int64_t kr_bootstrap_value_1230 = rt_at(kr_bootstrap_value_1228, kr_bootstrap_value_1229);
+int64_t kr_bootstrap_value_1231 = kr_bootstrap_value_1230;
+bool kr_bootstrap_value_1232 = (kr_bootstrap_value_1231 != INT64_C(70));
+if (kr_bootstrap_value_1232) {
+const char * kr_bootstrap_value_1233 = "value is not callable: ";
+const char * kr_bootstrap_value_1234 = name;
+const char * kr_bootstrap_value_1235 = rt_cat(kr_bootstrap_value_1233, kr_bootstrap_value_1234);
+const char * kr_bootstrap_value_1236 = kr_bootstrap_value_1235;
+int64_t kr_bootstrap_value_1237 = name_line;
+int64_t kr_bootstrap_value_1238 = name_column;
+int64_t kr_bootstrap_value_1239 = fail_at(kr_bootstrap_value_1236, kr_bootstrap_value_1237, kr_bootstrap_value_1238);
+(void)(kr_bootstrap_value_1239);
 }
 }
-next();
-value = rt_cat(name, "(");
+int64_t kr_bootstrap_value_1240 = next();
+(void)(kr_bootstrap_value_1240);
+const char * kr_bootstrap_value_1241 = name;
+const char * kr_bootstrap_value_1242 = "(";
+const char * kr_bootstrap_value_1243 = rt_cat(kr_bootstrap_value_1241, kr_bootstrap_value_1242);
+value = kr_bootstrap_value_1243;
 int64_t argument = INT64_C(2);
 bool first = true;
-while ((!rt_equal(token, ")"))) {
-if ((!first)) {
-take(",");
-value = rt_cat(value, ", ");
+while (true) {
+const char * kr_bootstrap_value_1244 = token;
+const char * kr_bootstrap_value_1245 = ")";
+bool kr_bootstrap_value_1246 = rt_equal(kr_bootstrap_value_1244, kr_bootstrap_value_1245);
+bool kr_bootstrap_value_1247 = (!kr_bootstrap_value_1246);
+if (!(kr_bootstrap_value_1247)) { break; }
+{
+bool kr_bootstrap_value_1248 = (!first);
+if (kr_bootstrap_value_1248) {
+const char * kr_bootstrap_value_1249 = ",";
+int64_t kr_bootstrap_value_1250 = take(kr_bootstrap_value_1249);
+(void)(kr_bootstrap_value_1250);
+const char * kr_bootstrap_value_1251 = value;
+const char * kr_bootstrap_value_1252 = ", ";
+const char * kr_bootstrap_value_1253 = rt_cat(kr_bootstrap_value_1251, kr_bootstrap_value_1252);
+value = kr_bootstrap_value_1253;
 }
-value = rt_cat(value, expression(INT64_C(1)));
-if ((!semantic_collecting)) {
-if ((argument >= rt_len(signature))) {
-fail(rt_cat("too many arguments for ", name));
+int64_t kr_bootstrap_value_1254 = INT64_C(1);
+const char * kr_bootstrap_value_1255 = expression(kr_bootstrap_value_1254);
+const char * actual = kr_bootstrap_value_1255;
+bool kr_bootstrap_value_1256 = (!semantic_collecting);
+if (kr_bootstrap_value_1256) {
+int64_t kr_bootstrap_value_1257 = argument;
+const char * kr_bootstrap_value_1258 = signature;
+int64_t kr_bootstrap_value_1259 = rt_len(kr_bootstrap_value_1258);
+bool kr_bootstrap_value_1260 = (kr_bootstrap_value_1257 >= kr_bootstrap_value_1259);
+if (kr_bootstrap_value_1260) {
+const char * kr_bootstrap_value_1261 = "too many arguments for ";
+const char * kr_bootstrap_value_1262 = name;
+const char * kr_bootstrap_value_1263 = rt_cat(kr_bootstrap_value_1261, kr_bootstrap_value_1262);
+const char * kr_bootstrap_value_1264 = kr_bootstrap_value_1263;
+int64_t kr_bootstrap_value_1265 = fail(kr_bootstrap_value_1264);
+(void)(kr_bootstrap_value_1265);
 }
-semantic_same(semantic_expression_type, rt_slice(signature, argument, (argument + INT64_C(1))));
+const char * kr_bootstrap_value_1266 = semantic_expression_type;
+const char * kr_bootstrap_value_1267 = signature;
+int64_t kr_bootstrap_value_1268 = argument;
+int64_t kr_bootstrap_value_1269 = argument;
+int64_t kr_bootstrap_value_1270 = rt_iadd(kr_bootstrap_value_1269, INT64_C(1), kr_bootstrap_value_source, INT64_C(574), INT64_C(104));
+int64_t kr_bootstrap_value_1271 = kr_bootstrap_value_1270;
+const char * kr_bootstrap_value_1272 = rt_slice(kr_bootstrap_value_1267, kr_bootstrap_value_1268, kr_bootstrap_value_1271);
+const char * kr_bootstrap_value_1273 = kr_bootstrap_value_1272;
+int64_t kr_bootstrap_value_1274 = semantic_same(kr_bootstrap_value_1266, kr_bootstrap_value_1273);
+(void)(kr_bootstrap_value_1274);
 }
-argument = (argument + INT64_C(1));
+const char * kr_bootstrap_value_1275 = value;
+const char * kr_bootstrap_value_1276 = semantic_expression_type;
+const char * kr_bootstrap_value_1277 = actual;
+const char * kr_bootstrap_value_1278 = semantic_materialize(kr_bootstrap_value_1276, kr_bootstrap_value_1277);
+const char * kr_bootstrap_value_1279 = kr_bootstrap_value_1278;
+const char * kr_bootstrap_value_1280 = rt_cat(kr_bootstrap_value_1275, kr_bootstrap_value_1279);
+value = kr_bootstrap_value_1280;
+int64_t kr_bootstrap_value_1281 = argument;
+int64_t kr_bootstrap_value_1282 = rt_iadd(kr_bootstrap_value_1281, INT64_C(1), kr_bootstrap_value_source, INT64_C(577), INT64_C(41));
+argument = kr_bootstrap_value_1282;
 first = false;
 }
-if (((!semantic_collecting) && (argument != rt_len(signature)))) {
-fail(rt_cat("incorrect argument count for ", name));
 }
-take(")");
-value = rt_cat(value, ")");
+bool kr_bootstrap_value_1283 = (!semantic_collecting);
+bool kr_bootstrap_value_1284 = kr_bootstrap_value_1283;
+if (kr_bootstrap_value_1284) {
+int64_t kr_bootstrap_value_1285 = argument;
+const char * kr_bootstrap_value_1286 = signature;
+int64_t kr_bootstrap_value_1287 = rt_len(kr_bootstrap_value_1286);
+bool kr_bootstrap_value_1288 = (kr_bootstrap_value_1285 != kr_bootstrap_value_1287);
+kr_bootstrap_value_1284 = kr_bootstrap_value_1288;
+}
+if (kr_bootstrap_value_1284) {
+const char * kr_bootstrap_value_1289 = "incorrect argument count for ";
+const char * kr_bootstrap_value_1290 = name;
+const char * kr_bootstrap_value_1291 = rt_cat(kr_bootstrap_value_1289, kr_bootstrap_value_1290);
+const char * kr_bootstrap_value_1292 = kr_bootstrap_value_1291;
+int64_t kr_bootstrap_value_1293 = fail(kr_bootstrap_value_1292);
+(void)(kr_bootstrap_value_1293);
+}
+const char * kr_bootstrap_value_1294 = ")";
+int64_t kr_bootstrap_value_1295 = take(kr_bootstrap_value_1294);
+(void)(kr_bootstrap_value_1295);
+const char * kr_bootstrap_value_1296 = value;
+const char * kr_bootstrap_value_1297 = ")";
+const char * kr_bootstrap_value_1298 = rt_cat(kr_bootstrap_value_1296, kr_bootstrap_value_1297);
+value = kr_bootstrap_value_1298;
 if (semantic_collecting) {
 semantic_expression_type = "i";
 }
 else {
-semantic_expression_type = rt_slice(signature, INT64_C(1), INT64_C(2));
+{
+const char * kr_bootstrap_value_1299 = signature;
+int64_t kr_bootstrap_value_1300 = INT64_C(1);
+int64_t kr_bootstrap_value_1301 = INT64_C(2);
+const char * kr_bootstrap_value_1302 = rt_slice(kr_bootstrap_value_1299, kr_bootstrap_value_1300, kr_bootstrap_value_1301);
+semantic_expression_type = kr_bootstrap_value_1302;
+}
 }
 semantic_lvalue = false;
 semantic_call = true;
 semantic_constant = false;
+const char * kr_bootstrap_value_1303 = semantic_expression_type;
+const char * kr_bootstrap_value_1304 = value;
+const char * kr_bootstrap_value_1305 = semantic_materialize(kr_bootstrap_value_1303, kr_bootstrap_value_1304);
+value = kr_bootstrap_value_1305;
 }
 else {
-const char * metadata = semantic_variable(name);
+{
+const char * kr_bootstrap_value_1306 = name;
+int64_t kr_bootstrap_value_1307 = name_line;
+int64_t kr_bootstrap_value_1308 = name_column;
+const char * kr_bootstrap_value_1309 = semantic_variable(kr_bootstrap_value_1306, kr_bootstrap_value_1307, kr_bootstrap_value_1308);
+const char * metadata = kr_bootstrap_value_1309;
 if (semantic_collecting) {
 semantic_expression_type = "i";
 }
 else {
-semantic_expression_type = rt_slice(metadata, INT64_C(1), INT64_C(2));
+{
+const char * kr_bootstrap_value_1310 = metadata;
+int64_t kr_bootstrap_value_1311 = INT64_C(1);
+int64_t kr_bootstrap_value_1312 = INT64_C(2);
+const char * kr_bootstrap_value_1313 = rt_slice(kr_bootstrap_value_1310, kr_bootstrap_value_1311, kr_bootstrap_value_1312);
+semantic_expression_type = kr_bootstrap_value_1313;
+}
 }
 value = name;
 semantic_lvalue = true;
 }
 }
-else {
-fail(rt_cat("expected expression, found '", rt_cat(token, "'")));
 }
-return leave(value);
+else {
+{
+const char * kr_bootstrap_value_1314 = "expected expression, found '";
+const char * kr_bootstrap_value_1315 = token;
+const char * kr_bootstrap_value_1316 = "'";
+const char * kr_bootstrap_value_1317 = rt_cat(kr_bootstrap_value_1315, kr_bootstrap_value_1316);
+const char * kr_bootstrap_value_1318 = kr_bootstrap_value_1317;
+const char * kr_bootstrap_value_1319 = rt_cat(kr_bootstrap_value_1314, kr_bootstrap_value_1318);
+const char * kr_bootstrap_value_1320 = kr_bootstrap_value_1319;
+int64_t kr_bootstrap_value_1321 = fail(kr_bootstrap_value_1320);
+(void)(kr_bootstrap_value_1321);
+}
+}
+}
+}
+}
+const char * kr_bootstrap_value_1322 = value;
+const char * kr_bootstrap_value_1323 = leave(kr_bootstrap_value_1322);
+return kr_bootstrap_value_1323;
 }
 }
 const char * expression(int64_t minimum) {
 {
-enter();
-const char * left = primary();
-int64_t level = precedence(token);
-while ((level >= minimum)) {
+int64_t kr_bootstrap_value_1324 = enter();
+(void)(kr_bootstrap_value_1324);
+int64_t start_line = token_line;
+int64_t start_column = token_column;
+const char * kr_bootstrap_value_1325 = primary();
+const char * left = kr_bootstrap_value_1325;
+const char * kr_bootstrap_value_1326 = token;
+int64_t kr_bootstrap_value_1327 = precedence(kr_bootstrap_value_1326);
+int64_t level = kr_bootstrap_value_1327;
+int64_t operations = INT64_C(0);
+while (true) {
+int64_t kr_bootstrap_value_1328 = level;
+bool kr_bootstrap_value_1329 = (kr_bootstrap_value_1328 >= minimum);
+if (!(kr_bootstrap_value_1329)) { break; }
+{
+int64_t kr_bootstrap_value_1330 = operations;
+int64_t kr_bootstrap_value_1331 = rt_iadd(kr_bootstrap_value_1330, INT64_C(1), kr_bootstrap_value_source, INT64_C(620), INT64_C(37));
+operations = kr_bootstrap_value_1331;
+int64_t kr_bootstrap_value_1332 = operations;
+bool kr_bootstrap_value_1333 = (kr_bootstrap_value_1332 > INT64_C(512));
+if (kr_bootstrap_value_1333) {
+const char * kr_bootstrap_value_1334 = "expression operation limit (512) exceeded";
+int64_t kr_bootstrap_value_1335 = fail(kr_bootstrap_value_1334);
+(void)(kr_bootstrap_value_1335);
+}
 const char * op = token;
+int64_t where_line = token_line;
+int64_t where_column = token_column;
 const char * left_type = semantic_expression_type;
 bool left_constant = semantic_constant;
-next();
-const char * right = expression((level + INT64_C(1)));
+const char * kr_bootstrap_value_1336 = left_type;
+const char * kr_bootstrap_value_1337 = left;
+const char * kr_bootstrap_value_1338 = semantic_materialize(kr_bootstrap_value_1336, kr_bootstrap_value_1337);
+left = kr_bootstrap_value_1338;
+bool kr_bootstrap_value_1339 = semantic_emitting();
+bool kr_bootstrap_value_1340 = kr_bootstrap_value_1339;
+if (kr_bootstrap_value_1340) {
+const char * kr_bootstrap_value_1341 = op;
+const char * kr_bootstrap_value_1342 = "&&";
+bool kr_bootstrap_value_1343 = rt_equal(kr_bootstrap_value_1341, kr_bootstrap_value_1342);
+bool kr_bootstrap_value_1344 = kr_bootstrap_value_1343;
+if (!kr_bootstrap_value_1344) {
+const char * kr_bootstrap_value_1345 = op;
+const char * kr_bootstrap_value_1346 = "||";
+bool kr_bootstrap_value_1347 = rt_equal(kr_bootstrap_value_1345, kr_bootstrap_value_1346);
+kr_bootstrap_value_1344 = kr_bootstrap_value_1347;
+}
+kr_bootstrap_value_1340 = (kr_bootstrap_value_1344);
+}
+bool lazy = kr_bootstrap_value_1340;
+const char * outer_prelude = "";
+if (lazy) {
+const char * kr_bootstrap_value_1348 = semantic_take_prelude();
+outer_prelude = kr_bootstrap_value_1348;
+}
+int64_t kr_bootstrap_value_1349 = next();
+(void)(kr_bootstrap_value_1349);
+int64_t kr_bootstrap_value_1350 = level;
+int64_t kr_bootstrap_value_1351 = rt_iadd(kr_bootstrap_value_1350, INT64_C(1), kr_bootstrap_value_source, INT64_C(632), INT64_C(49));
+int64_t kr_bootstrap_value_1352 = kr_bootstrap_value_1351;
+const char * kr_bootstrap_value_1353 = expression(kr_bootstrap_value_1352);
+const char * right = kr_bootstrap_value_1353;
 const char * right_type = semantic_expression_type;
-if ((rt_equal(op, "&&") || rt_equal(op, "||"))) {
-semantic_same(left_type, "b");
-semantic_same(right_type, "b");
+const char * kr_bootstrap_value_1354 = op;
+const char * kr_bootstrap_value_1355 = "&&";
+bool kr_bootstrap_value_1356 = rt_equal(kr_bootstrap_value_1354, kr_bootstrap_value_1355);
+bool kr_bootstrap_value_1357 = kr_bootstrap_value_1356;
+if (!kr_bootstrap_value_1357) {
+const char * kr_bootstrap_value_1358 = op;
+const char * kr_bootstrap_value_1359 = "||";
+bool kr_bootstrap_value_1360 = rt_equal(kr_bootstrap_value_1358, kr_bootstrap_value_1359);
+kr_bootstrap_value_1357 = kr_bootstrap_value_1360;
+}
+if (kr_bootstrap_value_1357) {
+const char * kr_bootstrap_value_1361 = left_type;
+const char * kr_bootstrap_value_1362 = "b";
+int64_t kr_bootstrap_value_1363 = start_line;
+int64_t kr_bootstrap_value_1364 = start_column;
+int64_t kr_bootstrap_value_1365 = semantic_same_at(kr_bootstrap_value_1361, kr_bootstrap_value_1362, kr_bootstrap_value_1363, kr_bootstrap_value_1364);
+(void)(kr_bootstrap_value_1365);
+const char * kr_bootstrap_value_1366 = right_type;
+const char * kr_bootstrap_value_1367 = "b";
+int64_t kr_bootstrap_value_1368 = semantic_same(kr_bootstrap_value_1366, kr_bootstrap_value_1367);
+(void)(kr_bootstrap_value_1368);
 semantic_expression_type = "b";
 }
-else if ((rt_equal(op, "==") || rt_equal(op, "!="))) {
-semantic_same(right_type, left_type);
-if (((!semantic_collecting) && rt_equal(left_type, "s"))) {
-fail("string equality requires rt_equal");
+else {
+const char * kr_bootstrap_value_1369 = op;
+const char * kr_bootstrap_value_1370 = "==";
+bool kr_bootstrap_value_1371 = rt_equal(kr_bootstrap_value_1369, kr_bootstrap_value_1370);
+bool kr_bootstrap_value_1372 = kr_bootstrap_value_1371;
+if (!kr_bootstrap_value_1372) {
+const char * kr_bootstrap_value_1373 = op;
+const char * kr_bootstrap_value_1374 = "!=";
+bool kr_bootstrap_value_1375 = rt_equal(kr_bootstrap_value_1373, kr_bootstrap_value_1374);
+kr_bootstrap_value_1372 = kr_bootstrap_value_1375;
+}
+if (kr_bootstrap_value_1372) {
+const char * kr_bootstrap_value_1376 = right_type;
+const char * kr_bootstrap_value_1377 = left_type;
+int64_t kr_bootstrap_value_1378 = semantic_same(kr_bootstrap_value_1376, kr_bootstrap_value_1377);
+(void)(kr_bootstrap_value_1378);
+bool kr_bootstrap_value_1379 = (!semantic_collecting);
+bool kr_bootstrap_value_1380 = kr_bootstrap_value_1379;
+if (kr_bootstrap_value_1380) {
+const char * kr_bootstrap_value_1381 = left_type;
+const char * kr_bootstrap_value_1382 = "s";
+bool kr_bootstrap_value_1383 = rt_equal(kr_bootstrap_value_1381, kr_bootstrap_value_1382);
+kr_bootstrap_value_1380 = kr_bootstrap_value_1383;
+}
+if (kr_bootstrap_value_1380) {
+const char * kr_bootstrap_value_1384 = "string equality requires rt_equal";
+int64_t kr_bootstrap_value_1385 = fail(kr_bootstrap_value_1384);
+(void)(kr_bootstrap_value_1385);
 }
 semantic_expression_type = "b";
 }
 else {
-semantic_same(left_type, "i");
-semantic_same(right_type, "i");
-if ((level == INT64_C(4))) {
+{
+const char * kr_bootstrap_value_1386 = left_type;
+const char * kr_bootstrap_value_1387 = "i";
+int64_t kr_bootstrap_value_1388 = start_line;
+int64_t kr_bootstrap_value_1389 = start_column;
+int64_t kr_bootstrap_value_1390 = semantic_same_at(kr_bootstrap_value_1386, kr_bootstrap_value_1387, kr_bootstrap_value_1388, kr_bootstrap_value_1389);
+(void)(kr_bootstrap_value_1390);
+const char * kr_bootstrap_value_1391 = right_type;
+const char * kr_bootstrap_value_1392 = "i";
+int64_t kr_bootstrap_value_1393 = semantic_same(kr_bootstrap_value_1391, kr_bootstrap_value_1392);
+(void)(kr_bootstrap_value_1393);
+int64_t kr_bootstrap_value_1394 = level;
+bool kr_bootstrap_value_1395 = (kr_bootstrap_value_1394 == INT64_C(4));
+if (kr_bootstrap_value_1395) {
 semantic_expression_type = "b";
 }
 else {
+{
 semantic_expression_type = "i";
 }
 }
-semantic_constant = (left_constant && semantic_constant);
+}
+}
+}
+bool kr_bootstrap_value_1396 = left_constant;
+if (kr_bootstrap_value_1396) {
+kr_bootstrap_value_1396 = semantic_constant;
+}
+semantic_constant = kr_bootstrap_value_1396;
 semantic_lvalue = false;
 semantic_call = false;
-left = rt_cat("(", rt_cat(left, rt_cat(" ", rt_cat(op, rt_cat(" ", rt_cat(right, ")"))))));
-level = precedence(token);
+if (lazy) {
+const char * kr_bootstrap_value_1397 = semantic_take_prelude();
+const char * right_prelude = kr_bootstrap_value_1397;
+semantic_prelude = outer_prelude;
+const char * guard = left;
+const char * kr_bootstrap_value_1398 = op;
+const char * kr_bootstrap_value_1399 = "||";
+bool kr_bootstrap_value_1400 = rt_equal(kr_bootstrap_value_1398, kr_bootstrap_value_1399);
+if (kr_bootstrap_value_1400) {
+const char * kr_bootstrap_value_1401 = "!";
+const char * kr_bootstrap_value_1402 = left;
+const char * kr_bootstrap_value_1403 = rt_cat(kr_bootstrap_value_1401, kr_bootstrap_value_1402);
+guard = kr_bootstrap_value_1403;
 }
-return leave(left);
+const char * kr_bootstrap_value_1404 = semantic_prelude;
+const char * kr_bootstrap_value_1405 = "if (";
+const char * kr_bootstrap_value_1406 = guard;
+const char * kr_bootstrap_value_1407 = ") {\n";
+const char * kr_bootstrap_value_1408 = right_prelude;
+const char * kr_bootstrap_value_1409 = left;
+const char * kr_bootstrap_value_1410 = " = ";
+const char * kr_bootstrap_value_1411 = right;
+const char * kr_bootstrap_value_1412 = ";\n}\n";
+const char * kr_bootstrap_value_1413 = rt_cat(kr_bootstrap_value_1411, kr_bootstrap_value_1412);
+const char * kr_bootstrap_value_1414 = kr_bootstrap_value_1413;
+const char * kr_bootstrap_value_1415 = rt_cat(kr_bootstrap_value_1410, kr_bootstrap_value_1414);
+const char * kr_bootstrap_value_1416 = kr_bootstrap_value_1415;
+const char * kr_bootstrap_value_1417 = rt_cat(kr_bootstrap_value_1409, kr_bootstrap_value_1416);
+const char * kr_bootstrap_value_1418 = kr_bootstrap_value_1417;
+const char * kr_bootstrap_value_1419 = rt_cat(kr_bootstrap_value_1408, kr_bootstrap_value_1418);
+const char * kr_bootstrap_value_1420 = kr_bootstrap_value_1419;
+const char * kr_bootstrap_value_1421 = rt_cat(kr_bootstrap_value_1407, kr_bootstrap_value_1420);
+const char * kr_bootstrap_value_1422 = kr_bootstrap_value_1421;
+const char * kr_bootstrap_value_1423 = rt_cat(kr_bootstrap_value_1406, kr_bootstrap_value_1422);
+const char * kr_bootstrap_value_1424 = kr_bootstrap_value_1423;
+const char * kr_bootstrap_value_1425 = rt_cat(kr_bootstrap_value_1405, kr_bootstrap_value_1424);
+const char * kr_bootstrap_value_1426 = kr_bootstrap_value_1425;
+const char * kr_bootstrap_value_1427 = rt_cat(kr_bootstrap_value_1404, kr_bootstrap_value_1426);
+semantic_prelude = kr_bootstrap_value_1427;
+}
+else {
+{
+const char * kr_bootstrap_value_1428 = semantic_expression_type;
+const char * kr_bootstrap_value_1429 = op;
+const char * kr_bootstrap_value_1430 = left;
+const char * kr_bootstrap_value_1431 = right;
+int64_t kr_bootstrap_value_1432 = where_line;
+int64_t kr_bootstrap_value_1433 = where_column;
+const char * kr_bootstrap_value_1434 = semantic_binary(kr_bootstrap_value_1429, kr_bootstrap_value_1430, kr_bootstrap_value_1431, kr_bootstrap_value_1432, kr_bootstrap_value_1433);
+const char * kr_bootstrap_value_1435 = kr_bootstrap_value_1434;
+const char * kr_bootstrap_value_1436 = semantic_materialize(kr_bootstrap_value_1428, kr_bootstrap_value_1435);
+left = kr_bootstrap_value_1436;
+}
+}
+const char * kr_bootstrap_value_1437 = token;
+int64_t kr_bootstrap_value_1438 = precedence(kr_bootstrap_value_1437);
+level = kr_bootstrap_value_1438;
+}
+}
+expression_line = start_line;
+expression_column = start_column;
+const char * kr_bootstrap_value_1439 = left;
+const char * kr_bootstrap_value_1440 = leave(kr_bootstrap_value_1439);
+return kr_bootstrap_value_1440;
 }
 }
 const char * variable(void) {
 {
-take("var");
-const char * name = identifier();
-const char * ctype = type_name();
-const char * result = rt_cat(ctype, rt_cat(" ", name));
-if ((semantic_collecting && (!semantic_in_function))) {
-if ((!rt_equal(semantic_lookup(semantic_globals, name), ""))) {
-fail(rt_cat("duplicate top-level name: ", name));
+const char * kr_bootstrap_value_1441 = "var";
+int64_t kr_bootstrap_value_1442 = take(kr_bootstrap_value_1441);
+(void)(kr_bootstrap_value_1442);
+const char * kr_bootstrap_value_1443 = identifier();
+const char * name = kr_bootstrap_value_1443;
+const char * kr_bootstrap_value_1444 = type_name();
+const char * ctype = kr_bootstrap_value_1444;
+const char * kr_bootstrap_value_1445 = ctype;
+const char * kr_bootstrap_value_1446 = " ";
+const char * kr_bootstrap_value_1447 = name;
+const char * kr_bootstrap_value_1448 = rt_cat(kr_bootstrap_value_1446, kr_bootstrap_value_1447);
+const char * kr_bootstrap_value_1449 = kr_bootstrap_value_1448;
+const char * kr_bootstrap_value_1450 = rt_cat(kr_bootstrap_value_1445, kr_bootstrap_value_1449);
+const char * result = kr_bootstrap_value_1450;
+bool kr_bootstrap_value_1451 = semantic_collecting;
+if (kr_bootstrap_value_1451) {
+bool kr_bootstrap_value_1452 = (!semantic_in_function);
+kr_bootstrap_value_1451 = kr_bootstrap_value_1452;
 }
-semantic_globals = semantic_record(semantic_globals, name, rt_cat("V", semantic_code(ctype)));
+if (kr_bootstrap_value_1451) {
+const char * kr_bootstrap_value_1453 = semantic_globals;
+const char * kr_bootstrap_value_1454 = name;
+const char * kr_bootstrap_value_1455 = semantic_lookup(kr_bootstrap_value_1453, kr_bootstrap_value_1454);
+const char * kr_bootstrap_value_1456 = kr_bootstrap_value_1455;
+const char * kr_bootstrap_value_1457 = "";
+bool kr_bootstrap_value_1458 = rt_equal(kr_bootstrap_value_1456, kr_bootstrap_value_1457);
+bool kr_bootstrap_value_1459 = (!kr_bootstrap_value_1458);
+if (kr_bootstrap_value_1459) {
+const char * kr_bootstrap_value_1460 = "duplicate top-level name: ";
+const char * kr_bootstrap_value_1461 = name;
+const char * kr_bootstrap_value_1462 = rt_cat(kr_bootstrap_value_1460, kr_bootstrap_value_1461);
+const char * kr_bootstrap_value_1463 = kr_bootstrap_value_1462;
+int64_t kr_bootstrap_value_1464 = fail(kr_bootstrap_value_1463);
+(void)(kr_bootstrap_value_1464);
 }
-if ((((!semantic_collecting) && semantic_in_function) && (!rt_equal(semantic_lookup(semantic_globals, name), "")))) {
-fail(rt_cat("local name shadows a top-level name: ", name));
+const char * kr_bootstrap_value_1465 = semantic_globals;
+const char * kr_bootstrap_value_1466 = name;
+const char * kr_bootstrap_value_1467 = "V";
+const char * kr_bootstrap_value_1468 = ctype;
+const char * kr_bootstrap_value_1469 = semantic_code(kr_bootstrap_value_1468);
+const char * kr_bootstrap_value_1470 = kr_bootstrap_value_1469;
+const char * kr_bootstrap_value_1471 = rt_cat(kr_bootstrap_value_1467, kr_bootstrap_value_1470);
+const char * kr_bootstrap_value_1472 = kr_bootstrap_value_1471;
+const char * kr_bootstrap_value_1473 = semantic_record(kr_bootstrap_value_1465, kr_bootstrap_value_1466, kr_bootstrap_value_1472);
+semantic_globals = kr_bootstrap_value_1473;
 }
-if (rt_equal(token, "=")) {
-next();
-result = rt_cat(result, rt_cat(" = ", expression(INT64_C(1))));
-semantic_same(semantic_expression_type, semantic_code(ctype));
-if ((((!semantic_collecting) && (!semantic_in_function)) && (!semantic_constant))) {
-fail("global initializer must be a literal constant expression");
+bool kr_bootstrap_value_1474 = (!semantic_collecting);
+bool kr_bootstrap_value_1475 = kr_bootstrap_value_1474;
+if (kr_bootstrap_value_1475) {
+kr_bootstrap_value_1475 = semantic_in_function;
+}
+bool kr_bootstrap_value_1476 = kr_bootstrap_value_1475;
+if (kr_bootstrap_value_1476) {
+const char * kr_bootstrap_value_1477 = semantic_globals;
+const char * kr_bootstrap_value_1478 = name;
+const char * kr_bootstrap_value_1479 = semantic_lookup(kr_bootstrap_value_1477, kr_bootstrap_value_1478);
+const char * kr_bootstrap_value_1480 = kr_bootstrap_value_1479;
+const char * kr_bootstrap_value_1481 = "";
+bool kr_bootstrap_value_1482 = rt_equal(kr_bootstrap_value_1480, kr_bootstrap_value_1481);
+bool kr_bootstrap_value_1483 = (!kr_bootstrap_value_1482);
+kr_bootstrap_value_1476 = kr_bootstrap_value_1483;
+}
+if (kr_bootstrap_value_1476) {
+const char * kr_bootstrap_value_1484 = "local name shadows a top-level name: ";
+const char * kr_bootstrap_value_1485 = name;
+const char * kr_bootstrap_value_1486 = rt_cat(kr_bootstrap_value_1484, kr_bootstrap_value_1485);
+const char * kr_bootstrap_value_1487 = kr_bootstrap_value_1486;
+int64_t kr_bootstrap_value_1488 = fail(kr_bootstrap_value_1487);
+(void)(kr_bootstrap_value_1488);
+}
+const char * kr_bootstrap_value_1489 = token;
+const char * kr_bootstrap_value_1490 = "=";
+bool kr_bootstrap_value_1491 = rt_equal(kr_bootstrap_value_1489, kr_bootstrap_value_1490);
+if (kr_bootstrap_value_1491) {
+int64_t kr_bootstrap_value_1492 = next();
+(void)(kr_bootstrap_value_1492);
+const char * kr_bootstrap_value_1493 = result;
+const char * kr_bootstrap_value_1494 = " = ";
+int64_t kr_bootstrap_value_1495 = INT64_C(1);
+const char * kr_bootstrap_value_1496 = expression(kr_bootstrap_value_1495);
+const char * kr_bootstrap_value_1497 = kr_bootstrap_value_1496;
+const char * kr_bootstrap_value_1498 = rt_cat(kr_bootstrap_value_1494, kr_bootstrap_value_1497);
+const char * kr_bootstrap_value_1499 = kr_bootstrap_value_1498;
+const char * kr_bootstrap_value_1500 = rt_cat(kr_bootstrap_value_1493, kr_bootstrap_value_1499);
+result = kr_bootstrap_value_1500;
+const char * kr_bootstrap_value_1501 = semantic_expression_type;
+const char * kr_bootstrap_value_1502 = ctype;
+const char * kr_bootstrap_value_1503 = semantic_code(kr_bootstrap_value_1502);
+const char * kr_bootstrap_value_1504 = kr_bootstrap_value_1503;
+int64_t kr_bootstrap_value_1505 = semantic_same(kr_bootstrap_value_1501, kr_bootstrap_value_1504);
+(void)(kr_bootstrap_value_1505);
+bool kr_bootstrap_value_1506 = (!semantic_collecting);
+bool kr_bootstrap_value_1507 = kr_bootstrap_value_1506;
+if (kr_bootstrap_value_1507) {
+bool kr_bootstrap_value_1508 = (!semantic_in_function);
+kr_bootstrap_value_1507 = kr_bootstrap_value_1508;
+}
+bool kr_bootstrap_value_1509 = kr_bootstrap_value_1507;
+if (kr_bootstrap_value_1509) {
+bool kr_bootstrap_value_1510 = (!semantic_constant);
+kr_bootstrap_value_1509 = kr_bootstrap_value_1510;
+}
+if (kr_bootstrap_value_1509) {
+const char * kr_bootstrap_value_1511 = "global initializer must be a literal constant expression";
+int64_t kr_bootstrap_value_1512 = fail(kr_bootstrap_value_1511);
+(void)(kr_bootstrap_value_1512);
 }
 }
 else {
-if (rt_equal(ctype, "const char *")) {
-result = rt_cat(result, " = \"\"");
+{
+const char * kr_bootstrap_value_1513 = ctype;
+const char * kr_bootstrap_value_1514 = "const char *";
+bool kr_bootstrap_value_1515 = rt_equal(kr_bootstrap_value_1513, kr_bootstrap_value_1514);
+if (kr_bootstrap_value_1515) {
+const char * kr_bootstrap_value_1516 = result;
+const char * kr_bootstrap_value_1517 = " = \"\"";
+const char * kr_bootstrap_value_1518 = rt_cat(kr_bootstrap_value_1516, kr_bootstrap_value_1517);
+result = kr_bootstrap_value_1518;
 }
 else {
-result = rt_cat(result, " = 0");
+{
+const char * kr_bootstrap_value_1519 = result;
+const char * kr_bootstrap_value_1520 = " = 0";
+const char * kr_bootstrap_value_1521 = rt_cat(kr_bootstrap_value_1519, kr_bootstrap_value_1520);
+result = kr_bootstrap_value_1521;
 }
 }
-if (((!semantic_collecting) && semantic_in_function)) {
-semantic_bind_local(name, ctype);
 }
-return rt_cat(result, ";\n");
+}
+bool kr_bootstrap_value_1522 = (!semantic_collecting);
+bool kr_bootstrap_value_1523 = kr_bootstrap_value_1522;
+if (kr_bootstrap_value_1523) {
+kr_bootstrap_value_1523 = semantic_in_function;
+}
+if (kr_bootstrap_value_1523) {
+const char * kr_bootstrap_value_1524 = name;
+const char * kr_bootstrap_value_1525 = ctype;
+int64_t kr_bootstrap_value_1526 = semantic_bind_local(kr_bootstrap_value_1524, kr_bootstrap_value_1525);
+(void)(kr_bootstrap_value_1526);
+}
+const char * kr_bootstrap_value_1527 = semantic_take_prelude();
+const char * kr_bootstrap_value_1528 = kr_bootstrap_value_1527;
+const char * kr_bootstrap_value_1529 = result;
+const char * kr_bootstrap_value_1530 = ";\n";
+const char * kr_bootstrap_value_1531 = rt_cat(kr_bootstrap_value_1529, kr_bootstrap_value_1530);
+const char * kr_bootstrap_value_1532 = kr_bootstrap_value_1531;
+const char * kr_bootstrap_value_1533 = rt_cat(kr_bootstrap_value_1528, kr_bootstrap_value_1532);
+return kr_bootstrap_value_1533;
 }
 }
 const char * block(void) {
 {
-enter();
-take("{");
+int64_t kr_bootstrap_value_1534 = enter();
+(void)(kr_bootstrap_value_1534);
+const char * kr_bootstrap_value_1535 = "{";
+int64_t kr_bootstrap_value_1536 = take(kr_bootstrap_value_1535);
+(void)(kr_bootstrap_value_1536);
 const char * saved_locals = semantic_locals;
 const char * result = "{\n";
 bool ended = false;
 bool returned = false;
-while ((!rt_equal(token, "}"))) {
-if ((token_kind == INT64_C(0))) {
-fail("expected '}' before end of file");
+while (true) {
+const char * kr_bootstrap_value_1537 = token;
+const char * kr_bootstrap_value_1538 = "}";
+bool kr_bootstrap_value_1539 = rt_equal(kr_bootstrap_value_1537, kr_bootstrap_value_1538);
+bool kr_bootstrap_value_1540 = (!kr_bootstrap_value_1539);
+if (!(kr_bootstrap_value_1540)) { break; }
+{
+int64_t kr_bootstrap_value_1541 = token_kind;
+bool kr_bootstrap_value_1542 = (kr_bootstrap_value_1541 == INT64_C(0));
+if (kr_bootstrap_value_1542) {
+const char * kr_bootstrap_value_1543 = "expected '}' before end of file";
+int64_t kr_bootstrap_value_1544 = fail(kr_bootstrap_value_1543);
+(void)(kr_bootstrap_value_1544);
 }
 if (ended) {
-fail("unreachable statement");
+const char * kr_bootstrap_value_1545 = "unreachable statement";
+int64_t kr_bootstrap_value_1546 = fail(kr_bootstrap_value_1545);
+(void)(kr_bootstrap_value_1546);
 }
-result = rt_cat(result, statement());
+const char * kr_bootstrap_value_1547 = result;
+const char * kr_bootstrap_value_1548 = statement();
+const char * kr_bootstrap_value_1549 = kr_bootstrap_value_1548;
+const char * kr_bootstrap_value_1550 = rt_cat(kr_bootstrap_value_1547, kr_bootstrap_value_1549);
+result = kr_bootstrap_value_1550;
 ended = semantic_terminal;
 returned = semantic_returns;
 }
-take("}");
+}
+const char * kr_bootstrap_value_1551 = "}";
+int64_t kr_bootstrap_value_1552 = take(kr_bootstrap_value_1551);
+(void)(kr_bootstrap_value_1552);
 semantic_locals = saved_locals;
 semantic_terminal = ended;
 semantic_returns = returned;
-return leave(rt_cat(result, "}\n"));
+const char * kr_bootstrap_value_1553 = result;
+const char * kr_bootstrap_value_1554 = "}\n";
+const char * kr_bootstrap_value_1555 = rt_cat(kr_bootstrap_value_1553, kr_bootstrap_value_1554);
+const char * kr_bootstrap_value_1556 = kr_bootstrap_value_1555;
+const char * kr_bootstrap_value_1557 = leave(kr_bootstrap_value_1556);
+return kr_bootstrap_value_1557;
 }
 }
 const char * statement(void) {
 {
-enter();
+int64_t kr_bootstrap_value_1558 = enter();
+(void)(kr_bootstrap_value_1558);
 semantic_terminal = false;
 semantic_returns = false;
 const char * result = "";
-if (rt_equal(token, "var")) {
-return leave(variable());
+const char * kr_bootstrap_value_1559 = token;
+const char * kr_bootstrap_value_1560 = "var";
+bool kr_bootstrap_value_1561 = rt_equal(kr_bootstrap_value_1559, kr_bootstrap_value_1560);
+if (kr_bootstrap_value_1561) {
+const char * kr_bootstrap_value_1562 = variable();
+const char * kr_bootstrap_value_1563 = kr_bootstrap_value_1562;
+const char * kr_bootstrap_value_1564 = leave(kr_bootstrap_value_1563);
+return kr_bootstrap_value_1564;
 }
-if (rt_equal(token, "unsafe")) {
-next();
-return leave(block());
+const char * kr_bootstrap_value_1565 = token;
+const char * kr_bootstrap_value_1566 = "unsafe";
+bool kr_bootstrap_value_1567 = rt_equal(kr_bootstrap_value_1565, kr_bootstrap_value_1566);
+if (kr_bootstrap_value_1567) {
+int64_t kr_bootstrap_value_1568 = next();
+(void)(kr_bootstrap_value_1568);
+const char * kr_bootstrap_value_1569 = block();
+const char * kr_bootstrap_value_1570 = kr_bootstrap_value_1569;
+const char * kr_bootstrap_value_1571 = leave(kr_bootstrap_value_1570);
+return kr_bootstrap_value_1571;
 }
-if (rt_equal(token, "{")) {
-return leave(block());
+const char * kr_bootstrap_value_1572 = token;
+const char * kr_bootstrap_value_1573 = "{";
+bool kr_bootstrap_value_1574 = rt_equal(kr_bootstrap_value_1572, kr_bootstrap_value_1573);
+if (kr_bootstrap_value_1574) {
+const char * kr_bootstrap_value_1575 = block();
+const char * kr_bootstrap_value_1576 = kr_bootstrap_value_1575;
+const char * kr_bootstrap_value_1577 = leave(kr_bootstrap_value_1576);
+return kr_bootstrap_value_1577;
 }
-if (rt_equal(token, "if")) {
-next();
-result = rt_cat("if (", rt_cat(expression(INT64_C(1)), ") "));
-semantic_same(semantic_expression_type, "b");
-result = rt_cat(result, block());
+const char * kr_bootstrap_value_1578 = token;
+const char * kr_bootstrap_value_1579 = "if";
+bool kr_bootstrap_value_1580 = rt_equal(kr_bootstrap_value_1578, kr_bootstrap_value_1579);
+if (kr_bootstrap_value_1580) {
+int64_t kr_bootstrap_value_1581 = next();
+(void)(kr_bootstrap_value_1581);
+int64_t kr_bootstrap_value_1582 = INT64_C(1);
+const char * kr_bootstrap_value_1583 = expression(kr_bootstrap_value_1582);
+const char * condition = kr_bootstrap_value_1583;
+const char * kr_bootstrap_value_1584 = semantic_expression_type;
+const char * kr_bootstrap_value_1585 = "b";
+int64_t kr_bootstrap_value_1586 = semantic_same(kr_bootstrap_value_1584, kr_bootstrap_value_1585);
+(void)(kr_bootstrap_value_1586);
+const char * kr_bootstrap_value_1587 = semantic_take_prelude();
+const char * kr_bootstrap_value_1588 = kr_bootstrap_value_1587;
+const char * kr_bootstrap_value_1589 = "if (";
+const char * kr_bootstrap_value_1590 = condition;
+const char * kr_bootstrap_value_1591 = ") ";
+const char * kr_bootstrap_value_1592 = rt_cat(kr_bootstrap_value_1590, kr_bootstrap_value_1591);
+const char * kr_bootstrap_value_1593 = kr_bootstrap_value_1592;
+const char * kr_bootstrap_value_1594 = rt_cat(kr_bootstrap_value_1589, kr_bootstrap_value_1593);
+const char * kr_bootstrap_value_1595 = kr_bootstrap_value_1594;
+const char * kr_bootstrap_value_1596 = rt_cat(kr_bootstrap_value_1588, kr_bootstrap_value_1595);
+result = kr_bootstrap_value_1596;
+const char * kr_bootstrap_value_1597 = result;
+const char * kr_bootstrap_value_1598 = block();
+const char * kr_bootstrap_value_1599 = kr_bootstrap_value_1598;
+const char * kr_bootstrap_value_1600 = rt_cat(kr_bootstrap_value_1597, kr_bootstrap_value_1599);
+result = kr_bootstrap_value_1600;
 bool then_terminal = semantic_terminal;
 bool then_returns = semantic_returns;
 semantic_terminal = false;
 semantic_returns = false;
-if (rt_equal(token, "else")) {
-next();
-result = rt_cat(result, "else ");
-if (rt_equal(token, "if")) {
-result = rt_cat(result, statement());
+const char * kr_bootstrap_value_1601 = token;
+const char * kr_bootstrap_value_1602 = "else";
+bool kr_bootstrap_value_1603 = rt_equal(kr_bootstrap_value_1601, kr_bootstrap_value_1602);
+if (kr_bootstrap_value_1603) {
+int64_t kr_bootstrap_value_1604 = next();
+(void)(kr_bootstrap_value_1604);
+const char * kr_bootstrap_value_1605 = result;
+const char * kr_bootstrap_value_1606 = "else {\n";
+const char * kr_bootstrap_value_1607 = rt_cat(kr_bootstrap_value_1605, kr_bootstrap_value_1606);
+result = kr_bootstrap_value_1607;
+const char * kr_bootstrap_value_1608 = token;
+const char * kr_bootstrap_value_1609 = "if";
+bool kr_bootstrap_value_1610 = rt_equal(kr_bootstrap_value_1608, kr_bootstrap_value_1609);
+if (kr_bootstrap_value_1610) {
+const char * kr_bootstrap_value_1611 = result;
+const char * kr_bootstrap_value_1612 = statement();
+const char * kr_bootstrap_value_1613 = kr_bootstrap_value_1612;
+const char * kr_bootstrap_value_1614 = rt_cat(kr_bootstrap_value_1611, kr_bootstrap_value_1613);
+result = kr_bootstrap_value_1614;
 }
 else {
-result = rt_cat(result, block());
+{
+const char * kr_bootstrap_value_1615 = result;
+const char * kr_bootstrap_value_1616 = block();
+const char * kr_bootstrap_value_1617 = kr_bootstrap_value_1616;
+const char * kr_bootstrap_value_1618 = rt_cat(kr_bootstrap_value_1615, kr_bootstrap_value_1617);
+result = kr_bootstrap_value_1618;
 }
-semantic_terminal = (then_terminal && semantic_terminal);
-semantic_returns = (then_returns && semantic_returns);
 }
-return leave(result);
+const char * kr_bootstrap_value_1619 = result;
+const char * kr_bootstrap_value_1620 = "}\n";
+const char * kr_bootstrap_value_1621 = rt_cat(kr_bootstrap_value_1619, kr_bootstrap_value_1620);
+result = kr_bootstrap_value_1621;
+bool kr_bootstrap_value_1622 = then_terminal;
+if (kr_bootstrap_value_1622) {
+kr_bootstrap_value_1622 = semantic_terminal;
 }
-if (rt_equal(token, "for")) {
-next();
-loop_depth = (loop_depth + INT64_C(1));
-result = rt_cat("while (", rt_cat(expression(INT64_C(1)), ") "));
-semantic_same(semantic_expression_type, "b");
-result = rt_cat(result, block());
-loop_depth = (loop_depth - INT64_C(1));
+semantic_terminal = kr_bootstrap_value_1622;
+bool kr_bootstrap_value_1623 = then_returns;
+if (kr_bootstrap_value_1623) {
+kr_bootstrap_value_1623 = semantic_returns;
+}
+semantic_returns = kr_bootstrap_value_1623;
+}
+const char * kr_bootstrap_value_1624 = result;
+const char * kr_bootstrap_value_1625 = leave(kr_bootstrap_value_1624);
+return kr_bootstrap_value_1625;
+}
+const char * kr_bootstrap_value_1626 = token;
+const char * kr_bootstrap_value_1627 = "for";
+bool kr_bootstrap_value_1628 = rt_equal(kr_bootstrap_value_1626, kr_bootstrap_value_1627);
+if (kr_bootstrap_value_1628) {
+int64_t kr_bootstrap_value_1629 = next();
+(void)(kr_bootstrap_value_1629);
+int64_t kr_bootstrap_value_1630 = loop_depth;
+int64_t kr_bootstrap_value_1631 = rt_iadd(kr_bootstrap_value_1630, INT64_C(1), kr_bootstrap_value_source, INT64_C(753), INT64_C(37));
+loop_depth = kr_bootstrap_value_1631;
+int64_t kr_bootstrap_value_1632 = INT64_C(1);
+const char * kr_bootstrap_value_1633 = expression(kr_bootstrap_value_1632);
+const char * condition = kr_bootstrap_value_1633;
+const char * kr_bootstrap_value_1634 = semantic_expression_type;
+const char * kr_bootstrap_value_1635 = "b";
+int64_t kr_bootstrap_value_1636 = semantic_same(kr_bootstrap_value_1634, kr_bootstrap_value_1635);
+(void)(kr_bootstrap_value_1636);
+const char * kr_bootstrap_value_1637 = "while (true) {\n";
+const char * kr_bootstrap_value_1638 = semantic_take_prelude();
+const char * kr_bootstrap_value_1639 = kr_bootstrap_value_1638;
+const char * kr_bootstrap_value_1640 = "if (!(";
+const char * kr_bootstrap_value_1641 = condition;
+const char * kr_bootstrap_value_1642 = ")) { break; }\n";
+const char * kr_bootstrap_value_1643 = rt_cat(kr_bootstrap_value_1641, kr_bootstrap_value_1642);
+const char * kr_bootstrap_value_1644 = kr_bootstrap_value_1643;
+const char * kr_bootstrap_value_1645 = rt_cat(kr_bootstrap_value_1640, kr_bootstrap_value_1644);
+const char * kr_bootstrap_value_1646 = kr_bootstrap_value_1645;
+const char * kr_bootstrap_value_1647 = rt_cat(kr_bootstrap_value_1639, kr_bootstrap_value_1646);
+const char * kr_bootstrap_value_1648 = kr_bootstrap_value_1647;
+const char * kr_bootstrap_value_1649 = rt_cat(kr_bootstrap_value_1637, kr_bootstrap_value_1648);
+result = kr_bootstrap_value_1649;
+const char * kr_bootstrap_value_1650 = result;
+const char * kr_bootstrap_value_1651 = block();
+const char * kr_bootstrap_value_1652 = kr_bootstrap_value_1651;
+const char * kr_bootstrap_value_1653 = rt_cat(kr_bootstrap_value_1650, kr_bootstrap_value_1652);
+result = kr_bootstrap_value_1653;
+const char * kr_bootstrap_value_1654 = result;
+const char * kr_bootstrap_value_1655 = "}\n";
+const char * kr_bootstrap_value_1656 = rt_cat(kr_bootstrap_value_1654, kr_bootstrap_value_1655);
+result = kr_bootstrap_value_1656;
+int64_t kr_bootstrap_value_1657 = loop_depth;
+int64_t kr_bootstrap_value_1658 = rt_isub(kr_bootstrap_value_1657, INT64_C(1), kr_bootstrap_value_source, INT64_C(759), INT64_C(37));
+loop_depth = kr_bootstrap_value_1658;
 semantic_terminal = false;
 semantic_returns = false;
-return leave(result);
+const char * kr_bootstrap_value_1659 = result;
+const char * kr_bootstrap_value_1660 = leave(kr_bootstrap_value_1659);
+return kr_bootstrap_value_1660;
 }
-if (rt_equal(token, "return")) {
-next();
-result = rt_cat("return ", rt_cat(expression(INT64_C(1)), ";\n"));
-semantic_same(semantic_expression_type, semantic_result);
+const char * kr_bootstrap_value_1661 = token;
+const char * kr_bootstrap_value_1662 = "return";
+bool kr_bootstrap_value_1663 = rt_equal(kr_bootstrap_value_1661, kr_bootstrap_value_1662);
+if (kr_bootstrap_value_1663) {
+int64_t kr_bootstrap_value_1664 = next();
+(void)(kr_bootstrap_value_1664);
+int64_t kr_bootstrap_value_1665 = INT64_C(1);
+const char * kr_bootstrap_value_1666 = expression(kr_bootstrap_value_1665);
+const char * value = kr_bootstrap_value_1666;
+const char * kr_bootstrap_value_1667 = semantic_expression_type;
+const char * kr_bootstrap_value_1668 = semantic_result;
+int64_t kr_bootstrap_value_1669 = semantic_same(kr_bootstrap_value_1667, kr_bootstrap_value_1668);
+(void)(kr_bootstrap_value_1669);
+const char * kr_bootstrap_value_1670 = semantic_take_prelude();
+const char * kr_bootstrap_value_1671 = kr_bootstrap_value_1670;
+const char * kr_bootstrap_value_1672 = "return ";
+const char * kr_bootstrap_value_1673 = value;
+const char * kr_bootstrap_value_1674 = ";\n";
+const char * kr_bootstrap_value_1675 = rt_cat(kr_bootstrap_value_1673, kr_bootstrap_value_1674);
+const char * kr_bootstrap_value_1676 = kr_bootstrap_value_1675;
+const char * kr_bootstrap_value_1677 = rt_cat(kr_bootstrap_value_1672, kr_bootstrap_value_1676);
+const char * kr_bootstrap_value_1678 = kr_bootstrap_value_1677;
+const char * kr_bootstrap_value_1679 = rt_cat(kr_bootstrap_value_1671, kr_bootstrap_value_1678);
+result = kr_bootstrap_value_1679;
 semantic_terminal = true;
 semantic_returns = true;
-return leave(result);
+const char * kr_bootstrap_value_1680 = result;
+const char * kr_bootstrap_value_1681 = leave(kr_bootstrap_value_1680);
+return kr_bootstrap_value_1681;
 }
-if ((rt_equal(token, "break") || rt_equal(token, "continue"))) {
-if ((loop_depth == INT64_C(0))) {
-fail("break/continue requires an enclosing loop");
+const char * kr_bootstrap_value_1682 = token;
+const char * kr_bootstrap_value_1683 = "break";
+bool kr_bootstrap_value_1684 = rt_equal(kr_bootstrap_value_1682, kr_bootstrap_value_1683);
+bool kr_bootstrap_value_1685 = kr_bootstrap_value_1684;
+if (!kr_bootstrap_value_1685) {
+const char * kr_bootstrap_value_1686 = token;
+const char * kr_bootstrap_value_1687 = "continue";
+bool kr_bootstrap_value_1688 = rt_equal(kr_bootstrap_value_1686, kr_bootstrap_value_1687);
+kr_bootstrap_value_1685 = kr_bootstrap_value_1688;
 }
-result = rt_cat(token, ";\n");
-next();
+if (kr_bootstrap_value_1685) {
+int64_t kr_bootstrap_value_1689 = loop_depth;
+bool kr_bootstrap_value_1690 = (kr_bootstrap_value_1689 == INT64_C(0));
+if (kr_bootstrap_value_1690) {
+const char * kr_bootstrap_value_1691 = "break/continue requires an enclosing loop";
+int64_t kr_bootstrap_value_1692 = fail(kr_bootstrap_value_1691);
+(void)(kr_bootstrap_value_1692);
+}
+const char * kr_bootstrap_value_1693 = token;
+const char * kr_bootstrap_value_1694 = ";\n";
+const char * kr_bootstrap_value_1695 = rt_cat(kr_bootstrap_value_1693, kr_bootstrap_value_1694);
+result = kr_bootstrap_value_1695;
+int64_t kr_bootstrap_value_1696 = next();
+(void)(kr_bootstrap_value_1696);
 semantic_terminal = true;
 semantic_returns = false;
-return leave(result);
+const char * kr_bootstrap_value_1697 = result;
+const char * kr_bootstrap_value_1698 = leave(kr_bootstrap_value_1697);
+return kr_bootstrap_value_1698;
 }
-result = expression(INT64_C(1));
-if (rt_equal(token, "=")) {
-if ((!semantic_lvalue)) {
-fail("assignment requires a variable");
+int64_t kr_bootstrap_value_1699 = INT64_C(1);
+const char * kr_bootstrap_value_1700 = expression(kr_bootstrap_value_1699);
+result = kr_bootstrap_value_1700;
+const char * kr_bootstrap_value_1701 = token;
+const char * kr_bootstrap_value_1702 = "=";
+bool kr_bootstrap_value_1703 = rt_equal(kr_bootstrap_value_1701, kr_bootstrap_value_1702);
+if (kr_bootstrap_value_1703) {
+bool kr_bootstrap_value_1704 = (!semantic_lvalue);
+if (kr_bootstrap_value_1704) {
+const char * kr_bootstrap_value_1705 = "assignment requires a variable";
+int64_t kr_bootstrap_value_1706 = fail(kr_bootstrap_value_1705);
+(void)(kr_bootstrap_value_1706);
 }
 const char * target_type = semantic_expression_type;
-next();
-result = rt_cat(result, rt_cat(" = ", expression(INT64_C(1))));
-semantic_same(semantic_expression_type, target_type);
+int64_t kr_bootstrap_value_1707 = next();
+(void)(kr_bootstrap_value_1707);
+const char * kr_bootstrap_value_1708 = result;
+const char * kr_bootstrap_value_1709 = " = ";
+int64_t kr_bootstrap_value_1710 = INT64_C(1);
+const char * kr_bootstrap_value_1711 = expression(kr_bootstrap_value_1710);
+const char * kr_bootstrap_value_1712 = kr_bootstrap_value_1711;
+const char * kr_bootstrap_value_1713 = rt_cat(kr_bootstrap_value_1709, kr_bootstrap_value_1712);
+const char * kr_bootstrap_value_1714 = kr_bootstrap_value_1713;
+const char * kr_bootstrap_value_1715 = rt_cat(kr_bootstrap_value_1708, kr_bootstrap_value_1714);
+result = kr_bootstrap_value_1715;
+const char * kr_bootstrap_value_1716 = semantic_expression_type;
+const char * kr_bootstrap_value_1717 = target_type;
+int64_t kr_bootstrap_value_1718 = semantic_same(kr_bootstrap_value_1716, kr_bootstrap_value_1717);
+(void)(kr_bootstrap_value_1718);
 }
-else if ((!semantic_call)) {
-fail("expression statement requires a function call");
+else {
+{
+bool kr_bootstrap_value_1719 = (!semantic_call);
+if (kr_bootstrap_value_1719) {
+const char * kr_bootstrap_value_1720 = "expression statement requires a function call";
+int64_t kr_bootstrap_value_1721 = fail(kr_bootstrap_value_1720);
+(void)(kr_bootstrap_value_1721);
 }
-return leave(rt_cat(result, ";\n"));
+const char * kr_bootstrap_value_1722 = "(void)(";
+const char * kr_bootstrap_value_1723 = result;
+const char * kr_bootstrap_value_1724 = ")";
+const char * kr_bootstrap_value_1725 = rt_cat(kr_bootstrap_value_1723, kr_bootstrap_value_1724);
+const char * kr_bootstrap_value_1726 = kr_bootstrap_value_1725;
+const char * kr_bootstrap_value_1727 = rt_cat(kr_bootstrap_value_1722, kr_bootstrap_value_1726);
+result = kr_bootstrap_value_1727;
+}
+}
+const char * kr_bootstrap_value_1728 = semantic_take_prelude();
+const char * kr_bootstrap_value_1729 = kr_bootstrap_value_1728;
+const char * kr_bootstrap_value_1730 = result;
+const char * kr_bootstrap_value_1731 = ";\n";
+const char * kr_bootstrap_value_1732 = rt_cat(kr_bootstrap_value_1730, kr_bootstrap_value_1731);
+const char * kr_bootstrap_value_1733 = kr_bootstrap_value_1732;
+const char * kr_bootstrap_value_1734 = rt_cat(kr_bootstrap_value_1729, kr_bootstrap_value_1733);
+const char * kr_bootstrap_value_1735 = kr_bootstrap_value_1734;
+const char * kr_bootstrap_value_1736 = leave(kr_bootstrap_value_1735);
+return kr_bootstrap_value_1736;
 }
 }
 int64_t semantic_skip_body(void) {
 {
-take("{");
+const char * kr_bootstrap_value_1737 = "{";
+int64_t kr_bootstrap_value_1738 = take(kr_bootstrap_value_1737);
+(void)(kr_bootstrap_value_1738);
 int64_t depth = INT64_C(1);
-while ((depth > INT64_C(0))) {
-if ((token_kind == INT64_C(0))) {
-return fail("expected '}' before end of file");
+while (true) {
+int64_t kr_bootstrap_value_1739 = depth;
+bool kr_bootstrap_value_1740 = (kr_bootstrap_value_1739 > INT64_C(0));
+if (!(kr_bootstrap_value_1740)) { break; }
+{
+int64_t kr_bootstrap_value_1741 = token_kind;
+bool kr_bootstrap_value_1742 = (kr_bootstrap_value_1741 == INT64_C(0));
+if (kr_bootstrap_value_1742) {
+const char * kr_bootstrap_value_1743 = "expected '}' before end of file";
+int64_t kr_bootstrap_value_1744 = fail(kr_bootstrap_value_1743);
+return kr_bootstrap_value_1744;
 }
-if (rt_equal(token, "{")) {
-depth = (depth + INT64_C(1));
+const char * kr_bootstrap_value_1745 = token;
+const char * kr_bootstrap_value_1746 = "{";
+bool kr_bootstrap_value_1747 = rt_equal(kr_bootstrap_value_1745, kr_bootstrap_value_1746);
+if (kr_bootstrap_value_1747) {
+int64_t kr_bootstrap_value_1748 = depth;
+int64_t kr_bootstrap_value_1749 = rt_iadd(kr_bootstrap_value_1748, INT64_C(1), kr_bootstrap_value_source, INT64_C(802), INT64_C(53));
+depth = kr_bootstrap_value_1749;
 }
-if (rt_equal(token, "}")) {
-depth = (depth - INT64_C(1));
+const char * kr_bootstrap_value_1750 = token;
+const char * kr_bootstrap_value_1751 = "}";
+bool kr_bootstrap_value_1752 = rt_equal(kr_bootstrap_value_1750, kr_bootstrap_value_1751);
+if (kr_bootstrap_value_1752) {
+int64_t kr_bootstrap_value_1753 = depth;
+int64_t kr_bootstrap_value_1754 = rt_isub(kr_bootstrap_value_1753, INT64_C(1), kr_bootstrap_value_source, INT64_C(803), INT64_C(53));
+depth = kr_bootstrap_value_1754;
 }
-if ((depth > INT64_C(128))) {
-return fail("parser nesting limit (128) exceeded");
+int64_t kr_bootstrap_value_1755 = depth;
+bool kr_bootstrap_value_1756 = (kr_bootstrap_value_1755 > INT64_C(128));
+if (kr_bootstrap_value_1756) {
+const char * kr_bootstrap_value_1757 = "parser nesting limit (128) exceeded";
+int64_t kr_bootstrap_value_1758 = fail(kr_bootstrap_value_1757);
+return kr_bootstrap_value_1758;
 }
-next();
+int64_t kr_bootstrap_value_1759 = next();
+(void)(kr_bootstrap_value_1759);
+}
 }
 return INT64_C(0);
 }
 }
 int64_t function_definition(bool external) {
 {
-take("func");
-const char * name = identifier();
-take("(");
+const char * kr_bootstrap_value_1760 = "func";
+int64_t kr_bootstrap_value_1761 = take(kr_bootstrap_value_1760);
+(void)(kr_bootstrap_value_1761);
+const char * kr_bootstrap_value_1762 = identifier();
+const char * name = kr_bootstrap_value_1762;
+const char * kr_bootstrap_value_1763 = "(";
+int64_t kr_bootstrap_value_1764 = take(kr_bootstrap_value_1763);
+(void)(kr_bootstrap_value_1764);
 const char * parameters = "";
 const char * parameter_types = "";
 semantic_locals = "";
 bool first = true;
-while ((!rt_equal(token, ")"))) {
-if ((!first)) {
-take(",");
-parameters = rt_cat(parameters, ", ");
+while (true) {
+const char * kr_bootstrap_value_1765 = token;
+const char * kr_bootstrap_value_1766 = ")";
+bool kr_bootstrap_value_1767 = rt_equal(kr_bootstrap_value_1765, kr_bootstrap_value_1766);
+bool kr_bootstrap_value_1768 = (!kr_bootstrap_value_1767);
+if (!(kr_bootstrap_value_1768)) { break; }
+{
+bool kr_bootstrap_value_1769 = (!first);
+if (kr_bootstrap_value_1769) {
+const char * kr_bootstrap_value_1770 = ",";
+int64_t kr_bootstrap_value_1771 = take(kr_bootstrap_value_1770);
+(void)(kr_bootstrap_value_1771);
+const char * kr_bootstrap_value_1772 = parameters;
+const char * kr_bootstrap_value_1773 = ", ";
+const char * kr_bootstrap_value_1774 = rt_cat(kr_bootstrap_value_1772, kr_bootstrap_value_1773);
+parameters = kr_bootstrap_value_1774;
 }
-const char * pname = identifier();
-const char * ptype = type_name();
-semantic_bind_local(pname, ptype);
-parameter_types = rt_cat(parameter_types, semantic_code(ptype));
-parameters = rt_cat(parameters, rt_cat(ptype, rt_cat(" ", pname)));
+const char * kr_bootstrap_value_1775 = identifier();
+const char * pname = kr_bootstrap_value_1775;
+const char * kr_bootstrap_value_1776 = type_name();
+const char * ptype = kr_bootstrap_value_1776;
+const char * kr_bootstrap_value_1777 = pname;
+const char * kr_bootstrap_value_1778 = ptype;
+int64_t kr_bootstrap_value_1779 = semantic_bind_local(kr_bootstrap_value_1777, kr_bootstrap_value_1778);
+(void)(kr_bootstrap_value_1779);
+const char * kr_bootstrap_value_1780 = parameter_types;
+const char * kr_bootstrap_value_1781 = ptype;
+const char * kr_bootstrap_value_1782 = semantic_code(kr_bootstrap_value_1781);
+const char * kr_bootstrap_value_1783 = kr_bootstrap_value_1782;
+const char * kr_bootstrap_value_1784 = rt_cat(kr_bootstrap_value_1780, kr_bootstrap_value_1783);
+parameter_types = kr_bootstrap_value_1784;
+const char * kr_bootstrap_value_1785 = parameters;
+const char * kr_bootstrap_value_1786 = ptype;
+const char * kr_bootstrap_value_1787 = " ";
+const char * kr_bootstrap_value_1788 = pname;
+const char * kr_bootstrap_value_1789 = rt_cat(kr_bootstrap_value_1787, kr_bootstrap_value_1788);
+const char * kr_bootstrap_value_1790 = kr_bootstrap_value_1789;
+const char * kr_bootstrap_value_1791 = rt_cat(kr_bootstrap_value_1786, kr_bootstrap_value_1790);
+const char * kr_bootstrap_value_1792 = kr_bootstrap_value_1791;
+const char * kr_bootstrap_value_1793 = rt_cat(kr_bootstrap_value_1785, kr_bootstrap_value_1792);
+parameters = kr_bootstrap_value_1793;
 first = false;
 }
-take(")");
+}
+const char * kr_bootstrap_value_1794 = ")";
+int64_t kr_bootstrap_value_1795 = take(kr_bootstrap_value_1794);
+(void)(kr_bootstrap_value_1795);
 if (first) {
 parameters = "void";
 }
-const char * result_type = type_name();
-const char * metadata = rt_cat("F", rt_cat(semantic_code(result_type), parameter_types));
+const char * kr_bootstrap_value_1796 = type_name();
+const char * result_type = kr_bootstrap_value_1796;
+const char * kr_bootstrap_value_1797 = "F";
+const char * kr_bootstrap_value_1798 = result_type;
+const char * kr_bootstrap_value_1799 = semantic_code(kr_bootstrap_value_1798);
+const char * kr_bootstrap_value_1800 = kr_bootstrap_value_1799;
+const char * kr_bootstrap_value_1801 = parameter_types;
+const char * kr_bootstrap_value_1802 = rt_cat(kr_bootstrap_value_1800, kr_bootstrap_value_1801);
+const char * kr_bootstrap_value_1803 = kr_bootstrap_value_1802;
+const char * kr_bootstrap_value_1804 = rt_cat(kr_bootstrap_value_1797, kr_bootstrap_value_1803);
+const char * metadata = kr_bootstrap_value_1804;
 if (semantic_collecting) {
-if ((!rt_equal(semantic_lookup(semantic_globals, name), ""))) {
-return fail(rt_cat("duplicate top-level name: ", name));
+const char * kr_bootstrap_value_1805 = semantic_globals;
+const char * kr_bootstrap_value_1806 = name;
+const char * kr_bootstrap_value_1807 = semantic_lookup(kr_bootstrap_value_1805, kr_bootstrap_value_1806);
+const char * kr_bootstrap_value_1808 = kr_bootstrap_value_1807;
+const char * kr_bootstrap_value_1809 = "";
+bool kr_bootstrap_value_1810 = rt_equal(kr_bootstrap_value_1808, kr_bootstrap_value_1809);
+bool kr_bootstrap_value_1811 = (!kr_bootstrap_value_1810);
+if (kr_bootstrap_value_1811) {
+const char * kr_bootstrap_value_1812 = "duplicate top-level name: ";
+const char * kr_bootstrap_value_1813 = name;
+const char * kr_bootstrap_value_1814 = rt_cat(kr_bootstrap_value_1812, kr_bootstrap_value_1813);
+const char * kr_bootstrap_value_1815 = kr_bootstrap_value_1814;
+int64_t kr_bootstrap_value_1816 = fail(kr_bootstrap_value_1815);
+return kr_bootstrap_value_1816;
 }
-if ((rt_equal(name, "kr_main") && ((external || (!rt_equal(metadata, "Fi")))))) {
-return fail("entry point must be func main() i64");
+const char * kr_bootstrap_value_1817 = name;
+const char * kr_bootstrap_value_1818 = "kr_main";
+bool kr_bootstrap_value_1819 = rt_equal(kr_bootstrap_value_1817, kr_bootstrap_value_1818);
+bool kr_bootstrap_value_1820 = kr_bootstrap_value_1819;
+if (kr_bootstrap_value_1820) {
+bool kr_bootstrap_value_1821 = external;
+if (!kr_bootstrap_value_1821) {
+const char * kr_bootstrap_value_1822 = metadata;
+const char * kr_bootstrap_value_1823 = "Fi";
+bool kr_bootstrap_value_1824 = rt_equal(kr_bootstrap_value_1822, kr_bootstrap_value_1823);
+bool kr_bootstrap_value_1825 = (!kr_bootstrap_value_1824);
+kr_bootstrap_value_1821 = kr_bootstrap_value_1825;
 }
-semantic_globals = semantic_record(semantic_globals, name, metadata);
-if ((!external)) {
-semantic_skip_body();
+kr_bootstrap_value_1820 = (kr_bootstrap_value_1821);
+}
+if (kr_bootstrap_value_1820) {
+const char * kr_bootstrap_value_1826 = "entry point must be func main() i64";
+int64_t kr_bootstrap_value_1827 = fail(kr_bootstrap_value_1826);
+return kr_bootstrap_value_1827;
+}
+const char * kr_bootstrap_value_1828 = semantic_globals;
+const char * kr_bootstrap_value_1829 = name;
+const char * kr_bootstrap_value_1830 = metadata;
+const char * kr_bootstrap_value_1831 = semantic_record(kr_bootstrap_value_1828, kr_bootstrap_value_1829, kr_bootstrap_value_1830);
+semantic_globals = kr_bootstrap_value_1831;
+bool kr_bootstrap_value_1832 = (!external);
+if (kr_bootstrap_value_1832) {
+int64_t kr_bootstrap_value_1833 = semantic_skip_body();
+(void)(kr_bootstrap_value_1833);
 }
 }
 else {
-const char * signature = rt_cat(result_type, rt_cat(" ", rt_cat(name, rt_cat("(", rt_cat(parameters, ")")))));
-declarations = rt_cat(declarations, rt_cat(signature, ";\n"));
-if ((!external)) {
-semantic_result = semantic_code(result_type);
+{
+const char * kr_bootstrap_value_1834 = result_type;
+const char * kr_bootstrap_value_1835 = " ";
+const char * kr_bootstrap_value_1836 = name;
+const char * kr_bootstrap_value_1837 = "(";
+const char * kr_bootstrap_value_1838 = parameters;
+const char * kr_bootstrap_value_1839 = ")";
+const char * kr_bootstrap_value_1840 = rt_cat(kr_bootstrap_value_1838, kr_bootstrap_value_1839);
+const char * kr_bootstrap_value_1841 = kr_bootstrap_value_1840;
+const char * kr_bootstrap_value_1842 = rt_cat(kr_bootstrap_value_1837, kr_bootstrap_value_1841);
+const char * kr_bootstrap_value_1843 = kr_bootstrap_value_1842;
+const char * kr_bootstrap_value_1844 = rt_cat(kr_bootstrap_value_1836, kr_bootstrap_value_1843);
+const char * kr_bootstrap_value_1845 = kr_bootstrap_value_1844;
+const char * kr_bootstrap_value_1846 = rt_cat(kr_bootstrap_value_1835, kr_bootstrap_value_1845);
+const char * kr_bootstrap_value_1847 = kr_bootstrap_value_1846;
+const char * kr_bootstrap_value_1848 = rt_cat(kr_bootstrap_value_1834, kr_bootstrap_value_1847);
+const char * signature = kr_bootstrap_value_1848;
+const char * kr_bootstrap_value_1849 = declarations;
+const char * kr_bootstrap_value_1850 = signature;
+const char * kr_bootstrap_value_1851 = ";\n";
+const char * kr_bootstrap_value_1852 = rt_cat(kr_bootstrap_value_1850, kr_bootstrap_value_1851);
+const char * kr_bootstrap_value_1853 = kr_bootstrap_value_1852;
+const char * kr_bootstrap_value_1854 = rt_cat(kr_bootstrap_value_1849, kr_bootstrap_value_1853);
+declarations = kr_bootstrap_value_1854;
+bool kr_bootstrap_value_1855 = (!external);
+if (kr_bootstrap_value_1855) {
+const char * kr_bootstrap_value_1856 = result_type;
+const char * kr_bootstrap_value_1857 = semantic_code(kr_bootstrap_value_1856);
+semantic_result = kr_bootstrap_value_1857;
 semantic_in_function = true;
-definitions = rt_cat(definitions, rt_cat(signature, rt_cat(" ", block())));
+const char * kr_bootstrap_value_1858 = definitions;
+const char * kr_bootstrap_value_1859 = signature;
+const char * kr_bootstrap_value_1860 = " ";
+const char * kr_bootstrap_value_1861 = block();
+const char * kr_bootstrap_value_1862 = kr_bootstrap_value_1861;
+const char * kr_bootstrap_value_1863 = rt_cat(kr_bootstrap_value_1860, kr_bootstrap_value_1862);
+const char * kr_bootstrap_value_1864 = kr_bootstrap_value_1863;
+const char * kr_bootstrap_value_1865 = rt_cat(kr_bootstrap_value_1859, kr_bootstrap_value_1864);
+const char * kr_bootstrap_value_1866 = kr_bootstrap_value_1865;
+const char * kr_bootstrap_value_1867 = rt_cat(kr_bootstrap_value_1858, kr_bootstrap_value_1866);
+definitions = kr_bootstrap_value_1867;
 semantic_in_function = false;
-if ((!semantic_returns)) {
-return fail(rt_cat("function may finish without returning: ", name));
+bool kr_bootstrap_value_1868 = (!semantic_returns);
+if (kr_bootstrap_value_1868) {
+const char * kr_bootstrap_value_1869 = "function may finish without returning: ";
+const char * kr_bootstrap_value_1870 = name;
+const char * kr_bootstrap_value_1871 = rt_cat(kr_bootstrap_value_1869, kr_bootstrap_value_1870);
+const char * kr_bootstrap_value_1872 = kr_bootstrap_value_1871;
+int64_t kr_bootstrap_value_1873 = fail(kr_bootstrap_value_1872);
+return kr_bootstrap_value_1873;
+}
 }
 }
 }
@@ -856,24 +3430,58 @@ token_line = INT64_C(1);
 token_column = INT64_C(1);
 parse_depth = INT64_C(0);
 loop_depth = INT64_C(0);
-return next();
+expression_line = INT64_C(1);
+expression_column = INT64_C(1);
+int64_t kr_bootstrap_value_1874 = next();
+return kr_bootstrap_value_1874;
 }
 }
 int64_t semantic_translation_unit(void) {
 {
-while ((token_kind != INT64_C(0))) {
-if (rt_equal(token, "extern")) {
-next();
-function_definition(true);
-}
-else if (rt_equal(token, "func")) {
-function_definition(false);
-}
-else if (rt_equal(token, "var")) {
-declarations = rt_cat(declarations, variable());
+while (true) {
+int64_t kr_bootstrap_value_1875 = token_kind;
+bool kr_bootstrap_value_1876 = (kr_bootstrap_value_1875 != INT64_C(0));
+if (!(kr_bootstrap_value_1876)) { break; }
+{
+const char * kr_bootstrap_value_1877 = token;
+const char * kr_bootstrap_value_1878 = "extern";
+bool kr_bootstrap_value_1879 = rt_equal(kr_bootstrap_value_1877, kr_bootstrap_value_1878);
+if (kr_bootstrap_value_1879) {
+int64_t kr_bootstrap_value_1880 = next();
+(void)(kr_bootstrap_value_1880);
+bool kr_bootstrap_value_1881 = true;
+int64_t kr_bootstrap_value_1882 = function_definition(kr_bootstrap_value_1881);
+(void)(kr_bootstrap_value_1882);
 }
 else {
-return fail("expected top-level func, extern func or var");
+const char * kr_bootstrap_value_1883 = token;
+const char * kr_bootstrap_value_1884 = "func";
+bool kr_bootstrap_value_1885 = rt_equal(kr_bootstrap_value_1883, kr_bootstrap_value_1884);
+if (kr_bootstrap_value_1885) {
+bool kr_bootstrap_value_1886 = false;
+int64_t kr_bootstrap_value_1887 = function_definition(kr_bootstrap_value_1886);
+(void)(kr_bootstrap_value_1887);
+}
+else {
+const char * kr_bootstrap_value_1888 = token;
+const char * kr_bootstrap_value_1889 = "var";
+bool kr_bootstrap_value_1890 = rt_equal(kr_bootstrap_value_1888, kr_bootstrap_value_1889);
+if (kr_bootstrap_value_1890) {
+const char * kr_bootstrap_value_1891 = declarations;
+const char * kr_bootstrap_value_1892 = variable();
+const char * kr_bootstrap_value_1893 = kr_bootstrap_value_1892;
+const char * kr_bootstrap_value_1894 = rt_cat(kr_bootstrap_value_1891, kr_bootstrap_value_1893);
+declarations = kr_bootstrap_value_1894;
+}
+else {
+{
+const char * kr_bootstrap_value_1895 = "expected top-level func, extern func or var";
+int64_t kr_bootstrap_value_1896 = fail(kr_bootstrap_value_1895);
+return kr_bootstrap_value_1896;
+}
+}
+}
+}
 }
 }
 return INT64_C(0);
@@ -882,7 +3490,9 @@ return INT64_C(0);
 int64_t bootstrap_compile(const char * input, const char * destination) {
 {
 path = input;
-source = rt_read(path);
+const char * kr_bootstrap_value_1897 = path;
+const char * kr_bootstrap_value_1898 = rt_read(kr_bootstrap_value_1897);
+source = kr_bootstrap_value_1898;
 declarations = "";
 definitions = "";
 semantic_globals = "";
@@ -896,27 +3506,136 @@ semantic_call = false;
 semantic_constant = false;
 semantic_terminal = false;
 semantic_returns = false;
-semantic_rewind();
-semantic_translation_unit();
-if ((!rt_equal(semantic_lookup(semantic_globals, "kr_main"), "Fi"))) {
-return fail("program requires func main() i64");
+semantic_prelude = "";
+semantic_counter = INT64_C(0);
+semantic_checked = false;
+int64_t filename_start = INT64_C(0);
+int64_t filename_index = INT64_C(0);
+while (true) {
+int64_t kr_bootstrap_value_1899 = filename_index;
+const char * kr_bootstrap_value_1900 = input;
+int64_t kr_bootstrap_value_1901 = rt_len(kr_bootstrap_value_1900);
+bool kr_bootstrap_value_1902 = (kr_bootstrap_value_1899 < kr_bootstrap_value_1901);
+if (!(kr_bootstrap_value_1902)) { break; }
+{
+const char * kr_bootstrap_value_1903 = input;
+int64_t kr_bootstrap_value_1904 = filename_index;
+int64_t kr_bootstrap_value_1905 = rt_at(kr_bootstrap_value_1903, kr_bootstrap_value_1904);
+int64_t kr_bootstrap_value_1906 = kr_bootstrap_value_1905;
+bool kr_bootstrap_value_1907 = (kr_bootstrap_value_1906 == INT64_C(47));
+if (kr_bootstrap_value_1907) {
+int64_t kr_bootstrap_value_1908 = filename_index;
+int64_t kr_bootstrap_value_1909 = rt_iadd(kr_bootstrap_value_1908, INT64_C(1), kr_bootstrap_value_source, INT64_C(908), INT64_C(85));
+filename_start = kr_bootstrap_value_1909;
+}
+int64_t kr_bootstrap_value_1910 = filename_index;
+int64_t kr_bootstrap_value_1911 = rt_iadd(kr_bootstrap_value_1910, INT64_C(1), kr_bootstrap_value_source, INT64_C(909), INT64_C(45));
+filename_index = kr_bootstrap_value_1911;
+}
+}
+const char * kr_bootstrap_value_1912 = input;
+int64_t kr_bootstrap_value_1913 = filename_start;
+const char * kr_bootstrap_value_1914 = input;
+int64_t kr_bootstrap_value_1915 = rt_len(kr_bootstrap_value_1914);
+int64_t kr_bootstrap_value_1916 = kr_bootstrap_value_1915;
+const char * kr_bootstrap_value_1917 = rt_slice(kr_bootstrap_value_1912, kr_bootstrap_value_1913, kr_bootstrap_value_1916);
+const char * kr_bootstrap_value_1918 = kr_bootstrap_value_1917;
+const char * kr_bootstrap_value_1919 = semantic_quote_bytes(kr_bootstrap_value_1918);
+semantic_source_literal = kr_bootstrap_value_1919;
+int64_t kr_bootstrap_value_1920 = semantic_rewind();
+(void)(kr_bootstrap_value_1920);
+int64_t kr_bootstrap_value_1921 = semantic_translation_unit();
+(void)(kr_bootstrap_value_1921);
+const char * kr_bootstrap_value_1922 = semantic_globals;
+const char * kr_bootstrap_value_1923 = "kr_main";
+const char * kr_bootstrap_value_1924 = semantic_lookup(kr_bootstrap_value_1922, kr_bootstrap_value_1923);
+const char * kr_bootstrap_value_1925 = kr_bootstrap_value_1924;
+const char * kr_bootstrap_value_1926 = "Fi";
+bool kr_bootstrap_value_1927 = rt_equal(kr_bootstrap_value_1925, kr_bootstrap_value_1926);
+bool kr_bootstrap_value_1928 = (!kr_bootstrap_value_1927);
+if (kr_bootstrap_value_1928) {
+const char * kr_bootstrap_value_1929 = "program requires func main() i64";
+int64_t kr_bootstrap_value_1930 = fail(kr_bootstrap_value_1929);
+return kr_bootstrap_value_1930;
 }
 declarations = "";
 definitions = "";
 semantic_collecting = false;
-semantic_rewind();
-semantic_translation_unit();
-const char * output = rt_cat("// Generated by the Kremen bootstrap compiler.\n#include <stdint.h>\n#include <stdbool.h>\n\n", rt_cat(declarations, rt_cat("\n", definitions)));
-return rt_write(destination, output);
+int64_t kr_bootstrap_value_1931 = semantic_rewind();
+(void)(kr_bootstrap_value_1931);
+int64_t kr_bootstrap_value_1932 = semantic_translation_unit();
+(void)(kr_bootstrap_value_1932);
+const char * helpers = "int64_t rt_iadd(int64_t, int64_t, const char *, int64_t, int64_t);\nint64_t rt_isub(int64_t, int64_t, const char *, int64_t, int64_t);\nint64_t rt_imul(int64_t, int64_t, const char *, int64_t, int64_t);\nint64_t rt_idiv(int64_t, int64_t, const char *, int64_t, int64_t);\nint64_t rt_imod(int64_t, int64_t, const char *, int64_t, int64_t);\nint64_t rt_ineg(int64_t, const char *, int64_t, int64_t);\n\n";
+if (semantic_checked) {
+const char * kr_bootstrap_value_1933 = helpers;
+const char * kr_bootstrap_value_1934 = "static const char kr_bootstrap_value_source[] = ";
+const char * kr_bootstrap_value_1935 = semantic_source_literal;
+const char * kr_bootstrap_value_1936 = ";\n\n";
+const char * kr_bootstrap_value_1937 = rt_cat(kr_bootstrap_value_1935, kr_bootstrap_value_1936);
+const char * kr_bootstrap_value_1938 = kr_bootstrap_value_1937;
+const char * kr_bootstrap_value_1939 = rt_cat(kr_bootstrap_value_1934, kr_bootstrap_value_1938);
+const char * kr_bootstrap_value_1940 = kr_bootstrap_value_1939;
+const char * kr_bootstrap_value_1941 = rt_cat(kr_bootstrap_value_1933, kr_bootstrap_value_1940);
+helpers = kr_bootstrap_value_1941;
+}
+const char * kr_bootstrap_value_1942 = "// Generated by the Kremen bootstrap compiler.\n#include <stdint.h>\n#include <stdbool.h>\n\n";
+const char * kr_bootstrap_value_1943 = helpers;
+const char * kr_bootstrap_value_1944 = declarations;
+const char * kr_bootstrap_value_1945 = "\n";
+const char * kr_bootstrap_value_1946 = definitions;
+const char * kr_bootstrap_value_1947 = rt_cat(kr_bootstrap_value_1945, kr_bootstrap_value_1946);
+const char * kr_bootstrap_value_1948 = kr_bootstrap_value_1947;
+const char * kr_bootstrap_value_1949 = rt_cat(kr_bootstrap_value_1944, kr_bootstrap_value_1948);
+const char * kr_bootstrap_value_1950 = kr_bootstrap_value_1949;
+const char * kr_bootstrap_value_1951 = rt_cat(kr_bootstrap_value_1943, kr_bootstrap_value_1950);
+const char * kr_bootstrap_value_1952 = kr_bootstrap_value_1951;
+const char * kr_bootstrap_value_1953 = rt_cat(kr_bootstrap_value_1942, kr_bootstrap_value_1952);
+const char * output = kr_bootstrap_value_1953;
+const char * kr_bootstrap_value_1954 = destination;
+const char * kr_bootstrap_value_1955 = output;
+int64_t kr_bootstrap_value_1956 = rt_write(kr_bootstrap_value_1954, kr_bootstrap_value_1955);
+return kr_bootstrap_value_1956;
 }
 }
 int64_t kr_main(void) {
 {
-const char * input = rt_arg(INT64_C(1));
-const char * destination = rt_arg(INT64_C(2));
-if (((rt_equal(input, "") || rt_equal(destination, "")) || (!rt_equal(rt_arg(INT64_C(3)), "")))) {
-return rt_error("<command line>", INT64_C(1), INT64_C(1), "usage: selfhost input.kr output.c");
+int64_t kr_bootstrap_value_1957 = INT64_C(1);
+const char * kr_bootstrap_value_1958 = rt_arg(kr_bootstrap_value_1957);
+const char * input = kr_bootstrap_value_1958;
+int64_t kr_bootstrap_value_1959 = INT64_C(2);
+const char * kr_bootstrap_value_1960 = rt_arg(kr_bootstrap_value_1959);
+const char * destination = kr_bootstrap_value_1960;
+const char * kr_bootstrap_value_1961 = input;
+const char * kr_bootstrap_value_1962 = "";
+bool kr_bootstrap_value_1963 = rt_equal(kr_bootstrap_value_1961, kr_bootstrap_value_1962);
+bool kr_bootstrap_value_1964 = kr_bootstrap_value_1963;
+if (!kr_bootstrap_value_1964) {
+const char * kr_bootstrap_value_1965 = destination;
+const char * kr_bootstrap_value_1966 = "";
+bool kr_bootstrap_value_1967 = rt_equal(kr_bootstrap_value_1965, kr_bootstrap_value_1966);
+kr_bootstrap_value_1964 = kr_bootstrap_value_1967;
 }
-return bootstrap_compile(input, destination);
+bool kr_bootstrap_value_1968 = kr_bootstrap_value_1964;
+if (!kr_bootstrap_value_1968) {
+int64_t kr_bootstrap_value_1969 = INT64_C(3);
+const char * kr_bootstrap_value_1970 = rt_arg(kr_bootstrap_value_1969);
+const char * kr_bootstrap_value_1971 = kr_bootstrap_value_1970;
+const char * kr_bootstrap_value_1972 = "";
+bool kr_bootstrap_value_1973 = rt_equal(kr_bootstrap_value_1971, kr_bootstrap_value_1972);
+bool kr_bootstrap_value_1974 = (!kr_bootstrap_value_1973);
+kr_bootstrap_value_1968 = kr_bootstrap_value_1974;
+}
+if (kr_bootstrap_value_1968) {
+const char * kr_bootstrap_value_1975 = "<command line>";
+int64_t kr_bootstrap_value_1976 = INT64_C(1);
+int64_t kr_bootstrap_value_1977 = INT64_C(1);
+const char * kr_bootstrap_value_1978 = "usage: selfhost input.kr output.c";
+int64_t kr_bootstrap_value_1979 = rt_error(kr_bootstrap_value_1975, kr_bootstrap_value_1976, kr_bootstrap_value_1977, kr_bootstrap_value_1978);
+return kr_bootstrap_value_1979;
+}
+const char * kr_bootstrap_value_1980 = input;
+const char * kr_bootstrap_value_1981 = destination;
+int64_t kr_bootstrap_value_1982 = bootstrap_compile(kr_bootstrap_value_1980, kr_bootstrap_value_1981);
+return kr_bootstrap_value_1982;
 }
 }

@@ -24,6 +24,18 @@ var declarations string = ""
 var definitions string = ""
 var loop_depth i64 = 0
 var parse_depth i64 = 0
+var semantic_prelude string = ""
+var semantic_counter i64 = 0
+var semantic_source_literal string = ""
+var semantic_checked bool = false
+var expression_line i64 = 1
+var expression_column i64 = 1
+
+func fail_at(message string, at_line i64, at_column i64) i64 {
+    unsafe {
+        return rt_error(path, at_line, at_column, message)
+    }
+}
 
 func fail(message string) i64 {
     unsafe {
@@ -260,9 +272,10 @@ func semantic_reserved_identifier(name string) bool {
         // stdint/stdbool and implementation macros are expanded before the C
         // parser sees declarations. Reserve their families instead of allowing
         // a valid Kremen name to turn into a token sequence in generated C.
-        if semantic_prefix(name, "INT") || semantic_prefix(name, "UINT") || semantic_prefix(name, "SIZE_") || semantic_prefix(name, "PTRDIFF_") || semantic_prefix(name, "SIG_ATOMIC_") || semantic_prefix(name, "WCHAR_") || semantic_prefix(name, "WINT_") || semantic_prefix(name, "_") || rt_equal(name, "NULL") {
+        if semantic_prefix(name, "INT") || semantic_prefix(name, "UINT") || semantic_prefix(name, "SIZE_") || semantic_prefix(name, "PTRDIFF_") || semantic_prefix(name, "SIG_ATOMIC_") || semantic_prefix(name, "WCHAR_") || semantic_prefix(name, "WINT_") || semantic_prefix(name, "_") || semantic_prefix(name, "kr_bootstrap_value_") || rt_equal(name, "NULL") {
             return true
         }
+        if rt_equal(name, "rt_iadd") || rt_equal(name, "rt_isub") || rt_equal(name, "rt_imul") || rt_equal(name, "rt_idiv") || rt_equal(name, "rt_imod") || rt_equal(name, "rt_ineg") { return true }
         if semantic_prefix(name, "int") {
             var suffix string = rt_slice(name, 3, rt_len(name))
             if is_digit(rt_at(suffix, 0)) || rt_at(suffix, 0) == 95 || rt_equal(suffix, "max_t") || rt_equal(suffix, "ptr_t") { return true }
@@ -326,22 +339,28 @@ func semantic_description(code string) string {
     }
 }
 
-func semantic_same(actual string, expected string) i64 {
+func semantic_same_at(actual string, expected string, at_line i64, at_column i64) i64 {
     unsafe {
         if !semantic_collecting && !rt_equal(actual, expected) {
-            return fail(rt_cat("type mismatch: expected ", rt_cat(semantic_description(expected), rt_cat(", found ", semantic_description(actual)))))
+            return fail_at(rt_cat("type mismatch: expected ", rt_cat(semantic_description(expected), rt_cat(", found ", semantic_description(actual)))), at_line, at_column)
         }
         return 0
     }
 }
 
-func semantic_variable(name string) string {
+func semantic_same(actual string, expected string) i64 {
+    unsafe {
+        return semantic_same_at(actual, expected, expression_line, expression_column)
+    }
+}
+
+func semantic_variable(name string, at_line i64, at_column i64) string {
     unsafe {
         var found string = semantic_lookup(semantic_locals, name)
         if rt_equal(found, "") { found = semantic_lookup(semantic_globals, name) }
         if !semantic_collecting {
-            if rt_equal(found, "") { fail(rt_cat("undefined name: ", name)) }
-            if rt_at(found, 0) != 86 { fail("function names are only valid in calls") }
+            if rt_equal(found, "") { fail_at(rt_cat("undefined name: ", name), at_line, at_column) }
+            if rt_at(found, 0) != 86 { fail_at("function names are only valid in calls", at_line, at_column) }
         }
         return found
     }
@@ -408,12 +427,76 @@ func semantic_string_literal(text string) string {
     }
 }
 
+func semantic_quote_bytes(text string) string {
+    unsafe {
+        var result string = "\""
+        var index i64 = 0
+        for index < rt_len(text) {
+            var byte i64 = rt_at(text, index)
+            result = rt_cat(result, rt_cat("\\", rt_cat(rt_number(byte / 64), rt_cat(rt_number(byte / 8 % 8), rt_number(byte % 8)))))
+            index = index + 1
+        }
+        return rt_cat(result, "\"")
+    }
+}
+
+func semantic_location(where_line i64, where_column i64) string {
+    unsafe {
+        semantic_checked = true
+        return rt_cat("kr_bootstrap_value_source", rt_cat(", INT64_C(", rt_cat(rt_number(where_line), rt_cat("), INT64_C(", rt_cat(rt_number(where_column), ")")))))
+    }
+}
+
+func semantic_emitting() bool {
+    return !semantic_collecting && semantic_in_function
+}
+
+func semantic_materialize(code string, value string) string {
+    unsafe {
+        if !semantic_emitting() { return value }
+        semantic_counter = semantic_counter + 1
+        var name string = rt_cat("kr_bootstrap_value_", rt_number(semantic_counter))
+        var ctype string = "int64_t"
+        if rt_equal(code, "b") { ctype = "bool" }
+        if rt_equal(code, "s") { ctype = "const char *" }
+        semantic_prelude = rt_cat(semantic_prelude, rt_cat(ctype, rt_cat(" ", rt_cat(name, rt_cat(" = ", rt_cat(value, ";\n"))))))
+        return name
+    }
+}
+
+func semantic_take_prelude() string {
+    unsafe {
+        var result string = semantic_prelude
+        semantic_prelude = ""
+        return result
+    }
+}
+
+func semantic_binary(op string, left string, right string, where_line i64, where_column i64) string {
+    unsafe {
+        if semantic_emitting() {
+            var helper string = ""
+            if rt_equal(op, "+") { helper = "rt_iadd" }
+            if rt_equal(op, "-") { helper = "rt_isub" }
+            if rt_equal(op, "*") { helper = "rt_imul" }
+            if rt_equal(op, "/") { helper = "rt_idiv" }
+            if rt_equal(op, "%") { helper = "rt_imod" }
+            if !rt_equal(helper, "") {
+                return rt_cat(helper, rt_cat("(", rt_cat(left, rt_cat(", ", rt_cat(right, rt_cat(", ", rt_cat(semantic_location(where_line, where_column), ")")))))))
+            }
+        }
+        return rt_cat("(", rt_cat(left, rt_cat(" ", rt_cat(op, rt_cat(" ", rt_cat(right, ")"))))))
+    }
+}
+
 func primary() string {
     unsafe {
         enter()
         var value string = ""
         if rt_equal(token, "!") || rt_equal(token, "-") || rt_equal(token, "+") {
             var unary string = token
+            var where_line i64 = token_line
+            var where_column i64 = token_column
             next()
             if rt_equal(unary, "-") && token_kind == 2 && rt_equal(token, "9223372036854775808") {
                 next()
@@ -425,15 +508,20 @@ func primary() string {
             }
             value = primary()
             if rt_equal(unary, "!") {
-                semantic_same(semantic_expression_type, "b")
+                semantic_same_at(semantic_expression_type, "b", where_line, where_column)
                 semantic_expression_type = "b"
             } else {
-                semantic_same(semantic_expression_type, "i")
+                semantic_same_at(semantic_expression_type, "i", where_line, where_column)
                 semantic_expression_type = "i"
             }
             semantic_lvalue = false
             semantic_call = false
-            return leave(rt_cat(rt_cat("(", unary), rt_cat(value, ")")))
+            if semantic_emitting() && rt_equal(unary, "-") {
+                value = rt_cat("rt_ineg(", rt_cat(value, rt_cat(", ", rt_cat(semantic_location(where_line, where_column), ")"))))
+            } else {
+                value = rt_cat(rt_cat("(", unary), rt_cat(value, ")"))
+            }
+            return leave(semantic_materialize(semantic_expression_type, value))
         }
         if rt_equal(token, "(") {
             next()
@@ -458,16 +546,18 @@ func primary() string {
             semantic_expression_type = "b"
             next()
         } else if token_kind == 1 {
+            var name_line i64 = token_line
+            var name_column i64 = token_column
             var name string = identifier()
             semantic_constant = false
             if rt_equal(token, "(") {
                 var signature string = semantic_lookup(semantic_globals, name)
                 if !semantic_collecting {
                     if !rt_equal(semantic_lookup(semantic_locals, name), "") {
-                        fail(rt_cat("local value is not callable: ", name))
+                        fail_at(rt_cat("local value is not callable: ", name), name_line, name_column)
                     }
-                    if rt_equal(signature, "") { fail(rt_cat("undefined function: ", name)) }
-                    if rt_at(signature, 0) != 70 { fail(rt_cat("value is not callable: ", name)) }
+                    if rt_equal(signature, "") { fail_at(rt_cat("undefined function: ", name), name_line, name_column) }
+                    if rt_at(signature, 0) != 70 { fail_at(rt_cat("value is not callable: ", name), name_line, name_column) }
                 }
                 next()
                 value = rt_cat(name, "(")
@@ -478,11 +568,12 @@ func primary() string {
                         take(",")
                         value = rt_cat(value, ", ")
                     }
-                    value = rt_cat(value, expression(1))
+                    var actual string = expression(1)
                     if !semantic_collecting {
                         if argument >= rt_len(signature) { fail(rt_cat("too many arguments for ", name)) }
                         semantic_same(semantic_expression_type, rt_slice(signature, argument, argument + 1))
                     }
+                    value = rt_cat(value, semantic_materialize(semantic_expression_type, actual))
                     argument = argument + 1
                     first = false
                 }
@@ -499,8 +590,9 @@ func primary() string {
                 semantic_lvalue = false
                 semantic_call = true
                 semantic_constant = false
+                value = semantic_materialize(semantic_expression_type, value)
             } else {
-                var metadata string = semantic_variable(name)
+                var metadata string = semantic_variable(name, name_line, name_column)
                 if semantic_collecting {
                     semantic_expression_type = "i"
                 } else {
@@ -519,17 +611,28 @@ func primary() string {
 func expression(minimum i64) string {
     unsafe {
         enter()
+        var start_line i64 = token_line
+        var start_column i64 = token_column
         var left string = primary()
         var level i64 = precedence(token)
+        var operations i64 = 0
         for level >= minimum {
+            operations = operations + 1
+            if operations > 512 { fail("expression operation limit (512) exceeded") }
             var op string = token
+            var where_line i64 = token_line
+            var where_column i64 = token_column
             var left_type string = semantic_expression_type
             var left_constant bool = semantic_constant
+            left = semantic_materialize(left_type, left)
+            var lazy bool = semantic_emitting() && (rt_equal(op, "&&") || rt_equal(op, "||"))
+            var outer_prelude string = ""
+            if lazy { outer_prelude = semantic_take_prelude() }
             next()
             var right string = expression(level + 1)
             var right_type string = semantic_expression_type
             if rt_equal(op, "&&") || rt_equal(op, "||") {
-                semantic_same(left_type, "b")
+                semantic_same_at(left_type, "b", start_line, start_column)
                 semantic_same(right_type, "b")
                 semantic_expression_type = "b"
             } else if rt_equal(op, "==") || rt_equal(op, "!=") {
@@ -539,16 +642,26 @@ func expression(minimum i64) string {
                 }
                 semantic_expression_type = "b"
             } else {
-                semantic_same(left_type, "i")
+                semantic_same_at(left_type, "i", start_line, start_column)
                 semantic_same(right_type, "i")
                 if level == 4 { semantic_expression_type = "b" } else { semantic_expression_type = "i" }
             }
             semantic_constant = left_constant && semantic_constant
             semantic_lvalue = false
             semantic_call = false
-            left = rt_cat("(", rt_cat(left, rt_cat(" ", rt_cat(op, rt_cat(" ", rt_cat(right, ")"))))))
+            if lazy {
+                var right_prelude string = semantic_take_prelude()
+                semantic_prelude = outer_prelude
+                var guard string = left
+                if rt_equal(op, "||") { guard = rt_cat("!", left) }
+                semantic_prelude = rt_cat(semantic_prelude, rt_cat("if (", rt_cat(guard, rt_cat(") {\n", rt_cat(right_prelude, rt_cat(left, rt_cat(" = ", rt_cat(right, ";\n}\n"))))))))
+            } else {
+                left = semantic_materialize(semantic_expression_type, semantic_binary(op, left, right, where_line, where_column))
+            }
             level = precedence(token)
         }
+        expression_line = start_line
+        expression_column = start_column
         return leave(left)
     }
 }
@@ -579,7 +692,7 @@ func variable() string {
             if rt_equal(ctype, "const char *") { result = rt_cat(result, " = \"\"") } else { result = rt_cat(result, " = 0") }
         }
         if !semantic_collecting && semantic_in_function { semantic_bind_local(name, ctype) }
-        return rt_cat(result, ";\n")
+        return rt_cat(semantic_take_prelude(), rt_cat(result, ";\n"))
     }
 }
 
@@ -617,8 +730,9 @@ func statement() string {
         if rt_equal(token, "{") { return leave(block()) }
         if rt_equal(token, "if") {
             next()
-            result = rt_cat("if (", rt_cat(expression(1), ") "))
+            var condition string = expression(1)
             semantic_same(semantic_expression_type, "b")
+            result = rt_cat(semantic_take_prelude(), rt_cat("if (", rt_cat(condition, ") ")))
             result = rt_cat(result, block())
             var then_terminal bool = semantic_terminal
             var then_returns bool = semantic_returns
@@ -626,8 +740,9 @@ func statement() string {
             semantic_returns = false
             if rt_equal(token, "else") {
                 next()
-                result = rt_cat(result, "else ")
+                result = rt_cat(result, "else {\n")
                 if rt_equal(token, "if") { result = rt_cat(result, statement()) } else { result = rt_cat(result, block()) }
+                result = rt_cat(result, "}\n")
                 semantic_terminal = then_terminal && semantic_terminal
                 semantic_returns = then_returns && semantic_returns
             }
@@ -636,9 +751,11 @@ func statement() string {
         if rt_equal(token, "for") {
             next()
             loop_depth = loop_depth + 1
-            result = rt_cat("while (", rt_cat(expression(1), ") "))
+            var condition string = expression(1)
             semantic_same(semantic_expression_type, "b")
+            result = rt_cat("while (true) {\n", rt_cat(semantic_take_prelude(), rt_cat("if (!(", rt_cat(condition, ")) { break; }\n"))))
             result = rt_cat(result, block())
+            result = rt_cat(result, "}\n")
             loop_depth = loop_depth - 1
             semantic_terminal = false
             semantic_returns = false
@@ -646,8 +763,9 @@ func statement() string {
         }
         if rt_equal(token, "return") {
             next()
-            result = rt_cat("return ", rt_cat(expression(1), ";\n"))
+            var value string = expression(1)
             semantic_same(semantic_expression_type, semantic_result)
+            result = rt_cat(semantic_take_prelude(), rt_cat("return ", rt_cat(value, ";\n")))
             semantic_terminal = true
             semantic_returns = true
             return leave(result)
@@ -667,10 +785,11 @@ func statement() string {
             next()
             result = rt_cat(result, rt_cat(" = ", expression(1)))
             semantic_same(semantic_expression_type, target_type)
-        } else if !semantic_call {
-            fail("expression statement requires a function call")
+        } else {
+            if !semantic_call { fail("expression statement requires a function call") }
+            result = rt_cat("(void)(", rt_cat(result, ")"))
         }
-        return leave(rt_cat(result, ";\n"))
+        return leave(rt_cat(semantic_take_prelude(), rt_cat(result, ";\n")))
     }
 }
 
@@ -745,6 +864,8 @@ func semantic_rewind() i64 {
         token_column = 1
         parse_depth = 0
         loop_depth = 0
+        expression_line = 1
+        expression_column = 1
         return next()
     }
 }
@@ -778,6 +899,16 @@ func bootstrap_compile(input string, destination string) i64 {
         semantic_constant = false
         semantic_terminal = false
         semantic_returns = false
+        semantic_prelude = ""
+        semantic_counter = 0
+        semantic_checked = false
+        var filename_start i64 = 0
+        var filename_index i64 = 0
+        for filename_index < rt_len(input) {
+            if rt_at(input, filename_index) == 47 { filename_start = filename_index + 1 }
+            filename_index = filename_index + 1
+        }
+        semantic_source_literal = semantic_quote_bytes(rt_slice(input, filename_start, rt_len(input)))
         semantic_rewind()
         semantic_translation_unit()
         if !rt_equal(semantic_lookup(semantic_globals, "kr_main"), "Fi") {
@@ -788,7 +919,11 @@ func bootstrap_compile(input string, destination string) i64 {
         semantic_collecting = false
         semantic_rewind()
         semantic_translation_unit()
-        var output string = rt_cat("// Generated by the Kremen bootstrap compiler.\n#include <stdint.h>\n#include <stdbool.h>\n\n", rt_cat(declarations, rt_cat("\n", definitions)))
+        var helpers string = "int64_t rt_iadd(int64_t, int64_t, const char *, int64_t, int64_t);\nint64_t rt_isub(int64_t, int64_t, const char *, int64_t, int64_t);\nint64_t rt_imul(int64_t, int64_t, const char *, int64_t, int64_t);\nint64_t rt_idiv(int64_t, int64_t, const char *, int64_t, int64_t);\nint64_t rt_imod(int64_t, int64_t, const char *, int64_t, int64_t);\nint64_t rt_ineg(int64_t, const char *, int64_t, int64_t);\n\n"
+        if semantic_checked {
+            helpers = rt_cat(helpers, rt_cat("static const char kr_bootstrap_value_source[] = ", rt_cat(semantic_source_literal, ";\n\n")))
+        }
+        var output string = rt_cat("// Generated by the Kremen bootstrap compiler.\n#include <stdint.h>\n#include <stdbool.h>\n\n", rt_cat(helpers, rt_cat(declarations, rt_cat("\n", definitions))))
         return rt_write(destination, output)
     }
 }
