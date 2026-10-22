@@ -1,0 +1,15 @@
+package main
+func doubled(value i64)!i64 {
+	if value < 0 {
+		return fail(7)
+	}
+	return ok(value * 2)
+}
+func next(value i64)!i64 {
+	var answer = doubled(value)?
+	return ok(answer + 1)
+}
+func main() {
+	println(next(20) catch 0)
+	println(doubled(-1) catch code => code)
+}

@@ -1,0 +1,21 @@
+package main
+type Reading enum {
+	Missing
+	Value(number i64)
+}
+func show(reading Reading) {
+	match reading {
+		Missing => {
+			println("no reading")
+		}
+		Value(number) => {
+			println("reading:", number)
+		}
+	}
+}
+func main() {
+	show(Reading.Missing())
+	show(Reading.Value(42))
+	var (number, label) =(7, "seven")
+	println(number, label)
+}

@@ -1,0 +1,11 @@
+package main
+func main() {
+	var total i64 = 0
+	for number := 1; number <= 5; number++ {
+		total += number
+		if number % 2 == 0 {
+			println("even:", number)
+		}
+	}
+	println("total:", total)
+}

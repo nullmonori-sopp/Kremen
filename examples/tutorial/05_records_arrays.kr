@@ -1,0 +1,18 @@
+package main
+type Counter struct {
+	value i64
+}
+func (counter &mut Counter) add(amount i64) {
+	counter.value += amount
+}
+func main() {
+	var values =[3]i64{2, 4, 6}
+	var counter = Counter{value: 0}
+	for index := 0; index < len(values); index++ {
+		counter.add(values[index])
+	}
+	var copy = values
+	copy[0] = 9
+	println("total:", counter.value)
+	println("original:", values[0], "copy:", copy[0])
+}

@@ -1,0 +1,13 @@
+package main
+func main() {
+	println("Enter an integer:")
+	var input = readIntResult()
+	match input {
+		ok(number) => {
+			println("Next:", number + 1)
+		}
+		fail(code) => {
+			println("Input error:", code)
+		}
+	}
+}

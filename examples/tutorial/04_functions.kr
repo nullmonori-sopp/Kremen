@@ -1,0 +1,8 @@
+package main
+func twice(value i64) i64 {
+	return value * 2
+}
+func main() {
+	var answer = twice(21)
+	println(answer)
+}

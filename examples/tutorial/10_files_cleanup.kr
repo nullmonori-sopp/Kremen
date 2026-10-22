@@ -1,0 +1,21 @@
+package main
+func saveAndCount(path string)!i64 {
+	var written = fsWrite(path, "hello\n")?
+	assert(written)
+	var handle = fsOpen(path, "rb")?
+	defer fileClose(handle)
+	var contents = fsReadAll(handle)?
+	return ok(len(contents))
+}
+func main() {
+	defer println("finished")
+	var result = saveAndCount("kremen-tutorial.txt")
+	match result {
+		ok(count) => {
+			println("saved bytes:", count)
+		}
+		fail(code) => {
+			println("file error:", errorMessage(code))
+		}
+	}
+}

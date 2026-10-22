@@ -1,0 +1,22 @@
+package main
+func main() {
+	var number = 1
+	{
+		var reference = &mut number
+		*reference += 1
+	}
+	println("number:", number)
+	unsafe {
+		var values = alloc [i64](3)
+		defer free(values)
+		values[1] = 42
+		println("slice:", len(values), values[1])
+	}
+	arenablock memory {
+		unsafe {
+			var temporary = arenaAlloc [i64](memory, 2)
+			temporary[0] = 9
+			println("arena:", temporary[0])
+		}
+	}
+}

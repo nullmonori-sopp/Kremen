@@ -1,0 +1,8 @@
+package main
+func main() {
+	var apples i64 = 3
+	const price i64 = 4
+	apples += 2
+	println("apples:", apples)
+	println("cost:", apples * price)
+}
