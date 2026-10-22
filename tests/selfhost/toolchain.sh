@@ -126,7 +126,7 @@ cmp -s "$WORK/original.kr" "$SOURCE" || fail 'build overwrote source'
 # Exercise these guards against disposable copies, so a regression cannot damage
 # either the checkout or the driver used by the rest of this test run.
 mkdir "$WORK/resources"
-for resource in bootstrap.kr toolchain.kr runtime.c runtime.h driver.c host.c host.h; do
+for resource in bootstrap.kr toolchain.kr runtime.c runtime.h driver.c host.c host.h platform.h; do
     cp "$ROOT/selfhost/$resource" "$WORK/resources/$resource"
 done
 cp "$WORK/resources/runtime.c" "$WORK/runtime.original.c"

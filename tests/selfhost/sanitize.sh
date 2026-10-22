@@ -27,4 +27,7 @@ KREMEN_SELFHOST_ROOT="$ROOT/selfhost"
 export KREMEN_SELFHOST_ROOT
 sh tests/selfhost/semantics.sh "$BUILD/stage0"
 sh tests/selfhost/toolchain.sh "$BUILD/kremen-selfhost"
+SANITIZE_GENERATED=1 sh tests/selfhost/frontend_stability.sh "$BUILD/stage0"
+SANITIZE=1 sh tests/selfhost/runtime_stability.sh
+SANITIZE=1 sh tests/selfhost/diagnostics.sh "$BUILD/kremen-selfhost"
 printf '%s\n' 'ASan/UBSan passed: bootstrap compiler, typed semantic checks and selfhost driver/OS integration.'
