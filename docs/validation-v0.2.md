@@ -1,7 +1,7 @@
-# Исторические проверки 0.2 и текущий выпуск
+# Historical 0.2 validation
 
-Страница обновлена для исходного пакета Kremen 0.4.0. Прежние 58 нативных интеграционных проверок сохранены в `tests/native/run.sh`: типы, методы, массивы, ссылки, результаты, срезы, импорты, форматирование и защита файлов вывода. Они запускаются командой `make test` вместе с регрессиями 0.3 и bootstrap.
+The original 58 native integration checks remain in `tests/native/run.sh`. They cover types, methods, arrays, references, results, slices, modules, formatting, I/O, and output protection. `make test` runs them alongside later regression suites.
 
-Исторические численные сравнения с Python не являются показателем скорости текущего выпуска. Старый Python-runner удалён. Для воспроизведения используйте действующие shell-скрипты и нативный компилятор.
+Old measurements comparing a Python prototype are historical observations, not current performance results. That implementation and its runner are no longer distributed. Use the native compiler and current shell scripts when reproducing behavior.
 
-Состав проверок, условия запуска санитайзеров и результаты выпуска описаны в [validation.md](validation.md). Команды измерений: [bench/README.md](../bench/README.md).
+The [current validation record](validation.md) describes 0.4.2 checks, sanitizer conditions, installation, and packaging. [Benchmarks](../bench/README.md) explain what the supplied measurements include and exclude.

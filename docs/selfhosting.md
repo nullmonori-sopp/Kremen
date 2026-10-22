@@ -1,54 +1,64 @@
-# Self-hosting и системное направление Kremen 0.4.0
+# Self-hosting and systems work
 
-В выпуске 0.4 bootstrap-компилятор и его рабочий драйвер написаны на Kremen. Драйвер проверяет исходники, вызывает C backend, собирает и запускает программы, а также пересобирает собственный тулчейн с проверкой следующей стадии.
+A compiler is **self-hosted** when it can compile the language implementation written in its own language. Kremen has a self-hosted compiler and CLI for a small bootstrap subset. The compiler for the full language is still written in C. These are two different frontends, and keeping that boundary clear matters when choosing which one to use.
 
-Основной компилятор полного языка из `native/` остаётся на C. Bootstrap поддерживает отдельное подмножество; структуры, enum, `defer`, результаты, ссылки и срезы основного языка ещё не перенесены в него. C11-компилятор и libc остаются зависимостями обеих реализаций.
+The bootstrap frontend and its build policy live in `.kr` files. C supplies strings, memory, filesystem access, process primitives, and an entry point. A C11 toolchain, libc, and a hosted OS are still required. Self-hosting has not removed those dependencies.
 
-## Сборка и команды
+## Build and use the subset toolchain
 
-Из корня исходного пакета:
+From the source root:
 
 ```sh
-make
-make selfhost
+make all selfhost
 ./build/kremen selfhost --help
 ./build/kremen selfhost check selfhost/example.kr
 ./build/kremen selfhost build selfhost/example.kr -o build/bootstrap-example
 ./build/kremen selfhost run selfhost/example.kr -- /tmp/kremen-example.txt
+cat /tmp/kremen-example.txt
 ./build/kremen selfhost emit-c selfhost/example.kr -o build/bootstrap-example.c
 ./build/kremen selfhost bootstrap -o build/kremen-selfhost-next
 ```
 
-Отдельная команда `selfhost/build/kremen-selfhost` принимает те же аргументы без слова `selfhost`. После установки доступны `kremen selfhost ...` и `kremen-selfhost ...`. Подробности установки приведены в [install.md](install.md).
+The example writes `720|18|ok` to the output path passed as its argument. The separate executable `selfhost/build/kremen-selfhost` accepts the same commands without the `selfhost` prefix. After installation, use `kremen selfhost ...` or `kremen-selfhost ...`.
 
-| Команда | Действие |
+| Command | Work performed |
 | --- | --- |
-| `check SOURCE.kr [--cc EXE] [-O0..-O3]` | Разбор, проверка типов и строгая проверка полученного C без линковки |
-| `emit-c SOURCE.kr -o FILE` | Генерация C в явно указанный файл |
-| `build SOURCE.kr [-o FILE] [--cc EXE] [-O0..-O3]` | Сборка исполняемого файла; по умолчанию `a.out` |
-| `run SOURCE.kr [--cc EXE] [-O0..-O3] [-- ARG ...]` | Временная сборка и запуск с переданными аргументами |
-| `bootstrap [-o FILE] [--cc EXE] [-O0..-O3]` | Сборка собственного тулчейна и проверка следующей стадии; по умолчанию `kremen-selfhost` |
+| `check SOURCE.kr` | Subset parsing and type checking, followed by strict C syntax checking |
+| `emit-c SOURCE.kr -o FILE` | Generate C into a required explicit output file |
+| `build SOURCE.kr [-o FILE]` | Build an executable, default `a.out` |
+| `run SOURCE.kr [-- ARG ...]` | Build temporarily and run with the supplied arguments |
+| `bootstrap [-o FILE]` | Rebuild the subset compiler and CLI, then verify the next stage; default `kremen-selfhost` |
 
-C backend запускается с `-std=c11 -Wall -Wextra -Wpedantic -Werror`; оптимизация по умолчанию — `-O3`. Для сборки можно выбрать `-O0`…`-O3`, компилятор — через `--cc /absolute/path/to/cc` или `CC`. Значение компилятора обозначает исполняемый файл, а не shell-команду с дополнительными флагами.
+`--cc EXE` and `-O0` through `-O3` select the C compiler and optimization. The default is `CC` or `cc`, with `-O3`, plus `-std=c11 -Wall -Wextra -Wpedantic -Werror`. The compiler setting names an executable, not a shell expression.
 
-Аргументы после `--` передаются программе буквально, включая пробелы и shell-метасимволы. Драйвер использует `fork`/`exec` и отдельные элементы argv. Он возвращает код дочернего процесса; при завершении по сигналу возвращается код `128 + номер сигнала`.
+Arguments after `--` go literally to the program, including spaces and shell metacharacters. The driver uses separate `argv` entries and no shell. It preserves the program's exit status, using `128 + signal` when a child is terminated by a signal. The full-language `run` command does not yet expose the same program-argument interface.
 
-## Самопересборка
+## What a fixed point proves
 
-`bootstrap` переводит `bootstrap.kr` и `toolchain.kr` в C, собирает новый драйвер и просит его снова перевести оба исходника. Сгенерированные C-файлы компилятора и драйвера должны совпасть побайтно с предыдущей стадией. Только после этого публикуется готовый бинарный файл.
+`bootstrap` generates C for both `bootstrap.kr` and `toolchain.kr`, builds the next driver, then asks it to generate C for both sources again. The files must match byte for byte before the executable is published.
 
-Это фиксированная точка исходников, а не обещание побайтно одинаковых бинарных файлов. Она показывает, что текущий bootstrap способен воспроизвести собственные frontend и CLI. Начальная цепочка с сохраняемым C seed, файлами стадий и тестами описана в [selfhost/README.md](../selfhost/README.md).
+The initial build also checks the committed C seed against stages 1, 2, and 3. This is a fixed point of generated C source, not a promise of byte-identical executable files or a proof that the compiler has no bugs. It demonstrates that the subset implementation can reproduce its own frontend and CLI. The [bootstrap reference](../selfhost/README.md) explains the seed workflow.
 
-## Файлы и процессы
+## Files, paths, and resources
 
-Выходные артефакты создаются во временных файлах и публикуются после успешного завершения. Исходники и ресурсы собственного компилятора защищаются от перезаписи, включая совпадающие пути, симлинки и жёсткие ссылки. Неудачная компиляция сохраняет предыдущий файл результата. Временные файлы удаляются при штатном завершении и диагностической ошибке процесса; при принудительном убийстве процесса очистка не гарантируется.
+Artifacts are built in temporary locations and published only after successful completion. A failed frontend or backend leaves an existing output intact. Source files, bundled compiler resources, and the running driver are protected from accidental overwrite through matching paths, symbolic links, and hard links.
 
-Драйвер ищет исходники bootstrap и C runtime рядом со своей сборкой либо в установленном дереве относительно исполняемого файла. Явное переопределение — абсолютный каталог `KREMEN_SELFHOST_ROOT`, содержащий полный набор ресурсов. Этот каталог передаётся следующей стадии при самопересборке. Переносить установленный тулчейн следует целиком, вместе с его данными.
+Temporary directories are cleaned on normal exits and diagnostic errors. SIGKILL and hostile concurrent filesystem changes are outside this guarantee. Process argument storage grows dynamically; OS `exec` limits still apply.
 
-`extern func` объявляет внешний C-символ. Проверка типов Kremen проверяет соответствие объявлению, но не доказывает корректность реализации C или совпадение с произвольной внешней библиотекой. Ошибки C backend пока относятся к сгенерированному C. Bootstrap не предоставляет гарантии заимствований, переполнения и времени жизни основного языка.
+The driver searches its build/install layout for support files. `KREMEN_SELFHOST_ROOT` can explicitly select an absolute resource directory. A bootstrap rebuild passes that resource choice to the next stage. Move an installed prefix as a whole; see [Installation](install.md).
 
-## Следующие этапы
+`extern func` declares an external C symbol in the subset. Kremen checks calls against the declaration, but it cannot establish the correctness of arbitrary C implementations or foreign library ABIs. Backend diagnostics still refer to C. The subset's checked arithmetic reports a source basename, line, and column; frontend errors also show the current input excerpt.
 
-Для полного self-hosting требуется перенос типов, модулей, составных значений и проверок памяти основного frontend. Практический порядок — типизированное промежуточное представление, перенос по подсистемам и сравнение поведения двух компиляторов на общем наборе программ. Подменять основной компилятор bootstrap следует после достижения этой совместимости.
+## Work needed for full self-hosting
 
-Для исполнения на железе потребуется отдельный freestanding-профиль: runtime без libc/POSIX, определённый ABI целевой платформы, startup-код, linker script, представление памяти устройств и проверяемые volatile/MMIO-операции. Затем — эмуляторные тесты загрузки и минимального драйвера устройства. Эти возможности не входят в 0.4; текущая самопересборка выполняется в пользовательском процессе ОС.
+The subset does not yet have the full language's structs, enums, tuples, modules, slices, references, results, or cleanup semantics. Replacing the native frontend now would remove those features.
+
+A practical next step is a typed intermediate representation, followed by transferring one subsystem at a time. Start with composite values and module resolution, then results and cleanup, then the borrow and lifetime checks. Run shared valid and invalid programs through both compilers and compare diagnostics and behavior. A full replacement needs that compatibility, not just a successful self-rebuild.
+
+## Work needed to target hardware directly
+
+The existing driver is a compiler command-line driver, not a kernel device driver. It runs in a user process. There is no freestanding target in this release.
+
+A hardware target needs a runtime without POSIX/libc, a defined target ABI and data layout, startup code, a linker script, and explicit volatile/MMIO access. After those foundations, add emulator tests that boot a minimal program and exercise one small device driver. Raw pointers alone do not provide the ordering and visibility rules required for device registers.
+
+These are planned engineering steps, not implemented features. [Safety and memory](safety.md) describes today's guarantees, and [Validation](validation.md) shows the tested host configuration.

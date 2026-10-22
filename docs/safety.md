@@ -1,45 +1,61 @@
-# Модель безопасности Kremen 0.4.0
+# Safety and memory in Kremen
 
-Основная реализация сочетает строгую типизацию, консервативные заимствования и runtime-проверки. Они остаются включёнными при `-O3`. Это развивающийся компилятор, без формального доказательства корректности или независимого полного аудита.
+Kremen checks many mistakes before a program runs and checks others while it runs. These checks are useful, but they do not make every possible program correct. This page explains the actual boundaries of the full language in 0.4.2. The self-hosted subset has a different, smaller set of checks.
 
-## Статические проверки
+If you are new to memory, begin with [tutorial lesson 9](tutorial.md#9-understand-ownership-before-using-dynamic-memory). A variable owns a value. A reference borrows access to that value. A slice describes storage owned by a runtime allocation. Copying a slice does not copy its elements or extend the lifetime of that storage.
 
-Проверяются совместимость типов, диапазон литералов, аргументы, возвраты, доступ к полям, изменяемость и достижимость. Неиспользуемые имена, затенение и отброшенные результаты вызовов — ошибки. Префикс `_` у имени и явное `_ = expression` позволяют выразить намеренное неиспользование.
+## What the compiler checks
 
-Ссылки удерживают заимствование именованной переменной целиком до конца блока. Обычные ссылки допускают совместное чтение, изменяемая исключает конфликтующий доступ. Временные ссылки аргументов заканчиваются после вызова; ссылки в `defer` удерживаются до его выполнения. В `unsafe` создание raw-указателя не отменяет эти правила.
+The frontend checks declarations, types, argument counts, operators, conditions, return paths, and constant ranges. Unused bindings, shadowed names, unreachable statements, and unhandled expression results are errors. `_name` and `_ = expression` let code express intentional non-use.
 
-Ссылки и указатели нельзя возвращать или хранить внутри структур, enum, кортежей, результатов, массивов и срезов. Переприсваивание адресных переменных запрещено. Это намеренные ограничения текущей модели, а не полноценная система параметризованных времён жизни.
+A borrow covers an entire named variable. Multiple shared references allow reading. A mutable reference excludes conflicting reads and writes. Local loans end with their lexical block, not at their last use. An argument's temporary loan normally ends after the call; `defer` keeps it until cleanup. A raw conversion preserves the loan and whether it came from a shared or mutable reference.
 
-`match` проверяется на полноту, повторы и тип полезной нагрузки. Ветви после `_` запрещены. Кортежи индексируются константой. Нельзя нулём создать неинициализированный `!T`; `ok`/`fail` требуют контекста результата, положительного кода ошибки и обычного типа значения.
+References and pointers cannot be returned, reassigned, or stored in composite values. This version has no lifetime parameters. Its conservative rules reject some programs that a more expressive lifetime system could prove safe.
 
-## Runtime-проверки
+The compiler also checks enum matches for coverage, duplicate variants, payload types, and arm order. Tuple indices must be constants. A result needs explicit initialization; zero-filled storage cannot silently create an invalid `!T`.
 
-Проверяются арифметическое переполнение, деление на ноль, диапазон преобразований/сдвигов, индексы, границы представлений, доступ к ошибочному результату, устаревшие срезы, повторное/частичное освобождение и состояние арен. При записи в срез его владелец повторно проверяется после правой части: вызов справа не может незаметно освободить или reset-нуть память перед сохранением.
+## What the runtime checks
 
-Копии дескрипторов срезов разделяют служебного владельца. После free/reset данные освобождаются, владелец остаётся до конца процесса для обнаружения устаревших копий. Аналогично сохраняются метаданные арен и закрытых файлов. Это расход памяти, растущий с числом выделений/открытий, даже если полезная память уже освобождена.
+Checked operations include integer overflow, division by zero, narrowing conversions, invalid shifts, array/slice indices, view bounds, failed-result access, stale slices, repeated or partial release, and invalid arena state. The checks remain active under `-O3`.
 
-Арены освобождают чанки при reset/free. Автоматический `arenablock` делает то же на любом штатном пути выхода. Escape среза из арены допускается как значение, но не продлевает её жизнь: последующий доступ вызывает остановку. Отдельно освобождать arena-срез нельзя.
+A slice assignment rechecks its owner after evaluating the right-hand side. This matters when a function on that side can free or reset the allocation: an address checked earlier must not become an unchecked stale write.
 
-## Очистка и ошибки
+Allocation owners stay registered until process exit, even after their data is released. Old descriptor copies can therefore be identified without reading freed data. Arena and closed-file metadata are similarly retained. The metadata cost grows with allocations and opens; releasing payload storage does not reclaim every bookkeeping object immediately.
 
-`!T`, `?`, `catch` и `match` работают через значения и ветвления, без тяжёлых исключений. Ожидаемые ошибки следует передавать этими механизмами. `defer` хранит захваченные аргументы и узел очистки в C-стеке; каждый блок снимает свои узлы в обратном порядке. Если активных очисток нет, обычный возврат не требует раскрутки списка.
+An arena reset or release invalidates all slices issued from it. A slice may escape its arena as a value, but it does not keep the arena alive; later access produces a runtime error. Individual arena slices cannot be freed separately.
 
-`panic`, `assert(false)` и проверки безопасности вызывают активные `defer`, затем завершают процесс. Узел снимается до вызова cleanup, поэтому повторный panic не запускает тот же cleanup повторно. Восстановления через `recover` нет. Гарантий очистки при SIGKILL, повреждении процесса или необработанном внешнем сигнале нет.
+## Cleanup and error handling
 
-`fileClose` годится для идемпотентной очистки, `fsClose` возвращает явную ошибку при повторном закрытии. Закрытие инвалидирует все копии handle. Операции над закрытым handle возвращают `EBADF`, не обращаясь к закрытому `FILE`.
+`!T`, `?`, `catch`, and result `match` use values and branches. Use them for expected failures. There is no heavy language exception mechanism.
 
-## Память, ввод и файловая система
+A deferred call captures its arguments immediately. Its registration and captured values live on the generated C stack. Each block runs its registrations in reverse order on exit. A block without cleanup does not need to unwind a cleanup list on an ordinary return.
 
-`alloc`, `free`, ручные арены и операции указателей требуют `unsafe`. Срезы проверяются runtime даже внутри `unsafe`; произвольная сырая память не получает полной проверки валидности. Многопоточность и синхронизация runtime не реализованы.
+User panic, failed assertions, and runtime checks run active deferred calls, then terminate the process. A node is removed before its cleanup call executes, so a second panic cannot run that same node again. Recovery is not implemented. Cleanup is not guaranteed for SIGKILL, an unhandled external signal, or a corrupted process.
 
-Строки от ввода/файлов и текст имён каталогов сохраняются до выхода. Нет GC, лимита общего потребления памяти, гарантии отсутствия исчерпания стека или ограничения времени работы. Чтение файла имеет лимит 64 MiB на вызов, листинг — миллион имён; это частные ограничения, а не общая защита от исчерпания ресурсов.
+`fileClose` is idempotent and suitable for deferred cleanup. `fsClose` returns an explicit error on repeated close. Both invalidate every copy of the handle. Operations on a closed handle return `EBADF` rather than using a closed C stream.
 
-NUL в файловом пути отвергается до вызова C API. Строковое содержимое файла может включать NUL. Файловый доступ следует правам ОС, включая симлинки. Он не является песочницей; ограничения корня применяются к `import`, а не к файловым операциям исполняемой программы. Запись может частично выполниться при ошибке и не включает fsync.
+## What unsafe means
 
-## Платформа и границы
+Manual allocation, release, manual arena operations, and pointer operations require `unsafe`. This marks code that needs additional care about memory and resources. It does not disable ordinary type, bounds, or tracked lifetime checks.
 
-Главный compiler/runtime используют libc, пользовательский процесс и POSIX. Нет freestanding-сборки, стабильного внешнего ABI, универсального C FFI, потоков или автоматических пользовательских деструкторов. Строгие C-флаги помогают ловить дефекты генератора, но не доказывают отсутствие всех ошибок.
+Raw memory does not acquire a complete validity proof. A non-null pointer may still be invalid. The language currently restricts address construction and storage substantially, but arbitrary external C code can have its own behavior. General FFI, stable foreign ABI, device registers, and a volatile/MMIO model are not implemented.
 
-Самокомпилируемый bootstrap в 0.4 имеет собственную строгую проверку типов, вызовов, областей видимости и возвратов. Проверки заимствований и арифметические runtime-проверки основного языка в нём отсутствуют. Гарантии основной реализации нельзя переносить на него: [selfhost/README.md](../selfhost/README.md).
+There is no threading or runtime synchronization. Do not assume these data structures are ready for concurrent use.
 
-Драйвер bootstrap передаёт процессам отдельные элементы argv без shell; источник, ресурсы и исполняемый файл защищены от перезаписи, а готовый артефакт публикуется после успешной сборки. C runtime отслеживает inode прочитанных входов и атомарно записывает выходы. Временные каталоги убираются через atexit при обычном и диагностическом завершении. Защиты от SIGKILL или враждебных одновременных изменений файловой системы не заявляются. Подробности: [selfhosting.md](selfhosting.md), проверки — [validation.md](validation.md).
+## Input, files, and resource use
+
+Input and file strings, and directory-name strings, remain managed until process exit. There is no garbage collector, total memory quota, stack-exhaustion guarantee, or execution-time limit. File reads have a 64 MiB per-call limit; directory listing has a million-entry limit. These are specific safeguards, not a general resource sandbox.
+
+NUL bytes are rejected in filesystem paths before calling the C API. File data may contain NUL. Filesystem operations follow host permissions and symlinks. The import-root restriction applies to source loading; it does not restrict the executing program's filesystem access. Writes may partially succeed and do not promise durable storage through `fsync`.
+
+The compiler bounds its own source sizes, token counts, nesting, and arena usage. Bounded diagnostic excerpts avoid reading outside source storage on long or malformed lines. Compiler limits do not impose the same limits on a compiled program's own data.
+
+## Toolchain and platform boundary
+
+The full compiler and runtime currently target a hosted POSIX process with libc. Strict C flags help detect generator defects; they do not prove that the compiler is free of defects. [Validation](validation.md) describes the regression and sanitizer coverage.
+
+The self-hosted subset checks types, calls, scopes, returns, and function-body arithmetic. It sequences operands and arguments, but it does not implement the full language's borrowing or memory checks. Do not transfer the full compiler's guarantees to it. See the [bootstrap reference](../selfhost/README.md).
+
+The bootstrap driver uses separate process arguments without a shell. It protects source files, compiler resources, and its executable from accidental overwrite, including aliases through links. Output publication is atomic after successful compilation. Temporary directories are removed on normal and diagnostic exits. Hostile concurrent filesystem changes and abrupt process termination remain outside those guarantees.
+
+Generated full-language programs retain source paths and bounded snippets for diagnostics. They can report a location without reopening the source. [Understanding errors](diagnostics.md) explains the format and its display limits.
