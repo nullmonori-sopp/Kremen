@@ -1,22 +1,23 @@
-# Bootstrap-тулчейн Kremen 0.4.0
+# The Kremen bootstrap toolchain
 
-Этот каталог содержит компилятор подмножества Kremen и его CLI-драйвер, написанные на самом подмножестве. Основной компилятор полного языка остаётся на C в `native/`. Пользовательские команды и границы self-hosting описаны в [docs/selfhosting.md](../docs/selfhosting.md).
+This directory contains a compiler and command-line driver written in the subset of Kremen that they compile. Use the full compiler in `native/` for ordinary Kremen programs, including the tutorial. See [Self-hosting and systems work](../docs/selfhosting.md) for user commands and the larger roadmap.
 
-## Состав
+## Source map
 
-| Файл | Назначение |
+| File | Responsibility |
 | --- | --- |
-| `bootstrap.kr` | Лексер, разбор, семантические проверки и генерация C |
-| `toolchain.kr` | Командная строка, сборка, запуск и проверка самопересборки |
-| `stage0.c` | Сохраняемый C seed, сгенерированный из `bootstrap.kr` |
-| `runtime.c`, `runtime.h` | Строки, ввод-вывод, аргументы и память bootstrap |
-| `host.c`, `host.h` | Примитивы процессов, путей, временных файлов и установки результата |
-| `driver.c` | Минимальная C-точка входа, вызывающая `kr_main` |
-| `bootstrap.sh` | Начальная сборка и проверка фиксированной точки |
+| `bootstrap.kr` | Lexer, parser, semantic checks, and C generation |
+| `toolchain.kr` | Command-line parsing, build/run policy, and next-stage verification |
+| `stage0.c` | Committed generated C seed for `bootstrap.kr` |
+| `runtime.c`, `runtime.h` | Strings, checked arithmetic, source input/output, arguments, and arena storage |
+| `host.c`, `host.h` | Process, path, temporary-file, and artifact-publication primitives |
+| `platform.h` | Executable discovery, including the POSIX argv/PATH fallback |
+| `driver.c` | Small C entry point calling `kr_main` |
+| `bootstrap.sh` | Initial build and fixed-point checks |
 
-В C runtime и host нет скрытого парсера или генератора кода. Frontend и политика командной строки находятся в `.kr`; C предоставляет необходимые операции ОС. Python и сетевые зависимости не используются.
+There is no parser or generator hidden in the C host layer. C provides the operations the subset cannot yet implement. No Python or network dependency is involved.
 
-## Воспроизведение
+## Reproduce the compiler
 
 ```sh
 make selfhost
@@ -26,29 +27,41 @@ cat /tmp/example.txt
 selfhost/build/kremen-selfhost bootstrap -o build/kremen-selfhost-next
 ```
 
-Нужны C11-компилятор (`CC`, по умолчанию `cc`), POSIX shell и стандартные утилиты. Начальную цепочку можно запустить непосредственно: `sh selfhost/bootstrap.sh`. Каталог промежуточных результатов задаётся `KREMEN_SELFHOST_BUILD`; по умолчанию это `selfhost/build/`.
+The example produces `720|18|ok`. Initial stages use `-std=c11 -O2 -Wall -Wextra -Wpedantic -Werror`; the user-facing driver defaults to `-O3`.
 
-Начальная цепочка собирает seed, получает и собирает stage1, получает и собирает stage2, затем получает stage3. Исходники сравниваются побайтно: `stage0.c == stage1.c == stage2.c == stage3.c`. Stage2 компилирует `example.kr`; ожидаемый результат — `720|18|ok`. Драйвер дополнительно проверяет воспроизводимость C для самого компилятора и `toolchain.kr` при команде `bootstrap`.
+`bootstrap.sh` compiles the seed, translates and compiles stage 1, translates and compiles stage 2, and obtains stage 3. It checks `stage0.c == stage1.c == stage2.c == stage3.c`. The driver also verifies C for both the compiler and CLI during `bootstrap`. Comparisons concern C source, not machine code.
 
-Стадии начальной цепочки собираются с `-std=c11 -O2 -Wall -Wextra -Wpedantic -Werror`; пользовательский драйвер по умолчанию выбирает `-O3`. Сравниваются исходники C, а не машинный код.
+## The subset's language
 
-## Подмножество и ограничения
+The types are `i64`, `bool`, and `string`. Variables and parameters have explicit types. Functions require a result type; the entry point is `func main() i64`. Supported declarations include local/global `var`, functions, and `extern func`. Functions may call one another before definition because signatures are collected first.
 
-Поддерживаются типы `i64`, `bool`, `string`, десятичные литералы, функции и рекурсия, `extern func`, глобальные и локальные `var`. Параметры и переменные имеют явные типы; тип результата функции обязателен, точка входа — `func main() i64`.
+Statements include assignment, function calls, `return`, `if`/`else if`/`else`, `for condition`, `break`, `continue`, and an `unsafe` block marker. Arithmetic, comparisons, boolean operators, decimal integers, and strings are supported. Types, calls, scopes, argument counts, and return paths are checked before C generation. There is no implicit `bool`/integer conversion. Compare strings with `rt_equal`, not `==`.
 
-Есть `if`/`else if`/`else`, `for condition`, `break`, `continue`, `return`, присваивание, вызовы, арифметика, сравнения и логические операции. Сигнатуры собираются до разбора тел, поэтому поддерживаются взаимные вызовы. Типы проверяются в самом bootstrap: аргументы, арность, присваивания, возвраты, условия и операции не допускают неявного преобразования `bool`/`i64`. Строки сравнивают через `rt_equal`.
+Comments use `//`. String escapes include `\n`, `\r`, `\t`, `\\`, and `\"`; strings are immutable NUL-terminated C strings, so embedded NUL is unsupported. C keywords, leading-underscore names, and C-header/backend name families are reserved. Call results may be discarded as statements; the full language's unused-binding rules do not all apply here.
 
-Комментарии начинаются с `//`; поддерживаются строковые escape `\n`, `\r`, `\t`, `\\`, `\"`. Зарезервированы ключевые слова C, служебные семейства заголовков (например, `INT*`, `UINT*`, `int8_t`) и имена с ведущим `_`. `unsafe` является маркером блока и не включает модель заимствований основного компилятора. Вызовы с результатом можно использовать как инструкции; правила неиспользуемых имён основного языка сюда полностью не перенесены.
+Function-body operands and arguments are explicitly sequenced left to right. `&&` and `||` remain lazy. Loop conditions are recalculated on every iteration, including after `continue`. Integer helpers check overflow, division/remainder by zero, and the minimum-integer divided by minus-one case. Global initializers remain constant C expressions checked by the strict backend.
 
-В подмножестве нет `import`, структур, enum, методов, массивов, ссылок, указателей, срезов, `!T`, `defer`, `catch` и `arenablock`. Проверки арифметического переполнения и безопасности памяти основного runtime не вставляются. Строки представлены неизменяемыми C-строками. Ограничения bootstrap: исходник до 8 MiB, глубина разбора 128, строковая арена до 512 MiB. Диагностика frontend показывает путь, строку и столбец; ошибки backend указывают на C.
+The subset does not implement imports, structs, enums, methods, tuples, arrays, references, pointers, slices, `!T`, `defer`, `catch`, or `arenablock`. `unsafe` does not activate a borrow checker. The full compiler's memory guarantees must not be assumed here.
 
-## Изменение seed
+Limits are 8 MiB per input, parser depth 128, 512 operations per expression chain, and a 512 MiB string arena. Small strings use 64 KiB chunks; large strings use dedicated chunks. Known string lengths use a bounded cache without reading before arbitrary C string pointers.
 
-Сначала сохраните работоспособную предыдущую стадию, затем редактируйте `bootstrap.kr` и получайте новый seed с её помощью:
+## Diagnostics
+
+Frontend messages contain the input path, line, column, and a bounded excerpt. In 0.4.2, type mismatches point at the source expression rather than the following token; undefined names and calls point at the name. The excerpt comes from the input already read into memory.
+
+Generated arithmetic errors use an embedded source basename and line/column. Basenames keep generated C reproducible across checkout relocation. Those subset runtime errors do not embed the full compiler's source excerpts. Backend errors name generated C files.
+
+## Updating the seed
+
+Keep a working previous stage before changing `bootstrap.kr`. Generate a candidate with that previous compiler, verify it can reproduce itself, then replace the committed seed. Never hand-edit `stage0.c`.
+
+From an existing working build, the shortest workflow is:
 
 ```sh
-selfhost/build/stage2 selfhost/bootstrap.kr selfhost/stage0.c
+selfhost/build/stage2 selfhost/bootstrap.kr build/candidate-seed.c
+cp build/candidate-seed.c selfhost/stage0.c
 sh selfhost/bootstrap.sh
+make test-selfhost
 ```
 
-Новые возможности вводятся последовательно: предыдущий компилятор должен уметь собрать следующий. `stage0.c` обновляется генерацией, не ручным редактированием. После изменения frontend проверяйте также драйвер и самопересборку: оба используют один и тот же bootstrap-парсер.
+Only commit the seed after the fixed point and tests pass. If the new compiler needs syntax the previous stage does not support, introduce that feature in smaller steps. Test the driver as well as the frontend: both use this parser. The 0.4.2 seed includes expression-location tracking and was regenerated through the previous stage.
