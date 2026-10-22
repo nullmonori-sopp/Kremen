@@ -45,7 +45,7 @@ fi
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/kremen-check-bench.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 TIMER="$WORK/time"
-${CC:-cc} -std=c11 -Wall -Wextra -Wpedantic -Werror -O2 "$ROOT/bench/time.c" -o "$TIMER"
+"${CC:-cc}" -std=c11 -Wall -Wextra -Wpedantic -Werror -O2 "$ROOT/bench/time.c" -o "$TIMER"
 SOURCE="$WORK/generated.kr"
 awk -v functions="$FUNCTIONS" 'BEGIN {
     print "package main"

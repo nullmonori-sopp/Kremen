@@ -1,0 +1,13 @@
+Kremen bootstrap translation benchmark (startup and atomic C output included)
+host: Linux x86_64
+compiler POSIX cksum: 2536681096 45720
+source bytes / POSIX cksum: 1202710633 35374
+runs: 10; warmup: 1; operation: lexer/parser/typecheck/C generation/file output
+real 0.441425926
+user 0.272212000
+sys 0.154665000
+runs 10
+mean 0.044142593
+maxrss_kib 8704
+generated C POSIX cksum: 3595511284 161105
+The batch mean is host/workload specific; C compilation and generated-program speed are not measured.

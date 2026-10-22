@@ -1,0 +1,46 @@
+Bootstrap runtime comparison: unchanged0.4.0 frontend/source, strict C11-O2
+host: Linux x86_64; input cksum: 629078642 29532
+method: 3 alternating pairs, 5 processes/batch after warmup; wall/CPU/RSS
+round 1 runtime old
+real 0.112096564
+user 0.065094000
+sys 0.029331000
+runs 5
+mean 0.022419313
+maxrss_kib 2560
+round 1 runtime new
+real 0.124023943
+user 0.091068000
+sys 0.019553000
+runs 5
+mean 0.024804789
+maxrss_kib 1792
+round 2 runtime old
+real 0.127513817
+user 0.099869000
+sys 0.027130000
+runs 5
+mean 0.025502763
+maxrss_kib 2560
+round 2 runtime new
+real 0.062012366
+user 0.041408000
+sys 0.018976000
+runs 5
+mean 0.012402473
+maxrss_kib 1792
+round 3 runtime old
+real 0.119707513
+user 0.084839000
+sys 0.033004000
+runs 5
+mean 0.023941503
+maxrss_kib 2560
+round 3 runtime new
+real 0.094873861
+user 0.078881000
+sys 0.013026000
+runs 5
+mean 0.018974772
+maxrss_kib 1792
+Generated C is identical. This isolates runtime, not total0.4.1 safety/codegen cost.

@@ -1,8 +1,10 @@
-# Измерения Kremen 0.4.0
+# Measuring Kremen
 
-В пакете измеряются отдельно скорость проверки исходников и копирование буферов. Они не доказывают превосходства языка по скорости произвольных программ. Все инструменты нативные; исторический режим сравнения с Python удалён.
+The scripts here measure specific compiler and runtime workloads. They do not establish that Kremen is faster than another language for arbitrary applications. All runners are native C and shell; the old Python comparison mode is gone.
 
-## Проверка исходников
+Saved reports in this directory are **0.4.1 measurements**. They remain historical observations from that build and container, not new 0.4.2 performance claims. Run the scripts again to measure your own checkout.
+
+## Full-frontend checking
 
 ```sh
 make
@@ -11,19 +13,44 @@ sh bench/check.sh --functions 10000 --runs 10
 sh bench/check.sh --compiler ./build/kremen --runs 30
 ```
 
-Нужны C11-компилятор, shell, `awk`, `cksum`, `wc`. Скрипт предварительно собирает `bench/time.c` и генерирует корпус. Таймер использует `CLOCK_MONOTONIC`, `fork`, `execvp`, `waitpid`, `getrusage`. По умолчанию: 2000 функций и вызывающий их main, 156740 байт, POSIX cksum `364831760 156740`, один прогрев и 20 отдельных процессов `check`.
+The script builds `bench/time.c` and generates its corpus before timing. Requirements are a C11 compiler, shell, `awk`, `cksum`, and `wc`. The default corpus has 2,000 helper functions and a main that calls them: 156,740 bytes, POSIX cksum `364831760 156740`. There is one warm-up followed by 20 separate `check` processes.
 
-Измеряется запуск, чтение, лексер, парсер, типизация и освобождение памяти, включая fork/exec/wait. Генерация C, внешний компилятор, линковка и выполнение программы не входят. Вывод содержит версию и cksum бинарного файла, настройки сборки, ОС/архитектуру, параметры корпуса, wall-clock и CPU-время. Среднее вычисляется по пакету запусков; разброс и погрешность не оцениваются.
+Timing includes process startup, source reading, lexing, parsing, semantic checking, and cleanup, plus the runner's fork/exec/wait overhead. It excludes C generation, the external C compiler, linking, and execution of the generated program. The timer uses `CLOCK_MONOTONIC`, `waitpid`, and `getrusage`.
 
-Сохранённый результат выпуска: [check-results.txt](check-results.txt). Он относится к конкретному контейнеру Linux x86-64 и нагрузке системы. Для сравнения изменений повторяйте несколько чередующихся серий на одной машине с одинаковой сборкой. Скрипт не фиксирует частоту CPU и не ограничивает другие процессы.
+The output records compiler version and checksum, build settings, OS/architecture, corpus parameters, wall time, and CPU time. Means are per batch; the script does not estimate uncertainty or isolate CPU frequency and background load. Use several alternating runs with identical settings when comparing changes.
 
-## Копирование
+Saved report: [check-results.txt](check-results.txt).
+
+## Buffer copying
 
 ```sh
 make bench
 make bench USE_ASM=0
 ```
 
-`bench/copy.c` сначала проверяет 16768 комбинаций длины и выравнивания, затем сравнивает `km_fast_copy` с libc `memcpy` для 16, 64, 1024, 65536 байт. Области не пересекаются, кеши прогреты, вызовы идут через указатели; CPU-время измеряется через `clock()`.
+The copy test first verifies 16,768 length/alignment combinations. It then compares `km_fast_copy` with libc `memcpy` at 16, 64, 1,024, and 65,536 bytes. Regions do not overlap, caches are warm, calls go through function pointers, and CPU time comes from `clock()`.
 
-Основной компилятор вызывает Asm `rep movsb` на x86-64 System V только для буферов от 64 KiB; меньшие копирует libc. Сам микротест вызывает Asm напрямую для всех размеров. `USE_ASM=0` выбирает C-обёртку `memcpy`. Наличие Asm само по себе не означает ускорения. Этот тест не измеряет скорость скомпилированных программ или всего frontend.
+On Linux x86-64 the compiler uses its small `rep movsb` assembly routine only for copies of at least 64 KiB; smaller copies use libc. The microbenchmark calls the routine directly at every size. `USE_ASM=0` selects a C `memcpy` wrapper. Assembly is an implementation choice, not evidence of a speedup. This test does not measure whole-frontend or compiled-program performance.
+
+## Bootstrap translation
+
+```sh
+make selfhost
+sh bench/bootstrap.sh --runs 10
+```
+
+This measures translation into C, including input, typing, generation, and atomic output, without invoking the C backend. The report records input/compiler checksums and checks the output. Saved report: [bootstrap-results.txt](bootstrap-results.txt).
+
+## Comparing string runtimes
+
+```sh
+sh bench/compare-runtime.sh /path/to/kremen-v0.4.0.zip
+```
+
+The script extracts the old frontend, its source input, and old runtime. It compiles the same frontend with old and current runtimes, warms both, and runs three alternating pairs of five processes. The generated C must match. This isolates string-runtime changes from the newer emitter's explicit sequencing and checked arithmetic.
+
+Saved report: [runtime-comparison.txt](runtime-comparison.txt). In that 0.4.1 comparison, maximum RSS was 2,560 KiB for the old runtime and 1,792 KiB for the new one in each round. Per-process wall-time means were 0.0224/0.0255/0.0239 seconds versus 0.0248/0.0124/0.0190 seconds. One new-runtime round was slower. The container was not isolated from background work, so these timings do not support a guaranteed percentage speedup.
+
+`maxrss_kib` reports the maximum child RSS, normalized to KiB on Linux/macOS. It is not total allocation volume. Reduced allocation requests do not imply an identical RSS reduction because an allocator can retain pages.
+
+The 0.4.1 C seed grew from roughly 26 KiB to 157 KiB as operations gained explicit sequencing and arithmetic checks. The 0.4.2 seed additionally carries better frontend expression locations. The full compiler's runtime source excerpts also add read-only data. Evaluate these costs with realistic workloads rather than treating one microbenchmark as a language-wide result.

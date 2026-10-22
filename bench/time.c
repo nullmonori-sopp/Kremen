@@ -66,5 +66,10 @@ int main(int argc, char **argv) {
     (void)fprintf(stderr, "real %.9f\nuser %.9f\nsys %.9f\nruns %" PRIuMAX "\nmean %.9f\n", elapsed,
         seconds(cpu_finish.ru_utime) - seconds(cpu_start.ru_utime),
         seconds(cpu_finish.ru_stime) - seconds(cpu_start.ru_stime), runs, elapsed / (double)runs);
+#if defined(__linux__)
+    (void)fprintf(stderr, "maxrss_kib %ld\n", cpu_finish.ru_maxrss);
+#elif defined(__APPLE__)
+    (void)fprintf(stderr, "maxrss_kib %ld\n", cpu_finish.ru_maxrss / 1024);
+#endif
     return 0;
 }

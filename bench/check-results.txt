@@ -1,13 +1,13 @@
 Kremen check benchmark (each process startup and fork/exec/wait included)
 host: Linux x86_64
-native: Kremen 0.4.0 (native C11)
-native binary POSIX cksum: 3417742642 183408
+native: Kremen 0.4.1 (native C11)
+native binary POSIX cksum: 4033005451 191824
 native build config: cc -std=c11 -Wall -Wextra -Wpedantic -Werror -O3 native/fast_copy.S
 timer: bench/time.c, POSIX CLOCK_MONOTONIC and child CPU usage
 functions: 2000 + main; runs: 20; warmup: 1 per compiler
 source bytes: 156740; POSIX cksum: 364831760 156740
 operation: check only; no C generation, external C compiler, link, or program execution
 compiler  total elapsed(s)  mean/process(s)  user(s)  sys(s)
-native    4.874             0.243690         1.997    1.242
+native    1.361             0.068049         0.750    0.591
 The mean is derived from a batch wall-clock measurement; individual runs and statistical uncertainty are not sampled.
 This measures this frontend workload on this host; it does not measure generated-program speed.
