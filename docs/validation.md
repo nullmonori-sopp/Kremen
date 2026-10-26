@@ -1,14 +1,15 @@
-# Validation record for 0.4.2
+# Validation record for 0.4.3
 
-Release environment: 2026-10-22, Linux x86-64, GCC 14.2.0, POSIX shell. Clang is not installed in this environment. Compiler and generated C use `-std=c11 -Wall -Wextra -Wpedantic -Werror`; defaults are `-O3`, with `-O2` for the initial bootstrap stages.
+Release environment: Linux x86-64, GCC 14.2.0, POSIX shell. Clang is not installed in this environment. Compiler and generated C use `-std=c11 -Wall -Wextra -Wpedantic -Werror`; full-language generated programs additionally use `-pthread`. Defaults are `-O3`, with `-O2` for the initial bootstrap stages.
 
-The current suites cover 303 checks. They include the 272 checks retained from 0.4.1, 13 native diagnostic checks, 11 tutorial executions, and 7 bootstrap diagnostic checks. Negative cases must return the intended diagnostic, not terminate through a signal. Installer checks, bootstrap fixed points, and sanitizer runs are additional validation described below.
+The current suites cover 390 checks. They retain the 303 checks from 0.4.2 and add 14 diagnostic checks, 38 checker/codegen checks, 19 thread-language checks, and 16 thread-runtime checks. Negative cases must return the intended diagnostic, not terminate through a signal. Installer checks, bootstrap fixed points, and sanitizer runs are additional validation described below.
 
 ## Commands to reproduce
 
 ```sh
 make test
 make test-sanitize
+make test-thread-sanitize
 make test-install
 make examples
 ```
@@ -24,6 +25,10 @@ A clean subset build verifies the committed seed against stages 1, 2, and 3, run
 | `tests/native/runtime_stability.sh` | 22 | Arithmetic, file/input capacities, read limits, arenas, LIFO cleanup |
 | `tests/native/toolchain_stability.sh` | 16 | Executable discovery, PATH/links, dynamic argv, allocation budgets, CLI, output protection, quoted-path C-only builds |
 | `tests/native/diagnostics.sh` | 13 | Underlines, tabs/UTF-8, column 6000+, EOF, related locations, missing files, imported/moved runtime reports, deferred failure, strict standalone C |
+| `tests/native/diagnostics_043.sh` | 14 | Source context, JSON validity/ranges/escaping, related locations, import origins, NUL positions, EOF, and CLI rendering |
+| `tests/native/checker_codegen_043.sh` | 38 | Preserved effects/checks, host C layouts, structural type reuse, typo hints, thread signatures, handle boundaries, and imported workers |
+| `tests/native/threads_043.sh` | 19 | Spawn/join results, deferred joins, worker panic, automatic child cleanup, strict worker types, and forbidden handle escape |
+| `tests/native/threads_runtime.sh` | 16 | Actual worker overlap, nested jobs, handle ownership, limits, repeated joins, thread-local resources, panic cleanup, and synchronized input/output |
 | `tests/native/tutorial.sh` | 11 | Ten lesson programs, successful/invalid integer input, expected output, and file contents |
 | `tests/selfhost/semantics.sh` | 53 | Subset types, scopes, calls, literals, reserved C names, trigraphs |
 | `tests/selfhost/toolchain.sh` | 26 | Commands, strict flags, argv/statuses, protected resources, self-rebuild |
@@ -36,7 +41,9 @@ The tutorial's file-writing program runs inside a temporary directory. Formatter
 
 ## AddressSanitizer and UndefinedBehaviorSanitizer
 
-`make test-sanitize` instruments the native compiler and the subset compiler, driver, runtime, and OS layer. It reruns semantic, frontend, diagnostic, runtime, toolchain, and input checks under ASan/UBSan. Generated C is also instrumented for selected v0.3, borrowing, bootstrap arithmetic, and seven slice-assignment lifetime scenarios.
+`make test-sanitize` instruments the native compiler and the subset compiler, driver, runtime, and OS layer. It reruns semantic, frontend, diagnostic, runtime, toolchain, and input checks under ASan/UBSan, including the new checker/codegen and threading regressions. Generated C is also instrumented for selected v0.3, borrowing, bootstrap arithmetic, and seven slice-assignment lifetime scenarios.
+
+`make test-thread-sanitize` runs the 16 C thread-runtime scenarios with ThreadSanitizer. The overlap test uses synchronization to require two workers to be active; success cannot be reproduced by simply executing workers sequentially. Ownership and cleanup tests exercise nested workers, worker-local allocations, and shared standard-stream locking. TSan is an additional host/toolchain check; support for every POSIX system is not implied.
 
 LeakSanitizer is disabled by default because the managed environment does not support it under its tracing setup. This result therefore does not include a leak check. On a supported host, request one with:
 
@@ -56,7 +63,7 @@ Native diagnostic fixtures explicitly include both `-O0` and `-O3` builds.
 
 ## Installation and portability
 
-`make test-install` builds and installs both compilers into a temporary prefix containing spaces. It checks versions, installed tutorial output and reports, runtime lookup, prefix relocation, subset program execution, upgrade, invalid-manifest refusal, unrelated-file preservation, collision refusal, and uninstall.
+`make test-install` builds and installs both compilers into a temporary prefix containing spaces. It checks versions, installed tutorial output and reports, the license and thread guide, runtime lookup, prefix relocation, the installed worker example, subset program execution, upgrade, invalid-manifest refusal, unrelated-file preservation, collision refusal, and uninstall.
 
 The platform suite forces `KM_NO_PROC_SELF_EXE=1` and tests argv/PATH fallback on Linux, including an empty PATH element and executable symlink. A fresh compiler copy is built without assembly from a checkout path containing an apostrophe, using a compiler path with similarly difficult characters. This validates those fallback paths on Linux; it is not evidence of release testing on macOS, Windows, or ARM.
 
@@ -64,7 +71,7 @@ The platform suite forces `KM_NO_PROC_SELF_EXE=1` and tests argv/PATH fallback o
 
 ```sh
 make dist
-unzip ../kremen-v0.4.2.zip -d /tmp/kremen-release-check
+unzip ../kremen-v0.4.3.zip -d /tmp/kremen-release-check
 cd /tmp/kremen-release-check/kremen
 sha256sum -c SHA256SUMS
 make all selfhost
@@ -80,4 +87,4 @@ Documentation checks cover local Markdown file links, English-only Markdown pros
 
 Passing regressions and sanitizers does not prove the absence of bugs. The full frontend remains C, and the bootstrap remains a smaller language. [Safety and memory](safety.md) defines the current guarantees.
 
-Saved [benchmark reports](../bench/README.md) belong to 0.4.1. They measure selected workloads and are not fresh 0.4.2 performance claims. File-buffer capacities are allocator requests, not promised RSS reductions. The copy microbenchmark separately checks 16,768 size/alignment combinations.
+Saved [benchmark reports](../bench/README.md) belong to 0.4.1. They measure selected workloads and are not fresh 0.4.3 performance claims. File-buffer capacities are allocator requests, not promised RSS reductions. The copy microbenchmark separately checks 16,768 size/alignment combinations.

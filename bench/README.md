@@ -2,7 +2,7 @@
 
 The scripts here measure specific compiler and runtime workloads. They do not establish that Kremen is faster than another language for arbitrary applications. All runners are native C and shell; the old Python comparison mode is gone.
 
-Saved reports in this directory are **0.4.1 measurements**. They remain historical observations from that build and container, not new 0.4.2 performance claims. Run the scripts again to measure your own checkout.
+Saved reports in this directory are **0.4.1 measurements**. They remain historical observations from that build and container, not new 0.4.3 performance claims. Run the scripts again to measure your own checkout.
 
 ## Full-frontend checking
 
@@ -54,3 +54,9 @@ Saved report: [runtime-comparison.txt](runtime-comparison.txt). In that 0.4.1 co
 `maxrss_kib` reports the maximum child RSS, normalized to KiB on Linux/macOS. It is not total allocation volume. Reduced allocation requests do not imply an identical RSS reduction because an allocator can retain pages.
 
 The 0.4.1 C seed grew from roughly 26 KiB to 157 KiB as operations gained explicit sequencing and arithmetic checks. The 0.4.2 seed additionally carries better frontend expression locations. The full compiler's runtime source excerpts also add read-only data. Evaluate these costs with realistic workloads rather than treating one microbenchmark as a language-wide result.
+
+## Compiler changes in 0.4.3
+
+The checker caches computed type layouts, and the full backend interns structural types through a hash table. These changes reduce repeated analysis and lookup work. They do not remove arithmetic or lifetime checks, and there is no release-wide speedup percentage attached to them.
+
+Worker threads introduce their own costs: thread creation, join operations, bookkeeping, and synchronization around shared standard streams. Compare a substantial independent workload both sequentially and concurrently; the small squaring example in the documentation is a teaching example, not a throughput test. Run timing experiments without simultaneous builds or sanitizer jobs, use the same input and compiler options, and report the workload along with its results.

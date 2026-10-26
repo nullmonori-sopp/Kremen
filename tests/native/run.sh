@@ -144,7 +144,7 @@ for mode in 1 2 3 4 5 6; do
 done
 
 # CC may contain a compiler command and options, as in the Makefile.
-"${CC:-cc}" -std=c11 -Wall -Wextra -Wpedantic -Werror -O2 "$FIXTURES/runtime.c" -o "$WORK/runtime" > "$WORK/out" 2> "$WORK/err" || fail 'compile runtime invariant tests'
+"${CC:-cc}" -std=c11 -pthread -Wall -Wextra -Wpedantic -Werror -O2 "$FIXTURES/runtime.c" -o "$WORK/runtime" > "$WORK/out" 2> "$WORK/err" || fail 'compile runtime invariant tests'
 "$WORK/runtime" > "$WORK/out" 2> "$WORK/err" || fail 'runtime empty and copied slice invariants'
 printf '%s\n' '0 -9223372036854775808 9223372036854775807 12x 9223372036854775808 - 2' > "$WORK/input"
 "$WORK/runtime" input < "$WORK/input" > "$WORK/out" 2> "$WORK/err" || fail 'runtime full integer input cases'

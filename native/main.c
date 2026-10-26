@@ -14,13 +14,14 @@ static char current_executable[PATH_MAX];
 #endif
 
 static void usage(void) {
-    puts("Kremen 0.4.2 — native C11 toolchain\n"
+    puts("Kremen 0.4.3 — native C11 toolchain\n"
          "usage: kremen check|build|run|emit-c source.kr [options]\n"
          "       kremen fmt [--check|-w] [file.kr file.krh ...]\n"
          "       kremen selfhost check|build|run|emit-c|bootstrap [options]\n"
          "options: -o FILE, -O0..-O3 (default -O3), --root DIR, --cc COMPILER\n"
+         "         --diagnostic-format=text|json\n"
          "         -- ends compiler options (for source paths starting with -)\n"
-         "C backend: -std=c11 -Wall -Wextra -Wpedantic -Werror\n"
+         "C backend: -std=c11 -Wall -Wextra -Wpedantic -Werror -pthread\n"
          "source .kr; API declarations .krh; assembly .S; native objects .o/.a");
 }
 static bool extension(const char *path, const char *ext) { size_t n = strlen(path), m = strlen(ext); return n >= m && !strcmp(path + n - m, ext); }
@@ -71,7 +72,7 @@ static int build(Context *ctx, const char *source, const char *output) {
     size_t n = strlen(source); bool fail = fwrite(source, 1, n, f) != n; if (fclose(f)) fail = true;
     if (fail) { unlink(cfile); rmdir(directory); return 1; }
     char opt[4]; snprintf(opt, sizeof opt, "-O%d", ctx->optimization);
-    char *args[] = {ctx->cc, "-std=c11", "-Wall", "-Wextra", "-Wpedantic", "-Werror", opt, cfile, "-o", binary, NULL};
+    char *args[] = {ctx->cc, "-std=c11", "-Wall", "-Wextra", "-Wpedantic", "-Werror", "-pthread", opt, cfile, "-o", binary, NULL};
     int code = child(args); if (!code && rename(binary, output)) { perror(output); code = 1; }
     unlink(binary); unlink(cfile); rmdir(directory); return code;
 }
@@ -111,12 +112,20 @@ static int selfhost(int argc, char **argv) {
 int main(int argc, char **argv) {
     (void)km_platform_executable(argv[0], current_executable, sizeof current_executable);
     if (argc < 2 || !strcmp(argv[1], "--help") || !strcmp(argv[1], "help")) { usage(); return argc < 2 ? 1 : 0; }
-    if (!strcmp(argv[1], "--version")) { puts("Kremen 0.4.2 (native C11)"); return 0; }
+    if (!strcmp(argv[1], "--version")) { puts("Kremen 0.4.3 (native C11)"); return 0; }
     if (!strcmp(argv[1], "selfhost")) return selfhost(argc, argv);
     const char *command = argv[1]; bool fmt = !strcmp(command, "fmt");
     if (!fmt && strcmp(command, "check") && strcmp(command, "build") && strcmp(command, "run") && strcmp(command, "emit-c")) { usage(); return 1; }
     Context *ctx = calloc(1, sizeof *ctx); if (!ctx) return 2;
     km_init(ctx); ctx->failure_ready = true;
+    /* Choose diagnostic rendering before loading resources or parsing options.
+     * Respect -- so a source name never becomes a compiler setting. */
+    for (int i = 2; i < argc && strcmp(argv[i], "--"); i++) {
+        if ((!strcmp(argv[i], "-o") || !strcmp(argv[i], "--output") ||
+             !strcmp(argv[i], "--cc") || !strcmp(argv[i], "--root")) && i + 1 < argc) { i++; continue; }
+        if (!strcmp(argv[i], "--diagnostic-format=json")) ctx->diagnostic_json = true;
+        else if (!strcmp(argv[i], "--diagnostic-format=text")) ctx->diagnostic_json = false;
+    }
     if (setjmp(ctx->failure)) { km_destroy(ctx); free(ctx); return 1; }
     ctx->runtime_path = runtime_path(ctx);
     const char *cc = getenv("CC"); if (cc && *cc) ctx->cc = km_strdup(ctx, cc);
@@ -125,16 +134,23 @@ int main(int argc, char **argv) {
     for (int i = 2; i < argc; i++) {
         if (positional_only) files[count++] = argv[i];
         else if (!strcmp(argv[i], "--")) positional_only = true;
+        else if (!strncmp(argv[i], "--diagnostic-format=", 20)) {
+            const char *value = argv[i] + 20;
+            if (strcmp(value, "text") && strcmp(value, "json"))
+                km_error(ctx, (Token){0}, "E001", "diagnostic format must be 'text' or 'json'");
+            ctx->diagnostic_json = !strcmp(value, "json");
+        }
         else if ((!strcmp(argv[i], "-o") || !strcmp(argv[i], "--output")) && i + 1 < argc && !fmt && strcmp(command, "check") && strcmp(command, "run") && argv[i + 1][0]) output = argv[++i];
         else if (!strcmp(argv[i], "--cc") && i + 1 < argc && !fmt && argv[i + 1][0]) ctx->cc = km_strdup(ctx, argv[++i]);
         else if (!strcmp(argv[i], "--root") && i + 1 < argc) {
-            if (fmt) { fputs("kremen fmt: --root is not a formatter option\n", stderr); km_destroy(ctx); free(ctx); return 1; }
-            char resolved[PATH_MAX]; if (!realpath(argv[++i], resolved)) { perror("kremen: --root"); km_destroy(ctx); free(ctx); return 1; }
+            if (fmt) km_error(ctx, (Token){0}, "E001", "--root is not a formatter option");
+            char resolved[PATH_MAX];
+            if (!realpath(argv[++i], resolved)) km_error(ctx, (Token){0}, "E010", "cannot resolve project root '%s': %s", argv[i], strerror(errno));
             ctx->project_root = km_strdup(ctx, resolved);
         } else if (!fmt && !strncmp(argv[i], "-O", 2) && strlen(argv[i]) == 3 && argv[i][2] >= '0' && argv[i][2] <= '3') ctx->optimization = argv[i][2] - '0';
         else if (fmt && !strcmp(argv[i], "--check")) format_check = true;
         else if (fmt && (!strcmp(argv[i], "-w") || !strcmp(argv[i], "--write"))) write_format = true;
-        else if (argv[i][0] == '-') { fprintf(stderr, "kremen: unknown/incomplete option %s\n", argv[i]); km_destroy(ctx); free(ctx); return 1; }
+        else if (argv[i][0] == '-') km_error(ctx, (Token){0}, "E001", "unknown or incomplete option '%s'", argv[i]);
         else files[count++] = argv[i];
     }
     if ((!fmt && count != 1) || (fmt && format_check && write_format) || (fmt && count > 1 && !format_check && !write_format)) { usage(); km_destroy(ctx); free(ctx); return 1; }

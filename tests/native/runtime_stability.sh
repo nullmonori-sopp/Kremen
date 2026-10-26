@@ -6,11 +6,11 @@ WORK=$(mktemp -d "${TMPDIR:-/tmp}/kremen-runtime-stability.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 COMPILER=${CC:-cc}
 if [ "${SANITIZE:-0}" = 1 ]; then
-    "$COMPILER" -std=c11 -Wall -Wextra -Wpedantic -Werror -O1 -g \
+    "$COMPILER" -std=c11 -pthread -Wall -Wextra -Wpedantic -Werror -O1 -g \
         -fsanitize=address,undefined -fno-sanitize-recover=all \
         "$ROOT/tests/native/runtime_stability.c" -o "$WORK/runtime"
 else
-    "$COMPILER" -std=c11 -Wall -Wextra -Wpedantic -Werror -O2 \
+    "$COMPILER" -std=c11 -pthread -Wall -Wextra -Wpedantic -Werror -O2 \
         "$ROOT/tests/native/runtime_stability.c" -o "$WORK/runtime"
 fi
 TOTAL=0

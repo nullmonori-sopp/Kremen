@@ -19,10 +19,10 @@ reject() {
 }
 "$KREMEN" emit-c "$ROOT/tests/native/semantic_values.kr" -o "$WORK/positive.c" > "$WORK/log" 2> "$WORK/error" || fail 'emit positive fixture'
 if [ "${SANITIZE_GENERATED:-0}" = 1 ]; then
-    "${CC:-cc}" -std=c11 -Wall -Wextra -Wpedantic -Werror -O1 -g \
+    "${CC:-cc}" -std=c11 -pthread -Wall -Wextra -Wpedantic -Werror -O1 -g \
         -fsanitize=address,undefined -fno-sanitize-recover=all "$WORK/positive.c" -o "$WORK/positive" > "$WORK/log" 2> "$WORK/error" || fail 'sanitize positive fixture'
 else
-    "${CC:-cc}" -std=c11 -Wall -Wextra -Wpedantic -Werror -O3 "$WORK/positive.c" -o "$WORK/positive" > "$WORK/log" 2> "$WORK/error" || fail 'compile positive fixture'
+    "${CC:-cc}" -std=c11 -pthread -Wall -Wextra -Wpedantic -Werror -O3 "$WORK/positive.c" -o "$WORK/positive" > "$WORK/log" 2> "$WORK/error" || fail 'compile positive fixture'
 fi
 "$WORK/positive" > "$WORK/actual" 2> "$WORK/error" || fail 'run positive fixture'
 printf '10\n3\n8\n19\n5\n5\n22\n' > "$WORK/expected"

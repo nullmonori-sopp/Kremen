@@ -1,0 +1,36 @@
+name: Kremen checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build compiler and bootstrap
+        run: make all selfhost
+      - name: Regression and installation checks
+        run: make test test-install
+      - name: Portable C profile
+        run: make USE_ASM=0 all check
+      - name: Verify source archives
+        run: |
+          make dist
+          cd ..
+          sha256sum -c kremen-v0.4.3.sha256
+  sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ASAN_OPTIONS: detect_leaks=0
+      UBSAN_OPTIONS: halt_on_error=1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Address and undefined behavior sanitizers
+        run: make test-sanitize

@@ -7,6 +7,8 @@ typedef struct {
     Type *type;
     char *name;
     unsigned state;
+    uint64_t hash;
+    size_t next;
 } GenType;
 
 typedef struct {
@@ -14,6 +16,7 @@ typedef struct {
     Buffer out;
     GenType *types;
     size_t type_count, type_cap;
+    size_t *type_slots, type_slot_count;
     size_t *type_indices, type_index_count;
     unsigned indent, counter;
     char **loops;
@@ -85,12 +88,41 @@ static char *fresh(Generator *g, const char *prefix)
     return km_sprintf(g->ctx, "kr_%s_%u", prefix, ++g->counter);
 }
 
+static uint64_t type_hash(Type *type)
+{
+    uint64_t hash = (uint64_t)type->kind + UINT64_C(0x9e3779b97f4a7c15);
+    if (type->kind == TY_STRUCT || type->kind == TY_ENUM)
+        return hash ^ (uint64_t)(uintptr_t)type->decl;
+    if (type->kind == TY_INT) return hash ^ (uint64_t)(type->bits * 2 + type->sign);
+    if (type->kind == TY_ARRAY) hash ^= (uint64_t)type->count * UINT64_C(0x100000001b3);
+    if (type->kind == TY_REF) hash ^= (uint64_t)type->mut;
+    if (type->elem) hash ^= type_hash(type->elem) * UINT64_C(0xbf58476d1ce4e5b9);
+    for (size_t i = 0; i < type->members.len; i++)
+        hash = (hash ^ type_hash(type->members.data[i])) * UINT64_C(0x100000001b3);
+    return hash;
+}
+
+static void grow_type_slots(Generator *g)
+{
+    size_t count = g->type_slot_count ? g->type_slot_count * 2 : 64;
+    size_t *slots = km_alloc(g->ctx, count * sizeof *slots);
+    for (size_t i = 0; i < g->type_count; i++) {
+        size_t slot = (size_t)g->types[i].hash & (count - 1);
+        g->types[i].next = slots[slot]; slots[slot] = i + 1;
+    }
+    g->type_slots = slots; g->type_slot_count = count;
+}
+
 static size_t remember_type(Generator *g, Type *type)
 {
     if (type->id < g->type_index_count && g->type_indices[type->id])
         return g->type_indices[type->id] - 1;
-    for (size_t i = 0; i < g->type_count; ++i) {
-        if (km_type_equal(g->types[i].type, type)) {
+    if (!g->type_slot_count || g->type_count >= g->type_slot_count / 2) grow_type_slots(g);
+    uint64_t hash = type_hash(type);
+    size_t slot = (size_t)hash & (g->type_slot_count - 1);
+    for (size_t link = g->type_slots[slot]; link; link = g->types[link - 1].next) {
+        size_t i = link - 1;
+        if (g->types[i].hash == hash && km_type_equal(g->types[i].type, type)) {
             if (type->id < g->type_index_count) g->type_indices[type->id] = i + 1;
             return i;
         }
@@ -107,6 +139,8 @@ static size_t remember_type(Generator *g, Type *type)
     GenType *entry = &g->types[index];
     entry->type = type;
     entry->state = 0;
+    entry->hash = hash;
+    entry->next = g->type_slots[slot]; g->type_slots[slot] = index + 1;
     if (type->kind == TY_STRUCT || type->kind == TY_ENUM) {
         entry->name = type->decl ? type->decl->cname : NULL;
         if (!entry->name) entry->name = km_sprintf(g->ctx, "kr_struct_%zu", index);
@@ -127,12 +161,15 @@ static char *ctype(Generator *g, Type *type)
     if (!type) return "void";
     switch (type->kind) {
     case TY_VOID: return "void";
-    case TY_INT: return km_sprintf(g->ctx, "%sint%d_t", type->sign ? "" : "u", type->bits);
+    case TY_INT:
+        if (type->sign) { switch (type->bits) { case 8:return "int8_t";case 16:return "int16_t";case 32:return "int32_t";default:return "int64_t"; } }
+        switch (type->bits) { case 8:return "uint8_t";case 16:return "uint16_t";case 32:return "uint32_t";default:return "uint64_t"; }
     case TY_BOOL: return "bool";
     case TY_STRING: return "kr_string";
     case TY_SLICE: return "kr_slice";
     case TY_ARENA: return "kr_arena *";
     case TY_FILE: return "kr_file *";
+    case TY_THREAD: return "kr_thread *";
     case TY_REF:
     case TY_PTR: return km_sprintf(g->ctx, "%s *", ctype(g, type->elem));
     case TY_ARRAY:
@@ -255,7 +292,8 @@ static char *integer_literal(Generator *g, Type *type, uint64_t magnitude, bool 
 
 static char *int_suffix(Generator *g, Type *type)
 {
-    return km_sprintf(g->ctx, "%c%d", type->sign ? 'i' : 'u', type->bits);
+    (void)g;
+    return type->name;
 }
 
 static char *checked_index(Generator *g, Node *node, char *value)
@@ -360,6 +398,12 @@ static const char *arithmetic(const char *op)
 static char *call(Generator *g, Node *node)
 {
     const char *builtin = node->builtin;
+    if (builtin && !strcmp(builtin, "threadSpawn")) {
+        char *argument = expression(g, node->args.data[1]);
+        char *result = temporary(g, node->type, "{0}");
+        line(g, "%s.ok = kr_thread_spawn(%s, %s, &%s.value, &%s.code);", result, node->function->cname, argument, result, result);
+        return result;
+    }
     Buffer arguments = {0};
     char **values = km_alloc(g->ctx, (node->args.len + 1) * sizeof *values);
     if (!builtin && node->receiver) {
@@ -380,6 +424,7 @@ static char *call(Generator *g, Node *node)
     char *args = km_strndup(g->ctx, arguments.data ? arguments.data : "", arguments.len);
     free(arguments.data);
     if (builtin && (!strcmp(builtin, "print") || !strcmp(builtin, "println"))) {
+        line(g, "kr_output_begin();");
         for (size_t i = 0; i < node->args.len; ++i) {
             if (i) line(g, "kr_space();");
             Type *type = node->args.data[i]->type;
@@ -387,6 +432,7 @@ static char *call(Generator *g, Node *node)
             line(g, "kr_print_%s(%s);", suffix, values[i]);
         }
         if (!strcmp(builtin, "println")) line(g, "kr_newline();");
+        line(g, "kr_output_end();");
         return "";
     }
     if (builtin && !strcmp(builtin, "len")) {
@@ -420,6 +466,12 @@ static char *call(Generator *g, Node *node)
     if(builtin&&(!strcmp(builtin,"arenaFree")||!strcmp(builtin,"arenaReset"))){line(g,"kr_arena_%s(%s, %d);",!strcmp(builtin,"arenaFree")?"free":"reset",values[0],location(g, node));return "";}
     if(builtin&&!strcmp(builtin,"arenaAlloc"))return temporary(g,node->type,km_sprintf(g->ctx,"kr_arena_alloc(%s, %s, sizeof(%s), %d)",values[0],values[1],ctype(g,node->type->elem),location(g, node)));
     if(builtin&&!strcmp(builtin,"fileClose")){line(g,"kr_file_close(%s, %d);",values[0],location(g, node));return "";}
+    if(builtin&&!strcmp(builtin,"threadClose")){line(g,"kr_thread_close(%s, %d);",values[0],location(g,node));return "";}
+    if(builtin&&!strcmp(builtin,"threadJoin")){
+        char *result=temporary(g,node->type,"{0}");
+        line(g,"%s.ok = kr_thread_join(%s, &%s.value, &%s.code);",result,values[0],result,result);
+        return result;
+    }
     if(builtin&&!strcmp(builtin,"errorMessage"))return temporary(g,node->type,km_sprintf(g->ctx,"kr_error_message(%s)",values[0]));
     if(builtin&&!strncmp(builtin,"fs",2)){
         char *r=temporary(g,node->type,"{0}");
@@ -511,7 +563,7 @@ static char *expression(Generator *g, Node *node)
     case N_INDEX:
         return temporary(g, type, lvalue(g, node, NULL));
     case N_UNARY: {
-        if (!strcmp(node->op, "-") && node->constant) {
+        if (!strcmp(node->op, "-") && node->value->kind == N_INT && node->constant) {
             return temporary(g, type, integer_literal(g, type, node->constant_value, node->constant_negative));
         }
         if (!strcmp(node->op, "&") || !strcmp(node->op, "&mut")) {
@@ -520,7 +572,7 @@ static char *expression(Generator *g, Node *node)
         if (!strcmp(node->op, "*")) return temporary(g, type, lvalue(g, node, NULL));
         char *value = expression(g, node->value);
         if (!strcmp(node->op, "-")) return temporary(g, type, km_sprintf(g->ctx, "kr_neg_%s(%s, %d)", int_suffix(g, type), value, location(g, node)));
-        return temporary(g, type, km_sprintf(g->ctx, "(%s)(%s%s)", ctype(g, type), node->op, value));
+        return temporary(g, type, km_sprintf(g->ctx, "(%s)(%s%s)", ctype(g, type), !strcmp(node->op,"^")?"~":node->op, value));
     }
     case N_BINARY: {
         char *left = expression(g, node->left);
@@ -868,6 +920,7 @@ char *km_codegen(Context *ctx)
         line(g, "kr_source_locations = kr_locations;");
         line(g, "kr_source_location_count = sizeof kr_locations / sizeof kr_locations[0];");
     }
+    line(g, "kr_runtime_init();");
     line(g, "%s();", entry->cname);
     line(g, "return 0;");
     --g->indent;

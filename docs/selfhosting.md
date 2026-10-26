@@ -51,7 +51,7 @@ The driver searches its build/install layout for support files. `KREMEN_SELFHOST
 
 ## Work needed for full self-hosting
 
-The subset does not yet have the full language's structs, enums, tuples, modules, slices, references, results, or cleanup semantics. Replacing the native frontend now would remove those features.
+The subset does not yet have the full language's structs, enums, tuples, modules, slices, references, results, cleanup semantics, or worker-thread API. Replacing the native frontend now would remove those features. Full-language JSON diagnostics also remain in the C frontend.
 
 A practical next step is a typed intermediate representation, followed by transferring one subsystem at a time. Start with composite values and module resolution, then results and cleanup, then the borrow and lifetime checks. Run shared valid and invalid programs through both compilers and compare diagnostics and behavior. A full replacement needs that compatibility, not just a successful self-rebuild.
 

@@ -1,0 +1,23 @@
+package main
+func square(value i64) i64 {
+	return value * value
+}
+func calculate()!i64 {
+	var first = threadSpawn(square, 6)?
+	defer threadClose(first)
+	var second = threadSpawn(square, 8)?
+	defer threadClose(second)
+	var left = threadJoin(first)?
+	var right = threadJoin(second)?
+	return ok(left + right)
+}
+func main() {
+	match calculate() {
+		ok(total) => {
+			println("sum of squares:", total)
+		}
+		fail(code) => {
+			println("thread error:", errorMessage(code))
+		}
+	}
+}

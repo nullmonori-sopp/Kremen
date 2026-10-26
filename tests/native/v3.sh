@@ -14,7 +14,7 @@ build() {
     output=$2
     if [ "${SANITIZE_GENERATED:-0}" = 1 ]; then
         "$KREMEN" emit-c "$source" -o "$output.c" > "$WORK/log" 2> "$WORK/error" || fail "emit $source"
-        "${CC:-cc}" -std=c11 -Wall -Wextra -Wpedantic -Werror -O1 -g \
+        "${CC:-cc}" -std=c11 -pthread -Wall -Wextra -Wpedantic -Werror -O1 -g \
             -fsanitize=address,undefined -fno-sanitize-recover=all "$output.c" -o "$output" > "$WORK/log" 2> "$WORK/error" || fail "sanitize $source"
     else
         "$KREMEN" build "$source" -o "$output" > "$WORK/log" 2> "$WORK/error" || fail "build $source"

@@ -17,6 +17,9 @@ sh "$ROOT/install.sh" --prefix "$PREFIX" > "$WORK/log" 2>&1 || { cat "$WORK/log"
 printf 'Hello, Kremen!\n' > "$WORK/expected"
 cmp "$WORK/expected" "$WORK/actual"
 [ -f "$PREFIX/share/doc/kremen/docs/tutorial.md" ]
+[ -f "$PREFIX/share/doc/kremen/docs/threads.md" ]
+[ -f "$PREFIX/share/doc/kremen/LICENSE" ]
+cmp "$ROOT/LICENSE" "$PREFIX/share/doc/kremen/LICENSE"
 [ -f "$PREFIX/share/doc/kremen/bench/check-results.txt" ]
 [ -f "$PREFIX/share/doc/kremen/bench/runtime-comparison.txt" ]
 "$PREFIX/bin/kremen" run "$PREFIX/share/doc/kremen/examples/tutorial/01_hello.kr" > "$WORK/actual"
@@ -32,6 +35,9 @@ printf '720|18|ok\n' > "$WORK/selfhost-expected"
 cmp "$WORK/selfhost-expected" "$WORK/selfhost-example"
 "$MOVED/bin/kremen" emit-c "$ROOT/examples/hello.kr" -o "$WORK/probe-moved.c"
 grep -F 'installed runtime lookup probe' "$WORK/probe-moved.c" > /dev/null
+"$MOVED/bin/kremen" run "$MOVED/share/doc/kremen/examples/threads.kr" > "$WORK/actual"
+printf 'sum of squares: 100\n' > "$WORK/expected-threads"
+cmp "$WORK/expected-threads" "$WORK/actual"
 "$MOVED/bin/kremen" build "$ROOT/tests/native/v3_values.kr" -o "$WORK/app" > "$WORK/log"
 "$WORK/app" > "$WORK/actual"
 grep -F 'outer 1' "$WORK/actual" > /dev/null
