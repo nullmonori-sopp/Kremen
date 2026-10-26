@@ -1,14 +1,85 @@
 # Updating an existing repository
 
-Use the complete 0.4.2 source tree when updating a project based on 0.4.0 or 0.4.1. It includes the preceding stabilization work. Copying only the new files is not enough: the existing compiler, runtime, build rules, tests, seed, and documentation also changed.
+Use the complete 0.4.3 source tree when updating an older project. It includes the preceding stabilization and documentation work. Copying only the new files is not enough: the existing compiler, runtime, build rules, tests, seed, and documentation also changed.
 
-The lists below compare the released 0.4.0 and 0.4.1 checksum manifests with the 0.4.2 source distribution. Paths are relative to the `kremen` project root. They describe release contents, not any additional local edits in your own repository. Merge those edits before replacing files.
+The historical lists below compare the released 0.4.0 and 0.4.1 checksum manifests with the 0.4.2 source distribution. Paths are relative to the `kremen` project root. They describe release contents, not any additional local edits in your own repository. Merge those edits before replacing files.
 
-## What changed in the previous release
+## Updating to 0.4.3
+
+The current update changes checker, code generation, diagnostics, runtime, build commands, tests, and documentation. New material includes the worker-thread guide, 0.4.3 release notes, worker examples, compiler/runtime regressions, a JSON diagnostic validator, and the GitHub Actions workflow. See [0.4.3 notes](v0.4.3.md) for behavior and compatibility; the old 0.4.2 lists are not a complete 0.4.3 update manifest.
+
+Update both the new files and changed existing files. In particular, keep the matching `native/` sources and `runtime/kremen_rt.h` together: the new worker calls require the new runtime and `-pthread` backend flag. Keep the generated bootstrap seed, its sources, version strings, and installed rebuild resources in sync. The full compiler and self-hosted subset still have different feature sets.
+
+Retain the repository's license. The installer also includes it with installed documentation. Source archives exclude build products; publish those archives as release assets rather than committing them into the source tree. Regenerate `SHA256SUMS` after all source updates are final.
+
+## From the 0.4.2 archive to 0.4.3
+
+These lists compare file contents with the released 0.4.2 checksum manifest. `LICENSE` is new to the source archive; the GitHub repository already had it, and its text is preserved.
+
+### Add these files
+
+```text
+.github/workflows/ci.yml
+LICENSE
+docs/threads.md
+docs/v0.4.3.md
+examples/threads.kr
+tests/native/checker_codegen_043.sh
+tests/native/diagnostics_043.sh
+tests/native/json_validate.c
+tests/native/threads_043.sh
+tests/native/threads_runtime.c
+tests/native/threads_runtime.sh
+```
+
+### Replace these existing files
+
+```text
+CHANGELOG.md
+Makefile
+README.md
+VERSION
+bench/README.md
+docs/README.md
+docs/diagnostics.md
+docs/install.md
+docs/language.md
+docs/repository-update.md
+docs/safety.md
+docs/selfhosting.md
+docs/tutorial.md
+docs/v0.2.md
+docs/v0.4.1.md
+docs/v0.4.md
+docs/validation-v0.2.md
+docs/validation.md
+install.sh
+native/checker.c
+native/codegen.c
+native/core.c
+native/kremen.h
+native/main.c
+runtime/kremen_rt.h
+selfhost/README.md
+selfhost/toolchain.kr
+tests/native/diagnostics.sh
+tests/native/install.sh
+tests/native/run.sh
+tests/native/runtime_stability.sh
+tests/native/sanitize.sh
+tests/native/semantic_stability.sh
+tests/native/toolchain_stability.sh
+tests/native/v3.sh
+tools/package.sh
+```
+
+Replace `SHA256SUMS` with the regenerated manifest as well. Keep executable permissions on `install.sh`, `kremenc`, `selfhost/bootstrap.sh`, and `tools/package.sh`. No source files are removed. In particular, `selfhost/bootstrap.kr` and `selfhost/stage0.c` retain their verified contents; the subset driver's version changes in `selfhost/toolchain.kr`.
+
+## Historical changes in 0.4.1
 
 0.4.1 fixed borrowing through `catch`, enforced shared-pointer read-only provenance, preserved comments around `else`, and bounded compiler allocation. It corrected bootstrap evaluation order and arithmetic, reduced string and backend allocation overhead, improved executable/path discovery, and tightened output protection and CLI validation. It added the platform header and stability suites listed below. The [0.4.1 release notes](v0.4.1.md) explain behavior and compatibility.
 
-## What is new in this patch
+## Historical changes in 0.4.2
 
 0.4.2 adds English learning material, ten runnable lesson programs, and source-aware diagnostics. It updates the native compiler, runtime, bootstrap frontend and generated seed, installer, tests, version strings, and every existing Markdown page. The [0.4.2 notes](v0.4.2.md) explain these changes.
 
@@ -165,9 +236,10 @@ From your repository's project root:
 ```sh
 make test
 make test-sanitize
+make test-thread-sanitize
 make test-install
 make dist
-git add .gitignore README.md CHANGELOG.md Makefile VERSION install.sh kremenc
+git add .github .gitignore LICENSE README.md CHANGELOG.md Makefile VERSION install.sh kremenc
 git add native runtime selfhost examples tests docs bench tools SHA256SUMS
 git diff --cached --stat
 git diff --cached

@@ -1,6 +1,6 @@
-# Kremen 0.4.2
+# Kremen 0.4.3
 
-Kremen is a small compiled language for learning and experimenting with systems programming. Its syntax is inspired by Go. It has explicit integer types, structs and methods, checked references, raw pointers, arrays, slices, results, and scoped resource cleanup.
+Kremen is a small compiled language for learning and experimenting with systems programming. Its syntax is inspired by Go. It has explicit integer types, structs and methods, checked references, raw pointers, arrays, slices, results, scoped resource cleanup, and native worker threads.
 
 The main compiler is written in C11. It translates Kremen into C and asks a C compiler to produce an executable. A separate, smaller compiler and command-line driver are written in Kremen and can rebuild themselves. The [self-hosting guide](docs/selfhosting.md) explains that distinction.
 
@@ -8,7 +8,7 @@ The main compiler is written in C11. It translates Kremen into C and asks a C co
 
 ## Build and try it
 
-The tested platform is Linux x86-64 with GCC. You need a C11 compiler, `make`, and standard POSIX shell tools. Python is not used. A C compiler is also needed whenever Kremen builds a program.
+The tested platform is Linux x86-64 with GCC. You need a C11 compiler, POSIX threads, `make`, and standard POSIX shell tools. Python is not used. A C compiler is also needed whenever Kremen builds a program.
 
 From the unpacked `kremen` directory:
 
@@ -66,13 +66,13 @@ This prints `42`, then `finished`. `!i64` means the function returns either an i
 
 `check` checks Kremen without invoking a C compiler. `run` builds a temporary executable and runs it. `build` keeps the executable. `emit-c` lets you inspect the generated C, which includes the runtime. `fmt` gives the code its canonical layout.
 
-The default C flags are `-std=c11 -Wall -Wextra -Wpedantic -Werror -O3`. Safety checks stay enabled at every optimization level. The language also rejects unused bindings and shadowed names. An intentional unused name starts with `_`.
+The default C flags for full-language programs are `-std=c11 -Wall -Wextra -Wpedantic -Werror -O3 -pthread`. Safety checks stay enabled at every optimization level. The language also rejects unused bindings and shadowed names. An intentional unused name starts with `_`.
 
 ## What changed
 
-Version 0.4.2 adds English learning material and source excerpts in compiler and runtime errors. It fixes diagnostic clipping on long lines and identifies the origin of conflicting borrows and local declarations. Runtime locations survive moving an executable without its source files. See [0.4.2 notes](docs/v0.4.2.md) for costs and limits.
+Version 0.4.3 adds native POSIX worker threads with explicit spawn/join operations and automatic cleanup of outstanding children. Workers receive integer values; references, slices, and resource handles cannot be shared through this interface. This keeps the first threading model small enough to check. Read [Working with threads](docs/threads.md) before using it.
 
-The previous release, 0.4.1, fixed borrowing through `catch`, read-only raw pointers, formatting around `else`, and bootstrap evaluation order. It also reduced temporary allocation and improved toolchain path handling. The [0.4.1 notes](docs/v0.4.1.md) explain the changes. [Repository update instructions](docs/repository-update.md) list the exact added and replaced files for both releases.
+Compiler diagnostics now include surrounding source context, better related locations, and an optional JSON format for editor tools. The [0.4.3 notes](docs/v0.4.3.md) describe the compiler changes and current limits. [0.4.2](docs/v0.4.2.md) introduced the English learning material and embedded runtime source excerpts; [0.4.1](docs/v0.4.1.md) fixed borrowing and bootstrap behavior. [Repository update instructions](docs/repository-update.md) explain which files belong in a source update.
 
 ## Where to go next
 
@@ -80,7 +80,8 @@ The previous release, 0.4.1, fixed borrowing through `catch`, read-only raw poin
 - [Language reference](docs/language.md): syntax, types, built-ins, and limits.
 - [Understanding errors](docs/diagnostics.md): read a diagnostic and fix common mistakes.
 - [Safety and memory](docs/safety.md): what the compiler checks and what `unsafe` means.
+- [Working with threads](docs/threads.md): start independent jobs, collect results, and understand cleanup.
 - [Self-hosting](docs/selfhosting.md) and [bootstrap reference](selfhost/README.md).
 - [Validation](docs/validation.md), [benchmarks](bench/README.md), and [changelog](CHANGELOG.md).
 
-Kremen is an experimental language. The full frontend still lives in `native/`; the self-hosted subset does not yet implement the full language. C tools, libc, and a host OS remain dependencies. Freestanding kernels, MMIO, threads, floating point, interfaces, inheritance, and a general C FFI are not implemented. Source and ABI compatibility may change between releases.
+Kremen is an experimental language. The full frontend still lives in `native/`; the self-hosted subset does not yet implement the full language or its threading API. C tools, libc, POSIX threads, and a host OS remain dependencies. Freestanding kernels, MMIO, shared-memory concurrency primitives, floating point, interfaces, inheritance, and a general C FFI are not implemented. Source and ABI compatibility may change between releases.

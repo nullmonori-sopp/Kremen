@@ -87,6 +87,150 @@ void km_buf_printf(Buffer *buf, const char *format, ...) {
     km_buf_append(buf, s, (size_t)n); free(s);
 }
 
+/* Names are ASCII identifiers. A fixed workspace prevents a misspelled name
+ * from turning error reporting into an unbounded allocation or quadratic job. */
+unsigned km_name_distance(const char *left, const char *right) {
+    size_t a = 0, b = 0;
+    while (a <= 64 && left[a]) a++;
+    while (b <= 64 && right[b]) b++;
+    if (a > 64 || b > 64 || a > b + 2 || b > a + 2) return 3;
+    unsigned before[65], previous[65], current[65];
+    for (size_t j = 0; j <= b; j++) before[j] = previous[j] = (unsigned)j;
+    for (size_t i = 1; i <= a; i++) {
+        current[0] = (unsigned)i;
+        for (size_t j = 1; j <= b; j++) {
+            unsigned value = previous[j - 1] + (left[i - 1] != right[j - 1]);
+            if (previous[j] + 1 < value) value = previous[j] + 1;
+            if (current[j - 1] + 1 < value) value = current[j - 1] + 1;
+            if (i > 1 && j > 1 && left[i - 1] == right[j - 2] && left[i - 2] == right[j - 1] && before[j - 2] + 1 < value)
+                value = before[j - 2] + 1;
+            current[j] = value;
+        }
+        memcpy(before, previous, (b + 1) * sizeof *before);
+        memcpy(previous, current, (b + 1) * sizeof *previous);
+    }
+    return previous[b] > 2 ? 3 : previous[b];
+}
+
+/* Validate one scalar without consulting the process locale. */
+static size_t diagnostic_utf8(const unsigned char *data, size_t available) {
+    if (!available) return 0;
+    unsigned char first = data[0];
+    size_t length = first < 128 ? 1 : first >= 0xc2 && first <= 0xdf ? 2 :
+                    first >= 0xe0 && first <= 0xef ? 3 : first >= 0xf0 && first <= 0xf4 ? 4 : 0;
+    if (!length || length > available) return 0;
+    for (size_t i = 1; i < length; i++) if ((data[i] & 0xc0) != 0x80) return 0;
+    if ((first == 0xe0 && data[1] < 0xa0) || (first == 0xed && data[1] >= 0xa0) ||
+        (first == 0xf0 && data[1] < 0x90) || (first == 0xf4 && data[1] >= 0x90)) return 0;
+    return length;
+}
+
+static void diagnostic_json_string(const char *value) {
+    if (!value) { fputs("null", stderr); return; }
+    const unsigned char *p = (const unsigned char *)value;
+    size_t remaining = strlen(value);
+    fputc('"', stderr);
+    while (remaining) {
+        unsigned char byte = *p;
+        if (byte == '"' || byte == '\\') { fputc('\\', stderr); fputc(byte, stderr); }
+        else if (byte < 32 || byte == 127) fprintf(stderr, "\\u%04x", (unsigned)byte);
+        else if (byte >= 128) {
+            size_t length = diagnostic_utf8(p, remaining);
+            if (length) { fwrite(p, 1, length, stderr); p += length; remaining -= length; continue; }
+            fprintf(stderr, "\\u%04x", (unsigned)byte);
+        } else fputc(byte, stderr);
+        p++; remaining--;
+    }
+    fputc('"', stderr);
+}
+
+static void diagnostic_end(Token tok, int *line, int *column, size_t *length) {
+    *line = tok.line > 0 ? tok.line : 1;
+    *column = tok.col > 0 ? tok.col : 1;
+    *length = 0;
+    if (!tok.src || !tok.src->data || tok.offset > tok.src->len) return;
+    size_t available = tok.src->len - tok.offset;
+    *length = tok.len < available ? tok.len : available;
+    for (size_t i = 0; i < *length; i++) {
+        unsigned char byte = (unsigned char)tok.src->data[tok.offset + i];
+        if (byte == '\r') {
+            if (i + 1 < *length && tok.src->data[tok.offset + i + 1] == '\n') i++;
+            (*line)++; *column = 1;
+        } else if (byte == '\n') { (*line)++; *column = 1; }
+        else (*column)++;
+    }
+}
+
+static void diagnostic_json_location(Token tok) {
+    int end_line, end_column; size_t length;
+    diagnostic_end(tok, &end_line, &end_column, &length);
+    fputs("\"file\":", stderr); diagnostic_json_string(tok.src ? tok.src->path : "<program>");
+    fprintf(stderr, ",\"line\":%d,\"column\":%d,\"end_line\":%d,\"end_column\":%d,\"offset\":%zu,\"length\":%zu",
+            tok.line > 0 ? tok.line : 1, tok.col > 0 ? tok.col : 1, end_line, end_column, tok.offset, length);
+    DiagnosticSpan span; km_diagnostic_span(tok, &span);
+    fputs(",\"excerpt\":", stderr); diagnostic_json_string(span.text);
+    fprintf(stderr, ",\"caret\":%u,\"underline_width\":%u", span.caret, span.width);
+}
+
+static unsigned diagnostic_digits(int number) {
+    unsigned digits = 1;
+    while (number >= 10) { number /= 10; digits++; }
+    return digits;
+}
+
+static void diagnostic_source_line(Token tok, unsigned digits) {
+    DiagnosticSpan span; km_diagnostic_span(tok, &span);
+    fprintf(stderr, " %*d | %s\n", (int)digits, tok.line > 0 ? tok.line : 1, span.text);
+}
+
+static void diagnostic_text_location(Token tok, bool context) {
+    if (!tok.src || !tok.src->data || tok.offset > tok.src->len) return;
+    size_t line_start = tok.offset;
+    while (line_start && tok.src->data[line_start - 1] != '\n' && tok.src->data[line_start - 1] != '\r') line_start--;
+    size_t next = tok.offset;
+    while (next < tok.src->len && tok.src->data[next] != '\n' && tok.src->data[next] != '\r') next++;
+    if (next < tok.src->len && tok.src->data[next] == '\r') next++;
+    if (next < tok.src->len && tok.src->data[next] == '\n') next++;
+    int number = tok.line > 0 ? tok.line : 1;
+    unsigned digits = diagnostic_digits(number < INT_MAX && next < tok.src->len ? number + 1 : number);
+    fprintf(stderr, " %*s |\n", (int)digits, "");
+    if (context && number > 1 && line_start) {
+        size_t previous_end = line_start;
+        if (previous_end && tok.src->data[previous_end - 1] == '\n') previous_end--;
+        if (previous_end && tok.src->data[previous_end - 1] == '\r') previous_end--;
+        size_t previous = previous_end;
+        /* A context line is informational. Bound scanning as well as output. */
+        while (previous && previous_end - previous < 160 && tok.src->data[previous - 1] != '\n' && tok.src->data[previous - 1] != '\r') previous--;
+        Token before = {.src = tok.src, .offset = previous, .line = number - 1, .col = 1};
+        diagnostic_source_line(before, digits);
+    }
+    diagnostic_source_line(tok, digits);
+    DiagnosticSpan span; km_diagnostic_span(tok, &span);
+    fprintf(stderr, " %*s | ", (int)digits, "");
+    for (unsigned i = 0; i < span.caret; i++) fputc(' ', stderr);
+    fputc('^', stderr);
+    for (unsigned i = 1; i < span.width; i++) fputc('~', stderr);
+    fputc('\n', stderr);
+    if (context && next < tok.src->len && number < INT_MAX) {
+        Token after = {.src = tok.src, .offset = next, .line = number + 1, .col = 1};
+        diagnostic_source_line(after, digits);
+    }
+}
+
+static const char *diagnostic_hint(Context *ctx, const char *code, const char *format) {
+    if (ctx->diagnostic_hint) return ctx->diagnostic_hint;
+    if (strstr(format, "type mismatch")) return "Check the value and its declared type; Kremen does not convert types implicitly.";
+    if (!strcmp(code, "E107")) return "Check the spelling, declaration scope, and any import qualifier.";
+    if (!strcmp(code, "E131")) return "A shared reference allows reads only. A loan lasts until the end of its lexical block.";
+    if (!strcmp(code, "E132")) return "This operation needs an explicit unsafe { ... } block; its memory must remain valid.";
+    if (strstr(format, "contextual result")) return "Declare a result type, for example: var answer !i64 = ok(42).";
+    if (strstr(format, "exhaustive")) return "Handle every variant, or add a final _ => { ... } arm.";
+    if (strstr(format, "Unterminated block")) return "Add the closing } for this block before the end of the file.";
+    if (strstr(format, "NUL byte")) return "Remove the NUL byte from the source file; use \\0 inside a string literal when you need a zero byte.";
+    if (!strcmp(code, "W001")) return "Use this value, remove the declaration, or prefix an intentionally unused name with _.";
+    return NULL;
+}
+
 /* Choose a bounded window around the token before computing its end. Keeping
  * these offsets ordered matters for errors near the end of very long lines. */
 void km_diagnostic_span(Token tok, DiagnosticSpan *span) {
@@ -124,33 +268,61 @@ void km_diagnostic_span(Token tok, DiagnosticSpan *span) {
 }
 
 _Noreturn void km_error(Context *ctx, Token tok, const char *code, const char *format, ...) {
-    fprintf(stderr, "%s:%d:%d: error[%s]: ", tok.src ? tok.src->path : "<program>", tok.line ? tok.line : 1, tok.col ? tok.col : 1, code);
-    va_list a; va_start(a, format); vfprintf(stderr, format, a); va_end(a); fputc('\n', stderr);
-    if (tok.src && tok.src->data && tok.offset <= tok.src->len) {
-        DiagnosticSpan span; km_diagnostic_span(tok, &span);
-        int number = tok.line > 0 ? tok.line : 1, digits = 1;
-        for (int n = number; n >= 10; n /= 10) digits++;
-        fprintf(stderr, " %*s |\n %d | %s\n %*s | ", digits, "", number, span.text, digits, "");
-        for (unsigned i = 0; i < span.caret; i++) fputc(' ', stderr);
-        fputc('^', stderr);
-        for (unsigned i = 1; i < span.width; i++) fputc('~', stderr);
-        fputc('\n', stderr);
+    const char *hint = diagnostic_hint(ctx, code, format);
+    Token imports[128]; size_t import_count = 0;
+    Source *origin = tok.src;
+    while (origin && origin->import_origin.src && import_count < 128) {
+        Token item = origin->import_origin;
+        if (item.src == origin) break;
+        imports[import_count++] = item;
+        origin = item.src;
     }
-    const char *hint = NULL;
-    if (strstr(format, "type mismatch")) hint = "Check the value and its declared type; Kremen does not convert types implicitly.";
-    else if (!strcmp(code, "E107")) hint = "Check the spelling, declaration scope, and any import qualifier.";
-    else if (!strcmp(code, "E131")) hint = "A shared reference allows reads only. A loan lasts until the end of its lexical block.";
-    else if (!strcmp(code, "E132")) hint = "This operation needs an explicit unsafe { ... } block; its memory must remain valid.";
-    else if (strstr(format, "contextual result")) hint = "Declare a result type, for example: var answer !i64 = ok(42).";
-    else if (strstr(format, "exhaustive")) hint = "Handle every variant, or add a final _ => { ... } arm.";
-    if (hint) fprintf(stderr, " help: %s\n", hint);
-    if (ctx->related_message && ctx->related_token.src) {
-        Token related = ctx->related_token;
-        DiagnosticSpan span; km_diagnostic_span(related, &span);
-        fprintf(stderr, "%s:%d:%d: note: %s\n %d | %s\n", related.src->path,
-                related.line, related.col, ctx->related_message, related.line, span.text);
-        ctx->related_message = NULL;
+    va_list args; va_start(args, format);
+    if (ctx->diagnostic_json) {
+        char message[4096];
+        int needed = vsnprintf(message, sizeof message, format, args);
+        bool truncated = needed < 0 || (size_t)needed >= sizeof message;
+        if (needed < 0) strcpy(message, "cannot format diagnostic");
+        else if (truncated) {
+            size_t end = sizeof message - 4;
+            while (end && ((unsigned char)message[end] & 0xc0) == 0x80) end--;
+            memcpy(message + end, "...", 4);
+        }
+        fputs("{\"kind\":\"error\",\"code\":", stderr); diagnostic_json_string(code);
+        fputs(",\"message\":", stderr); diagnostic_json_string(message);
+        fprintf(stderr, ",\"message_truncated\":%s,", truncated ? "true" : "false");
+        diagnostic_json_location(tok);
+        fputs(",\"hint\":", stderr); diagnostic_json_string(hint);
+        fputs(",\"related\":[", stderr);
+        if (ctx->related_message && ctx->related_token.src) {
+            fputs("{\"message\":", stderr); diagnostic_json_string(ctx->related_message);
+            fputc(',', stderr); diagnostic_json_location(ctx->related_token); fputc('}', stderr);
+        }
+        fputs("],\"imports\":[", stderr);
+        for (size_t i = 0; i < import_count; i++) {
+            if (i) fputc(',', stderr);
+            fputc('{', stderr); diagnostic_json_location(imports[i]); fputc('}', stderr);
+        }
+        fputs("]}\n", stderr);
+    } else {
+        fprintf(stderr, "%s:%d:%d: error[%s]: ", tok.src ? tok.src->path : "<program>", tok.line ? tok.line : 1, tok.col ? tok.col : 1, code);
+        vfprintf(stderr, format, args); fputc('\n', stderr);
+        diagnostic_text_location(tok, true);
+        if (ctx->related_message && ctx->related_token.src) {
+            Token related = ctx->related_token;
+            fprintf(stderr, "%s:%d:%d: note: %s\n", related.src->path,
+                    related.line > 0 ? related.line : 1, related.col > 0 ? related.col : 1, ctx->related_message);
+            diagnostic_text_location(related, false);
+        }
+        for (size_t i = 0; i < import_count; i++) {
+            Token item = imports[i];
+            fprintf(stderr, "%s:%d:%d: note: imported from here\n", item.src->path, item.line, item.col);
+            diagnostic_text_location(item, false);
+        }
+        if (hint) fprintf(stderr, " help: %s\n", hint);
     }
+    va_end(args);
+    ctx->related_message = NULL; ctx->diagnostic_hint = NULL;
     ctx->errors++;
     if (ctx->failure_ready) longjmp(ctx->failure, 1);
     exit(1);
@@ -164,6 +336,7 @@ Type *km_named_type(Context *ctx, const char *name, Token tok) {
     if (!strcmp(name, "string")) return ctx->t_string;
     if (!strcmp(name, "arena")) return ctx->t_arena;
     if (!strcmp(name, "file")) return ctx->t_file;
+    if (!strcmp(name, "thread")) return ctx->t_thread;
     for (size_t i = 0; i < 8; i++) if (!strcmp(name, ctx->ints[i]->name)) return ctx->ints[i];
     Type *t = km_type(ctx, TY_STRUCT, NULL); t->name = km_strdup(ctx, name); t->tok = tok; return t;
 }
@@ -209,6 +382,7 @@ void km_init(Context *ctx) {
     ctx->t_string = km_type(ctx, TY_STRING, NULL); ctx->t_string->name = "string";
     ctx->t_arena = km_type(ctx, TY_ARENA, NULL); ctx->t_arena->name = "arena";
     ctx->t_file = km_type(ctx, TY_FILE, NULL); ctx->t_file->name = "file";
+    ctx->t_thread = km_type(ctx, TY_THREAD, NULL); ctx->t_thread->name = "thread";
     static const char *names[] = {"i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64"};
     for (size_t i = 0; i < 8; i++) { Type *t = km_type(ctx, TY_INT, NULL); t->name = (char *)names[i]; t->bits = 8 << (i % 4); t->sign = i < 4; ctx->ints[i] = t; }
 }
@@ -230,10 +404,22 @@ Source *km_read_source(Context *ctx, const char *path, bool header) {
     if (n < 0 || n > 4 * 1024 * 1024) { fclose(f); km_error(ctx, tok, "E010", "source exceeds 4 MiB: %s", path); }
     rewind(f);
     Source *src = km_alloc(ctx, sizeof *src); src->path = km_strdup(ctx, path); src->len = (size_t)n; src->header = header;
+    src->import_origin = ctx->import_token;
     src->data = km_alloc(ctx, src->len + 1);
     size_t got = fread(src->data, 1, src->len, f); bool failed = ferror(f) != 0; fclose(f);
     if (got != src->len || failed) km_error(ctx, tok, "E010", "cannot read %s", path);
-    if (memchr(src->data, 0, src->len)) km_error(ctx, tok, "E100", "NUL byte in source %s", path);
+    const char *nul = memchr(src->data, 0, src->len);
+    if (nul) {
+        Token invalid = {.src = src, .len = 1, .offset = (size_t)(nul - src->data), .line = 1, .col = 1};
+        for (size_t i = 0; i < invalid.offset; i++) {
+            if (src->data[i] == '\r') {
+                if (i + 1 < invalid.offset && src->data[i + 1] == '\n') i++;
+                invalid.line++; invalid.col = 1;
+            } else if (src->data[i] == '\n') { invalid.line++; invalid.col = 1; }
+            else invalid.col++;
+        }
+        km_error(ctx, invalid, "E100", "NUL byte in source %s", path);
+    }
     if (ctx->sources.len >= 512) km_error(ctx, tok, "E010", "too many source files (limit 512)");
     km_sources_push(ctx, &ctx->sources, src); return src;
 }

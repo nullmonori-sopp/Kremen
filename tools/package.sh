@@ -1,6 +1,7 @@
 #!/bin/sh
 # Source distributions contain no build products or Python implementation.
 set -eu
+umask 022
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 OUTPUT=${1:-"$ROOT/.."}
 mkdir -p -- "$OUTPUT"
@@ -12,8 +13,10 @@ mkdir "$WORK/kremen"
 tar -C "$ROOT" --exclude='./build' --exclude='./selfhost/build' \
     --exclude='./.git' --exclude='./.venv' --exclude='__pycache__' \
     --exclude='*.py' --exclude='*.pyc' --exclude='*.pyo' \
-    --exclude='*.zip' --exclude='*.tar.gz' -cf "$WORK/source.tar" .
+    --exclude='*.zip' --exclude='*.tar.gz' --exclude='A.a' -cf "$WORK/source.tar" .
 tar -C "$WORK/kremen" -xf "$WORK/source.tar"
+find "$WORK/kremen" -type d -exec chmod 755 {} +
+find "$WORK/kremen" -type f -exec chmod a+r {} +
 (cd "$WORK/kremen" && find . -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > "$WORK/checksums"
 mv "$WORK/checksums" "$WORK/kremen/SHA256SUMS"
 cp "$WORK/kremen/SHA256SUMS" "$ROOT/SHA256SUMS"

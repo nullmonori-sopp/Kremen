@@ -352,7 +352,7 @@ defer fileClose(handle)
 
 `defer` records a call to perform when the current block ends. Its arguments are evaluated immediately. The call still runs if the function returns early with `?`. If several calls are deferred in one block, the newest runs first. A nested block runs its own cleanup when that block ends.
 
-`fileClose` is a void, idempotent cleanup operation, so it is suitable for `defer`. `fsClose` instead returns a result for code that wants to inspect a close failure directly. Expected errors should use results; `panic` reports an unrecoverable error, runs active deferred calls, and exits the program. There is no panic recovery in this version.
+`fileClose` is a void, idempotent cleanup operation, so it is suitable for `defer`. `fsClose` instead returns a result for code that wants to inspect a close failure directly. Expected errors should use results; a panic in the main thread reports an unrecoverable error, runs active deferred calls, and exits the program. There is no panic recovery inside that thread. The advanced [thread guide](threads.md) explains how worker failures are delivered to their creator.
 
 **Try it:** change the text and predict the byte count. Give the function a path inside a nonexistent directory to exercise its failure arm. Remove your practice file when you are done.
 
@@ -362,4 +362,4 @@ You now have the pieces for a small program of your own. Read an integer score w
 
 Use `check` after small edits. If something fails, read the first error before changing more code. Format your file with `fmt -w`. When it works, build an executable and run it directly.
 
-Continue with [local imports](language.md#files-and-local-imports) when one file becomes unwieldy. The [language reference](language.md) collects the exact rules, and [Understanding errors](diagnostics.md) is a useful companion while you practice.
+Continue with [local imports](language.md#files-and-local-imports) when one file becomes unwieldy. When you have independent jobs to run concurrently, continue with [Working with threads](threads.md). The [language reference](language.md) collects the exact rules, and [Understanding errors](diagnostics.md) is a useful companion while you practice.

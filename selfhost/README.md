@@ -41,13 +41,15 @@ Comments use `//`. String escapes include `\n`, `\r`, `\t`, `\\`, and `\"`; stri
 
 Function-body operands and arguments are explicitly sequenced left to right. `&&` and `||` remain lazy. Loop conditions are recalculated on every iteration, including after `continue`. Integer helpers check overflow, division/remainder by zero, and the minimum-integer divided by minus-one case. Global initializers remain constant C expressions checked by the strict backend.
 
-The subset does not implement imports, structs, enums, methods, tuples, arrays, references, pointers, slices, `!T`, `defer`, `catch`, or `arenablock`. `unsafe` does not activate a borrow checker. The full compiler's memory guarantees must not be assumed here.
+The subset does not implement imports, structs, enums, methods, tuples, arrays, references, pointers, slices, `!T`, `defer`, `catch`, `arenablock`, or the full language's worker-thread API. `unsafe` does not activate a borrow checker. The full compiler's memory and threading guarantees must not be assumed here.
 
 Limits are 8 MiB per input, parser depth 128, 512 operations per expression chain, and a 512 MiB string arena. Small strings use 64 KiB chunks; large strings use dedicated chunks. Known string lengths use a bounded cache without reading before arbitrary C string pointers.
 
 ## Diagnostics
 
 Frontend messages contain the input path, line, column, and a bounded excerpt. In 0.4.2, type mismatches point at the source expression rather than the following token; undefined names and calls point at the name. The excerpt comes from the input already read into memory.
+
+The full compiler's `--diagnostic-format=json` option is not a bootstrap command-line option. The subset continues to emit its own text diagnostics.
 
 Generated arithmetic errors use an embedded source basename and line/column. Basenames keep generated C reproducible across checkout relocation. Those subset runtime errors do not embed the full compiler's source excerpts. Backend errors name generated C files.
 

@@ -16,7 +16,7 @@ endif
 endif
 SOURCES = native/core.c native/lexer.c native/parser.c native/modules.c native/checker.c native/codegen.c native/format.c native/main.c
 
-.PHONY: all test test-sanitize test-install test-selfhost check examples bootstrap selfhost bench dist clean FORCE
+.PHONY: all test test-sanitize test-thread-sanitize test-install test-selfhost check examples bootstrap selfhost bench dist clean FORCE
 all: build/kremen
 
 build/config: FORCE
@@ -37,6 +37,10 @@ test: build/kremen
 	sh tests/native/runtime_stability.sh
 	sh tests/native/toolchain_stability.sh ./build/kremen
 	sh tests/native/diagnostics.sh ./build/kremen
+	sh tests/native/diagnostics_043.sh ./build/kremen
+	sh tests/native/checker_codegen_043.sh ./build/kremen
+	sh tests/native/threads_043.sh ./build/kremen
+	sh tests/native/threads_runtime.sh
 	sh tests/native/tutorial.sh ./build/kremen
 	$(MAKE) test-selfhost
 	sh tests/native/source_io.sh
@@ -45,6 +49,9 @@ test-sanitize:
 	sh tests/selfhost/sanitize.sh
 	sh tests/native/sanitize.sh
 	KREMEN_SELFHOST_ROOT="$(CURDIR)/selfhost" sh tests/native/source_io.sh "$(CURDIR)/build/sanitize/kremen" "$(CURDIR)/build/sanitize-selfhost/stage0" "$(CURDIR)/build/sanitize-selfhost/kremen-selfhost"
+
+test-thread-sanitize:
+	SANITIZE=thread TSAN_OPTIONS=halt_on_error=1 sh tests/native/threads_runtime.sh
 
 test-install: build/kremen
 	sh tests/native/install.sh
@@ -64,6 +71,7 @@ examples: build/kremen
 	./build/kremen run examples/modules/main.kr
 	./build/kremen run examples/algebra.kr
 	./build/kremen run examples/resources.kr
+	./build/kremen run examples/threads.kr
 
 bootstrap:
 	sh selfhost/bootstrap.sh

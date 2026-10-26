@@ -11,13 +11,37 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <pthread.h>
 
 typedef struct kr_defer_node {
     struct kr_defer_node *previous;
     void (*call)(void *);
     void *data;
 } kr_defer_node;
-static kr_defer_node *kr_defers = NULL;
+static _Thread_local kr_defer_node *kr_defers = NULL;
+
+typedef struct kr_thread {
+    pthread_t id;
+    int64_t (*worker)(int64_t);
+    int64_t argument, result, code;
+    bool joined;
+    struct kr_thread *next;
+} kr_thread;
+static _Thread_local kr_thread *kr_threads, *kr_self_thread;
+static _Thread_local kr_thread **kr_thread_slots;
+static _Thread_local size_t kr_thread_slot_count;
+static _Thread_local size_t kr_thread_active, kr_thread_count;
+static _Thread_local bool kr_child_failure;
+static pthread_mutex_t kr_output_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t kr_input_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t kr_diagnostic_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t kr_error_message_mutex = PTHREAD_MUTEX_INITIALIZER;
+static _Thread_local unsigned kr_output_depth, kr_input_depth;
+static void kr_cleanup(void);
+static void kr_release_io(void) {
+    if (kr_output_depth) { kr_output_depth = 0; (void)pthread_mutex_unlock(&kr_output_mutex); }
+    if (kr_input_depth) { kr_input_depth = 0; (void)pthread_mutex_unlock(&kr_input_mutex); }
+}
 
 /* The caller keeps this node alive until run_until. A registration boundary
  * avoids GCC treating the intentional scoped stack link as a dangling store. */
@@ -85,6 +109,7 @@ static const kr_location *kr_source_locations;
 static size_t kr_source_location_count;
 
 static void kr_report_error(const char *message, size_t length, int id) {
+    (void)pthread_mutex_lock(&kr_diagnostic_mutex);
     const kr_location *location = id > 0 && (size_t)id <= kr_source_location_count ? &kr_source_locations[id - 1] : NULL;
     if (location != NULL) {
         (void)fprintf(stderr, "%s:%d:%d: runtime error: ", location->path, location->line, location->column);
@@ -104,12 +129,40 @@ static void kr_report_error(const char *message, size_t length, int id) {
         for (unsigned i = 1; i < location->width; i++) (void)fputc('~', stderr);
         (void)fputc('\n', stderr);
     }
+    if (kr_self_thread != NULL) {
+        (void)fprintf(stderr, " note: worker started with argument %" PRId64 "; threadJoin reports ECANCELED\n", kr_self_thread->argument);
+    }
+    (void)pthread_mutex_unlock(&kr_diagnostic_mutex);
 }
 
 _Noreturn void kr_panic(const char *msg, int line) {
+    kr_release_io();
     kr_report_error(msg, strlen(msg), line);
     kr_defer_run_until(NULL);
+    if (kr_self_thread != NULL) {
+        kr_self_thread->code = ECANCELED;
+        kr_cleanup();
+        pthread_exit(NULL);
+    }
     exit(EXIT_FAILURE);
+}
+
+void kr_output_begin(void) {
+    if (kr_output_depth == 0 && pthread_mutex_lock(&kr_output_mutex) != 0)
+        kr_panic("cannot lock output", 0);
+    kr_output_depth++;
+}
+void kr_output_end(void) {
+    if (kr_output_depth == 0) kr_panic("unbalanced output lock", 0);
+    if (--kr_output_depth == 0) (void)pthread_mutex_unlock(&kr_output_mutex);
+}
+static void kr_input_begin(void) {
+    if (kr_input_depth == 0 && pthread_mutex_lock(&kr_input_mutex) != 0)
+        kr_panic("cannot lock input", 0);
+    kr_input_depth++;
+}
+static void kr_input_end(void) {
+    if (--kr_input_depth == 0) (void)pthread_mutex_unlock(&kr_input_mutex);
 }
 
 size_t kr_idx(int64_t index, size_t n, int line) {
@@ -131,13 +184,26 @@ typedef struct kr_allocation {
     struct kr_allocation *next;
 } kr_allocation;
 
-static kr_allocation *kr_allocations = NULL;
-static kr_buffer *kr_buffers = NULL;
-static kr_arena *kr_arenas = NULL;
-static kr_file *kr_files = NULL;
-static bool kr_cleanup_registered = false;
+static _Thread_local kr_allocation *kr_allocations = NULL;
+static _Thread_local kr_buffer *kr_buffers = NULL;
+static _Thread_local kr_arena *kr_arenas = NULL;
+static _Thread_local kr_file *kr_files = NULL;
+static _Thread_local bool kr_cleanup_registered = false;
 
 static void kr_cleanup(void) {
+    /* Each creator exclusively owns this registry. Results are read only
+     * after pthread_join establishes synchronization with its child. */
+    while (kr_threads != NULL) {
+        kr_thread *thread = kr_threads; kr_threads = thread->next;
+        if (!thread->joined) {
+            int code = pthread_join(thread->id, NULL);
+            if (code != 0) { kr_child_failure = true; continue; }
+            if (thread->code != 0) kr_child_failure = true;
+        }
+        free(thread);
+    }
+    kr_thread_active = 0; kr_thread_count = 0;
+    free(kr_thread_slots); kr_thread_slots = NULL; kr_thread_slot_count = 0;
     while (kr_files != NULL) {
         kr_file *file = kr_files; kr_files = file->next;
         if (file->live) (void)fclose(file->stream);
@@ -160,16 +226,109 @@ static void kr_cleanup(void) {
         if (buffer->arena == NULL) free(buffer->data);
         free(buffer);
     }
+    if (kr_self_thread != NULL && kr_child_failure) kr_self_thread->code = ECANCELED;
+}
+
+static void kr_process_cleanup(void) {
+    kr_cleanup();
+    if (kr_child_failure) { (void)fflush(NULL); _Exit(EXIT_FAILURE); }
 }
 
 static bool kr_register_cleanup(void) {
     if (!kr_cleanup_registered) {
-        if (atexit(kr_cleanup) != 0) {
+        if (kr_self_thread == NULL && atexit(kr_process_cleanup) != 0) {
             return false;
         }
         kr_cleanup_registered = true;
     }
     return true;
+}
+
+void kr_runtime_init(void) {
+    if (!kr_register_cleanup()) kr_panic("cannot register runtime cleanup", 0);
+}
+
+static void *kr_thread_entry(void *data) {
+    kr_thread *thread = data;
+    kr_self_thread = thread;
+    thread->result = thread->worker(thread->argument);
+    kr_cleanup();
+    return NULL;
+}
+
+static size_t kr_thread_slot(kr_thread *handle, size_t capacity) {
+    uint64_t bits = (uint64_t)(uintptr_t)handle;
+    bits = (bits >> 4) * UINT64_C(0x9e3779b97f4a7c15);
+    bits ^= bits >> 32;
+    return (size_t)bits & (capacity - 1);
+}
+
+/* A creator keeps handle metadata until exit, including joined handles. Use
+ * an ownership index so repeated close/join does not scan that retained list.
+ * Looking up a foreign pointer only hashes/compares it, never dereferences it. */
+static bool kr_thread_reserve(void) {
+    if (kr_thread_count < kr_thread_slot_count / 2) return true;
+    size_t capacity = kr_thread_slot_count ? kr_thread_slot_count * 2 : 64;
+    kr_thread **slots = calloc(capacity, sizeof *slots);
+    if (slots == NULL) return false;
+    for (kr_thread *thread = kr_threads; thread != NULL; thread = thread->next) {
+        size_t slot = kr_thread_slot(thread, capacity);
+        while (slots[slot] != NULL) slot = (slot + 1) & (capacity - 1);
+        slots[slot] = thread;
+    }
+    free(kr_thread_slots); kr_thread_slots = slots; kr_thread_slot_count = capacity;
+    return true;
+}
+
+bool kr_thread_spawn(int64_t (*worker)(int64_t), int64_t argument, kr_thread **out, int64_t *code) {
+    *out = NULL; *code = 0;
+    if (worker == NULL) { *code = EINVAL; return false; }
+    if (kr_thread_active >= 256 || kr_thread_count >= 65536) { *code = EAGAIN; return false; }
+    if (!kr_register_cleanup()) { *code = ENOMEM; return false; }
+    if (!kr_thread_reserve()) { *code = ENOMEM; return false; }
+    kr_thread *thread = calloc(1, sizeof *thread);
+    if (thread == NULL) { *code = ENOMEM; return false; }
+    thread->worker = worker; thread->argument = argument;
+    int failure = pthread_create(&thread->id, NULL, kr_thread_entry, thread);
+    if (failure != 0) { free(thread); *code = failure; return false; }
+    thread->next = kr_threads; kr_threads = thread;
+    size_t slot = kr_thread_slot(thread, kr_thread_slot_count);
+    while (kr_thread_slots[slot] != NULL) slot = (slot + 1) & (kr_thread_slot_count - 1);
+    kr_thread_slots[slot] = thread;
+    kr_thread_active++; kr_thread_count++;
+    *out = thread;
+    return true;
+}
+
+static kr_thread *kr_thread_owned(kr_thread *handle) {
+    if (handle == NULL || kr_thread_slot_count == 0) return NULL;
+    size_t slot = kr_thread_slot(handle, kr_thread_slot_count);
+    while (kr_thread_slots[slot] != NULL) {
+        if (kr_thread_slots[slot] == handle) return handle;
+        slot = (slot + 1) & (kr_thread_slot_count - 1);
+    }
+    return NULL;
+}
+
+bool kr_thread_join(kr_thread *handle, int64_t *out, int64_t *code) {
+    *out = 0; *code = 0;
+    kr_thread *thread = kr_thread_owned(handle);
+    if (thread == NULL || thread->joined) { *code = EBADF; return false; }
+    int failure = pthread_join(thread->id, NULL);
+    if (failure != 0) { *code = failure; return false; }
+    thread->joined = true; kr_thread_active--;
+    if (thread->code != 0) { *code = thread->code; return false; }
+    *out = thread->result;
+    return true;
+}
+
+void kr_thread_close(kr_thread *handle, int location) {
+    kr_thread *thread = kr_thread_owned(handle);
+    if (thread == NULL) kr_panic("thread handle is invalid in this creator", location);
+    if (!thread->joined) {
+        int64_t value, code;
+        if (!kr_thread_join(thread, &value, &code)) kr_panic("thread cleanup failed", location);
+    }
 }
 
 static void kr_track(void *data, int line) {
@@ -382,7 +541,7 @@ static bool kr_whitespace(int ch) {
         || ch == '\f' || ch == '\v';
 }
 
-bool kr_try_read_int(int64_t *out, int64_t *code) {
+static bool kr_try_read_int_unlocked(int64_t *out, int64_t *code) {
     int ch;
     bool negative = false;
     bool digits = false;
@@ -444,6 +603,13 @@ bool kr_try_read_int(int64_t *out, int64_t *code) {
     return true;
 }
 
+bool kr_try_read_int(int64_t *out, int64_t *code) {
+    kr_input_begin();
+    bool success = kr_try_read_int_unlocked(out, code);
+    kr_input_end();
+    return success;
+}
+
 int64_t kr_read_int(int line) {
     int64_t value;
     int64_t code;
@@ -458,7 +624,7 @@ int64_t kr_read_int(int line) {
     return value;
 }
 
-kr_string kr_read_line(int line) {
+static kr_string kr_read_line_unlocked(int line) {
     size_t capacity = 64;
     size_t length = 0;
     char *data = malloc(capacity);
@@ -510,6 +676,13 @@ kr_string kr_read_line(int line) {
     }
 }
 
+kr_string kr_read_line(int line) {
+    kr_input_begin();
+    kr_string result = kr_read_line_unlocked(line);
+    kr_input_end();
+    return result;
+}
+
 bool kr_str_eq(kr_string left, kr_string right) {
     return left.len == right.len
         && (left.len == 0 || memcmp(left.data, right.data, left.len) == 0);
@@ -529,8 +702,14 @@ void kr_assert(bool condition, int line) {
 }
 
 _Noreturn void kr_user_panic(kr_string message, int line) {
+    kr_release_io();
     kr_report_error(message.data, message.len, line);
     kr_defer_run_until(NULL);
+    if (kr_self_thread != NULL) {
+        kr_self_thread->code = ECANCELED;
+        kr_cleanup();
+        pthread_exit(NULL);
+    }
     exit(EXIT_FAILURE);
 }
 
@@ -692,10 +871,13 @@ bool kr_fs_write_all(kr_file *file, kr_string data, int64_t *out, int64_t *code)
     *out = (int64_t)data.len; return true;
 }
 kr_string kr_error_message(int64_t code) {
+    (void)pthread_mutex_lock(&kr_error_message_mutex);
     const char *message = code > INT_MAX || code < 0 ? "unknown error" : strerror((int)code);
     size_t n = strlen(message); char *copy = malloc(n + 1);
+    if (copy != NULL) memcpy(copy, message, n + 1);
+    (void)pthread_mutex_unlock(&kr_error_message_mutex);
     if (copy == NULL) kr_panic("out of memory", 0);
-    memcpy(copy, message, n + 1); kr_track(copy, 0); kr_string result = {copy, n}; return result;
+    kr_track(copy, 0); kr_string result = {copy, n}; return result;
 }
 
 int8_t kr_add_i8(int8_t a, int8_t b, int line) {

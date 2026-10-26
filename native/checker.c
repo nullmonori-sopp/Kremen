@@ -41,6 +41,21 @@ static size_t tuple_field(Checker *c,Type *t,const char *name,Node *n) {
 static bool eq(const char *a, const char *b) { return a && b && strcmp(a,b)==0; }
 static Context *cx(Checker *c) { return c->ctx; }
 static Module *module_of(Node *n) { return n->module ? n->module : n->tok.src ? n->tok.src->module : NULL; }
+typedef struct { const char *name; Token tok; unsigned distance, examined; bool tied; } Suggestion;
+static void suggest_candidate(Suggestion *best,const char *wanted,const char *candidate,Token tok) {
+    /* Suggestions are an error-path convenience, never an unbounded pass over
+     * a hostile symbol table. Very short names tend to produce noisy guesses. */
+    if(!candidate||!wanted[0]||!wanted[1]||!wanted[2]||best->examined++>=1024)return;
+    unsigned distance=km_name_distance(wanted,candidate);
+    if(!distance||distance>2)return;
+    if(distance<best->distance){best->name=candidate;best->tok=tok;best->distance=distance;best->tied=false;}
+    else if(distance==best->distance&&!eq(best->name,candidate))best->tied=true;
+}
+static void suggest_finish(Checker *c,Suggestion *best) {
+    if(!best->name||best->tied)return;
+    cx(c)->diagnostic_hint=km_sprintf(cx(c),"Did you mean '%s'?",best->name);
+    if(best->tok.src){cx(c)->related_token=best->tok;cx(c)->related_message="suggested declaration is here";}
+}
 /* Tables are private to one semantic pass. Canonical struct declarations make
  * receiver identity stable across imports and header/implementation merging. */
 static uint64_t name_hash(const char *name) {
@@ -95,7 +110,7 @@ static size_t module_id(Context *c, Module *m) {
     return 0;
 }
 static bool primitive_name(const char *s) {
-    static const char *names[]={"void","bool","string","arena","file","i8","i16","i32","i64","u8","u16","u32","u64"};
+    static const char *names[]={"void","bool","string","arena","file","thread","i8","i16","i32","i64","u8","u16","u32","u64"};
     for(size_t i=0;i<sizeof(names)/sizeof(names[0]);i++) if(eq(s,names[i])) return true;
     return false;
 }
@@ -121,13 +136,15 @@ static const BuiltinSpec resource_specs[] = {
     {"fsReadAll",TY_STRING,1,{TY_FILE,TY_VOID},true,false},
     {"fsWriteAll",TY_INT,2,{TY_FILE,TY_STRING},true,false},
     {"fileClose",TY_VOID,1,{TY_FILE,TY_VOID},false,false},
+    {"threadJoin",TY_INT,1,{TY_THREAD,TY_VOID},true,false},
+    {"threadClose",TY_VOID,1,{TY_THREAD,TY_VOID},false,false},
     {"errorMessage",TY_STRING,1,{TY_INT,TY_VOID},false,false},
     {"arenaNew",TY_ARENA,0,{TY_VOID,TY_VOID},false,true},
     {"arenaReset",TY_VOID,1,{TY_ARENA,TY_VOID},false,true},
     {"arenaFree",TY_VOID,1,{TY_ARENA,TY_VOID},false,true}
 };
 static bool builtin_name(const char *s) {
-    static const char *names[]={"print","println","readInt","readLine","readIntResult","len","assert","panic","raw","alloc","arenaAlloc","free","slice","ok","fail"};
+    static const char *names[]={"print","println","readInt","readLine","readIntResult","len","assert","panic","raw","alloc","arenaAlloc","free","slice","ok","fail","threadSpawn"};
     if(primitive_name(s)) return true;
     for(size_t i=0;i<sizeof(names)/sizeof(names[0]);i++) if(eq(s,names[i])) return true;
     for(size_t i=0;i<sizeof(resource_specs)/sizeof(resource_specs[0]);i++) if(eq(s,resource_specs[i].name)) return true;
@@ -157,6 +174,12 @@ static bool contains_address(Type *t) {
     if(t->kind==TY_TUPLE) {for(size_t i=0;i<t->members.len;i++)if(contains_address(t->members.data[i]))return true;}
     return (t->kind==TY_ARRAY||t->kind==TY_RESULT||t->kind==TY_SLICE) && contains_address(t->elem);
 }
+static bool contains_thread(Type *t) {
+    if(!t)return false;
+    if(t->kind==TY_THREAD)return true;
+    if(t->kind==TY_TUPLE){for(size_t i=0;i<t->members.len;i++)if(contains_thread(t->members.data[i]))return true;}
+    return (t->kind==TY_ARRAY||t->kind==TY_SLICE||t->kind==TY_RESULT||t->kind==TY_REF||t->kind==TY_PTR)&&contains_thread(t->elem);
+}
 /* A result's failure tag must always carry an explicit nonzero code. */
 static bool contains_result_value(Type *t) {
     if(t->kind==TY_RESULT)return true;
@@ -181,14 +204,23 @@ static Type *valid_type(Checker *c, Type *t, Node *n, bool allow_void) {
     if(t->kind==TY_STRUCT||t->kind==TY_ENUM) {
         if(t->decl) return t->decl->type;
         Node *s=find_struct(c,module_of(n),t->name,t->tok.src?t->tok:n->tok);
-        if(!s) km_error(cx(c),n->tok,"E105","unknown type '%s'",t->name);
+        if(!s) {
+            Suggestion best={.distance=3};
+            Module *module=module_of(n);
+            for(size_t i=0;i<cx(c)->structs.len;i++){Node *candidate=cx(c)->structs.data[i];if(module_of(candidate)==module)suggest_candidate(&best,t->name,candidate->name,candidate->tok);}
+            static const char *names[]={"bool","string","arena","file","thread","i8","i16","i32","i64","u8","u16","u32","u64"};
+            for(size_t i=0;i<sizeof(names)/sizeof(*names);i++)suggest_candidate(&best,t->name,names[i],(Token){0});
+            suggest_finish(c,&best);
+            km_error(cx(c),n->tok,"E105","unknown type '%s'",t->name);
+        }
         return s->type;
     }
     if(t->kind==TY_TUPLE) {
-        for(size_t i=0;i<t->members.len;i++){t->members.data[i]=valid_type(c,t->members.data[i],n,false);if(contains_address(t->members.data[i]))km_error(cx(c),n->tok,"E130","tuples cannot contain references or pointers");}
+        for(size_t i=0;i<t->members.len;i++){t->members.data[i]=valid_type(c,t->members.data[i],n,false);if(contains_address(t->members.data[i]))km_error(cx(c),n->tok,"E130","tuples cannot contain references or pointers");if(contains_thread(t->members.data[i]))km_error(cx(c),n->tok,"E150","tuples cannot contain thread handles");}
     }
     if(t->kind==TY_ARRAY||t->kind==TY_REF||t->kind==TY_PTR||t->kind==TY_SLICE||t->kind==TY_RESULT) {
         t->elem=valid_type(c,t->elem,n,false);
+        if(contains_thread(t->elem)&&(t->kind!=TY_RESULT||t->elem->kind!=TY_THREAD))km_error(cx(c),n->tok,"E150","thread handles cannot be stored in containers, nested results or accessed through addresses");
         if(t->kind==TY_ARRAY) {
             if(t->count==0 || t->count>1000000) km_error(cx(c),n->tok,"E105","array size must be between 1 and 1000000");
         }
@@ -201,19 +233,30 @@ static Type *valid_type(Checker *c, Type *t, Node *n, bool allow_void) {
 }
 static size_t layout(Checker *c,Type *t,size_t *align,unsigned depth,Node *where) {
     if(depth>128) km_error(cx(c),where->tok,"E106","recursive value type has infinite size");
+    if(t->layout_state==2){*align=t->layout_align;return t->layout_size;}
+    if(t->layout_state==1)km_error(cx(c),where->tok,"E106","recursive value type has infinite size");
+    t->layout_state=1;
     size_t size=0,a=1;
-    if(t->kind==TY_INT) size=a=(size_t)t->bits/8;
-    else if(t->kind==TY_BOOL) size=1;
-    else if(t->kind==TY_STRING) { size=16;a=8; }
-    else if(t->kind==TY_REF||t->kind==TY_PTR||t->kind==TY_ARENA||t->kind==TY_FILE) { size=8;a=8; }
-    else if(t->kind==TY_SLICE) { size=32;a=8; }
+    if(t->kind==TY_INT) {
+        size=(size_t)t->bits/8;
+        switch(t->bits){case 8:a=_Alignof(int8_t);break;case 16:a=_Alignof(int16_t);break;case 32:a=_Alignof(int32_t);break;default:a=_Alignof(int64_t);break;}
+    }
+    else if(t->kind==TY_BOOL) {size=sizeof(bool);a=_Alignof(bool);}
+    else if(t->kind==TY_STRING) { size=sizeof(struct {const char *data;size_t len;});a=_Alignof(struct {const char *data;size_t len;}); }
+    else if(t->kind==TY_REF||t->kind==TY_PTR||t->kind==TY_ARENA||t->kind==TY_FILE||t->kind==TY_THREAD) { size=sizeof(void *);a=_Alignof(void *); }
+    else if(t->kind==TY_SLICE) { size=sizeof(struct {void *owner;size_t offset,len;});a=_Alignof(struct {void *owner;size_t offset,len;}); }
     else if(t->kind==TY_ARRAY) {
         size_t es=layout(c,t->elem,&a,depth+1,where);
         if(es && t->count>1048576/es) km_error(cx(c),where->tok,"E105","type exceeds the 1 MiB maximum value size");
         size=es*t->count;
     } else if(t->kind==TY_RESULT) {
-        size_t es=layout(c,t->elem,&a,depth+1,where); if(a<8) a=8;
-        size=16+es; size=(size+a-1)/a*a;
+        size_t es=layout(c,t->elem,&a,depth+1,where);
+        size=(sizeof(bool)+a-1)/a*a+es;
+        if(a<_Alignof(bool))a=_Alignof(bool);
+        size_t code_align=_Alignof(int64_t);
+        size=(size+code_align-1)/code_align*code_align+sizeof(int64_t);
+        if(a<code_align)a=code_align;
+        size=(size+a-1)/a*a;
     } else if(t->kind==TY_TUPLE) {
         for(size_t i=0;i<t->members.len;i++){size_t fa,fs=layout(c,t->members.data[i],&fa,depth+1,where);if(fa>a)a=fa;size=(size+fa-1)/fa*fa+fs;if(size>1048576)km_error(cx(c),where->tok,"E105","tuple exceeds 1 MiB");}
         size=size?(size+a-1)/a*a:1;
@@ -223,8 +266,8 @@ static size_t layout(Checker *c,Type *t,size_t *align,unsigned depth,Node *where
             for(size_t j=0;j<v->params.len;j++){size_t fa,fs=layout(c,v->params.data[j]->type,&fa,depth+1,where);if(fa>va)va=fa;vs=(vs+fa-1)/fa*fa+fs;if(vs>1048576)km_error(cx(c),where->tok,"E105","variant exceeds 1 MiB");}
             vs=vs?(vs+va-1)/va*va:1;if(vs>largest)largest=vs;if(va>a)a=va;
         }
-        if(a<4)a=4;
-        size=(4+a-1)/a*a+largest;size=(size+a-1)/a*a;
+        if(a<_Alignof(uint32_t))a=_Alignof(uint32_t);
+        size=(sizeof(uint32_t)+a-1)/a*a+largest;size=(size+a-1)/a*a;
     } else if(t->kind==TY_STRUCT) {
         Node *s=t->decl;
         for(size_t i=0;i<s->fields.len;i++) {
@@ -236,6 +279,7 @@ static size_t layout(Checker *c,Type *t,size_t *align,unsigned depth,Node *where
         size=size?(size+a-1)/a*a:1;
     }
     if(size>1048576) km_error(cx(c),where->tok,"E105","type exceeds the 1 MiB maximum value size");
+    t->layout_size=size;t->layout_align=a;t->layout_state=2;
     *align=a;return size;
 }
 static void check_size(Checker *c,Type *t,Node *n) { size_t a; (void)layout(c,t,&a,0,n); }
@@ -277,6 +321,9 @@ static Binding *binding_for(Checker *c,Symbol *s) {
 static Symbol *lookup(Checker *c,const char *name,Node *n,bool use) {
     Binding *b=local_binding(c,name);
     if(b) {if(use)b->sym->used=true;return b->sym;}
+    Suggestion best={.distance=3};
+    for(Binding *candidate=c->bindings;candidate;candidate=candidate->next)if(candidate->alive)suggest_candidate(&best,name,candidate->sym->name,candidate->sym->tok);
+    suggest_finish(c,&best);
     km_error(cx(c),n->tok,"E107","unknown variable '%s'",name);
 }
 static bool has_binding(Checker *c,const char *name) { return local_binding(c,name)!=NULL; }
@@ -388,7 +435,12 @@ static Place place(Checker *c,Node *n,bool write,bool read) {
             if(t->kind!=TY_STRUCT) km_error(cx(c),n->tok,"E113","type %s has no fields",km_type_name(cx(c),t));
             Node *field=NULL;
             for(size_t i=0;i<t->decl->fields.len;i++) if(eq(t->decl->fields.data[i]->name,n->name)) field=t->decl->fields.data[i];
-            if(!field) km_error(cx(c),n->tok,"E113","struct %s has no field '%s'",km_type_name(cx(c),t),n->name);
+            if(!field) {
+                Suggestion best={.distance=3};
+                for(size_t i=0;i<t->decl->fields.len;i++){Node *candidate=t->decl->fields.data[i];suggest_candidate(&best,n->name,candidate->name,candidate->tok);}
+                suggest_finish(c,&best);
+                km_error(cx(c),n->tok,"E113","struct %s has no field '%s'",km_type_name(cx(c),t),n->name);
+            }
             n->type=field->type;
         }
     } else {
@@ -529,7 +581,7 @@ static void arity(Checker *c,Node *n,size_t count) {
 static Type *builtin_type(Checker *c,TypeKind kind) {
     switch(kind){
     case TY_VOID:return cx(c)->t_void;case TY_INT:return cx(c)->ints[3];case TY_BOOL:return cx(c)->t_bool;
-    case TY_STRING:return cx(c)->t_string;case TY_FILE:return cx(c)->t_file;case TY_ARENA:return cx(c)->t_arena;
+    case TY_STRING:return cx(c)->t_string;case TY_FILE:return cx(c)->t_file;case TY_ARENA:return cx(c)->t_arena;case TY_THREAD:return cx(c)->t_thread;
     case TY_SLICE:return km_type(cx(c),TY_SLICE,cx(c)->t_string);
     default:km_error(cx(c),(Token){0},"E900","invalid builtin signature");
     }
@@ -547,6 +599,19 @@ static Type *call(Checker *c,Node *n,Type *expected,bool persistent) {
         const char *name=callee->name;Type *cast=int_named(cx(c),name);
         callee->type=km_type(cx(c),TY_FUNCTION,NULL);n->builtin=cast?"cast":callee->name;
         if(n->typearg&&!eq(name,"alloc")&&!eq(name,"arenaAlloc")) km_error(cx(c),n->tok,"E119","type arguments require alloc or arenaAlloc");
+        if(eq(name,"threadSpawn")) {
+            arity(c,n,2);Node *worker=n->args.data[0],*fn=NULL;
+            if(worker->kind==N_NAME&&!has_binding(c,worker->name))fn=find_fn(c,module_of(c->fn),worker->name,NULL);
+            else if(worker->kind==N_FIELD&&worker->base->kind==N_NAME&&!has_binding(c,worker->base->name)) {
+                Module *m=module_of(c->fn);
+                for(Import *i=m?m->imports:NULL;i;i=i->next)if(eq(i->alias,worker->base->name)){fn=find_fn(c,i->target,worker->name,NULL);break;}
+            }
+            if(!fn||fn->receiver||fn->external||fn->params.len!=1||!km_type_equal(fn->params.data[0]->type,cx(c)->ints[3])||!km_type_equal(fn->result,cx(c)->ints[3]))
+                km_error(cx(c),worker->tok,"E150","threadSpawn requires a named Kremen worker with signature func(value i64) i64");
+            worker->type=km_type(cx(c),TY_FUNCTION,NULL);worker->function=fn;n->function=fn;
+            same(c,expr(c,n->args.data[1],cx(c)->ints[3],false),cx(c)->ints[3],n->args.data[1]);
+            release_since(c,baseline);return km_type(cx(c),TY_RESULT,cx(c)->t_thread);
+        }
         for(size_t i=0;i<sizeof(resource_specs)/sizeof(resource_specs[0]);i++)if(eq(name,resource_specs[i].name)) {
             const BuiltinSpec *spec=&resource_specs[i];arity(c,n,spec->count);
             if(spec->unsafe_call&&!c->unsafe_depth)km_error(cx(c),n->tok,"E132","%s requires an unsafe block",name);
@@ -567,6 +632,7 @@ static Type *call(Checker *c,Node *n,Type *expected,bool persistent) {
             if(!c->unsafe_depth)km_error(cx(c),n->tok,"E132","alloc requires an unsafe block");
             if(!n->typearg)km_error(cx(c),n->tok,"E119","alloc requires an element type: alloc[T](count)");
             n->typearg=valid_type(c,n->typearg,n,false);check_size(c,n->typearg,n);
+            if(contains_thread(n->typearg))km_error(cx(c),n->tok,"E150","slice elements cannot contain thread handles");
             if(contains_address(n->typearg))km_error(cx(c),n->tok,"E130","slice elements cannot contain references or raw pointers");
             if(contains_result_value(n->typearg))km_error(cx(c),n->tok,"E130","zero-filled allocation cannot contain result values; results require explicit initialization");
             if(arena)same(c,expr(c,n->args.data[0],cx(c)->t_arena,false),cx(c)->t_arena,n->args.data[0]);
@@ -623,28 +689,53 @@ static Type *call(Checker *c,Node *n,Type *expected,bool persistent) {
     if(n->typearg)km_error(cx(c),n->tok,"E119","type arguments are only supported by alloc");
     if(callee->kind==N_NAME) {
         fn=find_fn(c,module_of(c->fn),callee->name,NULL);
-        if(!fn)km_error(cx(c),callee->tok,"E107","unknown function '%s'",callee->name);
+        if(!fn){
+            Suggestion best={.distance=3};
+            for(size_t i=0;i<cx(c)->functions.len;i++){Node *candidate=cx(c)->functions.data[i];if(!candidate->receiver&&module_of(candidate)==module_of(c->fn))suggest_candidate(&best,callee->name,candidate->name,candidate->tok);}
+            static const char *names[]={"print","println","readInt","readLine","readIntResult","len","assert","panic","raw","alloc","arenaAlloc","free","slice","ok","fail","threadSpawn"};
+            for(size_t i=0;i<sizeof(names)/sizeof(*names);i++)suggest_candidate(&best,callee->name,names[i],(Token){0});
+            for(size_t i=0;i<sizeof(resource_specs)/sizeof(*resource_specs);i++)suggest_candidate(&best,callee->name,resource_specs[i].name,(Token){0});
+            suggest_finish(c,&best);
+            km_error(cx(c),callee->tok,"E107","unknown function '%s'",callee->name);
+        }
     } else if(callee->kind==N_FIELD) {
         Node *r=callee->base;
         char *type_name=type_expression_name(c,r);
         Node *algebraic=type_name?find_struct(c,module_of(c->fn),type_name,r->tok):NULL;
         if(algebraic&&algebraic->kind==N_ENUM) {
             Node *variant=NULL;for(size_t i=0;i<algebraic->fields.len;i++)if(eq(algebraic->fields.data[i]->name,callee->name))variant=algebraic->fields.data[i];
-            if(!variant)km_error(cx(c),callee->tok,"E141","unknown variant '%s'",callee->name);
+            if(!variant){
+                Suggestion best={.distance=3};
+                for(size_t i=0;i<algebraic->fields.len;i++){Node *candidate=algebraic->fields.data[i];suggest_candidate(&best,callee->name,candidate->name,candidate->tok);}
+                suggest_finish(c,&best);km_error(cx(c),callee->tok,"E141","unknown variant '%s'",callee->name);
+            }
             if(variant->params.len!=n->args.len)km_error(cx(c),n->tok,"E119","variant '%s' expects %zu arguments",variant->name,variant->params.len);
             for(size_t i=0;i<n->args.len;i++)same(c,expr(c,n->args.data[i],variant->params.data[i]->type,false),variant->params.data[i]->type,n->args.data[i]);
             callee->type=km_type(cx(c),TY_FUNCTION,NULL);n->function=variant;n->builtin="variant";n->integer=variant->integer;return algebraic->type;
         }
         if(r->kind==N_NAME&&!has_binding(c,r->name)) {
             Module *m=module_of(c->fn);
-            for(Import *i=m?m->imports:NULL;i;i=i->next) if(eq(i->alias,r->name)) {fn=find_fn(c,i->target,callee->name,NULL);break;}
+            for(Import *i=m?m->imports:NULL;i;i=i->next) if(eq(i->alias,r->name)) {
+                fn=find_fn(c,i->target,callee->name,NULL);
+                if(!fn){
+                    Suggestion best={.distance=3};
+                    for(size_t j=0;j<cx(c)->functions.len;j++){Node *candidate=cx(c)->functions.data[j];if(!candidate->receiver&&module_of(candidate)==i->target)suggest_candidate(&best,callee->name,candidate->name,candidate->tok);}
+                    suggest_finish(c,&best);
+                    km_error(cx(c),callee->tok,"E107","unknown function '%s' in imported module '%s'",callee->name,r->name);
+                }
+                break;
+            }
         }
         if(!fn) {
             Type *rt=hint(c,r);if(!rt)rt=expr(c,r,NULL,false);
             Type *base=rt->kind==TY_REF?rt->elem:rt;
             if(base->kind!=TY_STRUCT&&base->kind!=TY_ENUM)km_error(cx(c),callee->tok,"E119","method receiver must be a named type or an imported module");
             fn=find_fn(c,NULL,callee->name,base);
-            if(!fn)km_error(cx(c),callee->tok,"E107","unknown method '%s'",callee->name);
+            if(!fn){
+                Suggestion best={.distance=3};
+                for(size_t i=0;i<cx(c)->functions.len;i++){Node *candidate=cx(c)->functions.data[i];if(!candidate->receiver)continue;Type *receiver=candidate->receiver->type;if(receiver->kind==TY_REF)receiver=receiver->elem;if(km_type_equal(receiver,base))suggest_candidate(&best,callee->name,candidate->name,candidate->tok);}
+                suggest_finish(c,&best);km_error(cx(c),callee->tok,"E107","unknown method '%s'",callee->name);
+            }
             Type *want=fn->receiver->type;
             if(want->kind==TY_REF) {
                 if(rt->kind==TY_REF)ref_argument(c,r,want,delayed);
@@ -685,6 +776,7 @@ static Type *expr(Checker *c,Node *n,Type *expected,bool persistent) {
         if(eq(n->op,"&")||eq(n->op,"&mut")) {
             if(n->value->kind!=N_NAME)km_error(cx(c),n->tok,"E130","borrow requires a named local; borrow the entire value");
             Place p=place(c,n->value,false,false);
+            if(contains_thread(p.type))km_error(cx(c),n->tok,"E150","thread handles cannot be borrowed or converted to addresses");
             if(p.type->kind==TY_REF||p.type->kind==TY_PTR)km_error(cx(c),n->tok,"E130","direct reference/pointer reborrows are forbidden; pass it to a function");
             p.root->used=true;bool mut=eq(n->op,"&mut");
             if(mut&&!p.root->mutable)km_error(cx(c),n->tok,"E131","cannot mutably borrow an immutable binding");
@@ -730,7 +822,7 @@ static Type *expr(Checker *c,Node *n,Type *expected,bool persistent) {
     case N_TUPLE: {
         if(expected&&expected->kind==TY_TUPLE&&expected->members.len!=n->values.len)km_error(cx(c),n->tok,"E140","tuple arity does not match its type");
         Type *t=km_type(cx(c),TY_TUPLE,NULL);
-        for(size_t i=0;i<n->values.len;i++){Type *want=expected&&expected->kind==TY_TUPLE?expected->members.data[i]:NULL;Type *member=expr(c,n->values.data[i],want,false);if(want)same(c,member,want,n->values.data[i]);if(member->kind==TY_VOID||contains_address(member))km_error(cx(c),n->tok,"E130","tuple members must be ordinary values");km_types_push(cx(c),&t->members,member);}
+        for(size_t i=0;i<n->values.len;i++){Type *want=expected&&expected->kind==TY_TUPLE?expected->members.data[i]:NULL;Type *member=expr(c,n->values.data[i],want,false);if(want)same(c,member,want,n->values.data[i]);if(member->kind==TY_VOID||contains_address(member))km_error(cx(c),n->tok,"E130","tuple members must be ordinary values");if(contains_thread(member))km_error(cx(c),n->tok,"E150","tuple members cannot contain thread handles");km_types_push(cx(c),&t->members,member);}
         n->type=t;check_size(c,t,n);break;
     }
     case N_STRUCTLIT: {
@@ -847,7 +939,7 @@ static bool statement(Checker *c,Node *n) {
         Loan *baseline=c->loans;
         if(!n->value) {
             if(!want)km_error(cx(c),n->tok,"E116","variable requires a type or initializer");
-            if(n->flag||contains_address(want)||contains_result_value(want)||want->kind==TY_ARENA||want->kind==TY_FILE)km_error(cx(c),n->tok,"E116","this value requires an explicit initializer");
+            if(n->flag||contains_address(want)||contains_result_value(want)||want->kind==TY_ARENA||want->kind==TY_FILE||want->kind==TY_THREAD)km_error(cx(c),n->tok,"E116","this value requires an explicit initializer");
             t=want;
         } else {
             t=expr(c,n->value,want,true);
@@ -915,7 +1007,7 @@ static bool signature_equal(Node *a,Node *b) {
 static void resolve_fields(Checker *c,Nodes fields) {
     for(size_t i=0;i<fields.len;i++){
         Node *f=fields.data[i];for(size_t j=0;j<i;j++)if(eq(f->name,fields.data[j]->name))km_error(cx(c),f->tok,"E102","duplicate field '%s'",f->name);
-        f->type=valid_type(c,f->annotation,f,false);if(contains_address(f->type))km_error(cx(c),f->tok,"E130","aggregate fields cannot contain references or pointers");
+        f->type=valid_type(c,f->annotation,f,false);if(contains_address(f->type))km_error(cx(c),f->tok,"E130","aggregate fields cannot contain references or pointers");if(contains_thread(f->type))km_error(cx(c),f->tok,"E150","aggregate fields cannot contain thread handles");
     }
 }
 bool km_check(Context *ctx) {
@@ -978,7 +1070,7 @@ bool km_check(Context *ctx) {
             if(base->kind!=TY_STRUCT&&base->kind!=TY_ENUM)km_error(ctx,n->receiver->tok,"E103","method receiver must be a named value type");
             if(module_of(base->decl)!=module_of(n))km_error(ctx,n->receiver->tok,"E103","a method must be declared in its receiver type's module");
         } else if(builtin_name(n->name)||find_struct(c,module_of(n),n->name,n->tok))km_error(ctx,n->tok,"E102","duplicate or reserved declaration '%s'",n->name);
-        n->result=valid_type(c,n->result,n,true);if(contains_address(n->result))km_error(ctx,n->tok,"E130","functions cannot return references or raw pointers");check_size(c,n->result,n);
+        n->result=valid_type(c,n->result,n,true);if(contains_address(n->result))km_error(ctx,n->tok,"E130","functions cannot return references or raw pointers");if(contains_thread(n->result))km_error(ctx,n->tok,"E150","functions cannot return thread handles; join the worker in its creator thread");check_size(c,n->result,n);
         for(size_t j=0;j<n->params.len;j++){Node *p=n->params.data[j];p->type=valid_type(c,p->annotation,p,false);check_size(c,p->type,p);}
         if(!n->body&&!n->external&&!(n->tok.src&&n->tok.src->header))km_error(ctx,n->tok,"E119","function declarations without a body belong in .krh headers or must be extern");
         if(n->external&&n->body)km_error(ctx,n->tok,"E119","extern functions cannot define a body");

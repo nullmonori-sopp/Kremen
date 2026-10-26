@@ -54,7 +54,7 @@ func driver_usage_error(message string) i64 {
 
 func driver_help() i64 {
     unsafe {
-        host_print("Kremen selfhost 0.4.2 (bootstrap subset)\n", false)
+        host_print("Kremen selfhost 0.4.3 (bootstrap subset)\n", false)
         host_print("usage: kremen-selfhost check SOURCE.kr [--cc COMPILER] [-O0..-O3]\n", false)
         host_print("       kremen-selfhost emit-c SOURCE.kr -o FILE\n", false)
         host_print("       kremen-selfhost build SOURCE.kr [-o FILE] [--cc COMPILER] [-O0..-O3]\n", false)
@@ -395,7 +395,7 @@ func main() i64 {
             return driver_help()
         }
         if host_argc() == 2 && rt_equal(rt_arg(1), "--version") {
-            host_print("Kremen selfhost 0.4.2 (bootstrap subset)\n", false)
+            host_print("Kremen selfhost 0.4.3 (bootstrap subset)\n", false)
             return 0
         }
         var status i64 = driver_parse()

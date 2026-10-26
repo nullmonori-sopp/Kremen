@@ -119,7 +119,7 @@ pass 'failed-result access identifies its source expression'
 
 printf 'func main() { println("hello") }\n' > "$WORK/input.kr"
 "$KREMEN" emit-c "$WORK/input.kr" -o "$WORK/standalone.c" > "$WORK/output" 2> "$WORK/error" || fail 'emit no-check program'
-"${CC:-cc}" -std=c11 -Wall -Wextra -Wpedantic -Werror "$WORK/standalone.c" -o "$WORK/program" 2> "$WORK/error" || fail 'strict C without any location entries'
+"${CC:-cc}" -std=c11 -pthread -Wall -Wextra -Wpedantic -Werror "$WORK/standalone.c" -o "$WORK/program" 2> "$WORK/error" || fail 'strict C without any location entries'
 "$WORK/program" > "$WORK/output"
 grep -Fx 'hello' "$WORK/output" > /dev/null || fail 'standalone C changed behavior'
 pass 'programs without checked operations still compile as self-contained strict C'

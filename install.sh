@@ -87,6 +87,9 @@ for support in bootstrap.kr toolchain.kr stage0.c runtime.c runtime.h driver.c h
     install -m 644 "$SOURCE_ROOT/selfhost/$support" "$WORK/share/kremen/selfhost/$support"
 done
 install -m 644 "$SOURCE_ROOT/runtime/kremen_rt.h" "$WORK/share/kremen/runtime/kremen_rt.h"
+if [ -f "$SOURCE_ROOT/LICENSE" ]; then
+    install -m 644 "$SOURCE_ROOT/LICENSE" "$WORK/share/doc/kremen/LICENSE"
+fi
 for document in "$SOURCE_ROOT"/*.md; do
     install -m 644 "$document" "$WORK/share/doc/kremen/$(basename -- "$document")"
 done

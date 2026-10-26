@@ -1,34 +1,43 @@
-# Справочник Kremen 0.4.0
+# Kremen language reference
 
-Основной компилятор — `build/kremen` после `make` либо установленная команда `kremen`. Строгая типизация и runtime-проверки действуют при всех уровнях оптимизации. Это описание основной реализации `native/`; отдельный bootstrap имеет меньше возможностей.
+This page describes the full language accepted by `kremen` in 0.4.3. It is a reference for rules and built-ins. If the terms are unfamiliar, start with [the tutorial](tutorial.md). The compiler under `selfhost/` accepts a smaller language; its [reference](../selfhost/README.md) is separate.
 
-## Файлы, модули и функции
+Examples that show only a declaration or block are fragments to put inside a program. Complete programs include `func main()`.
 
-| Расширение | Назначение |
+## Files and local imports
+
+| Extension | Purpose |
 | --- | --- |
-| `.kr` | Исходный код Kremen |
-| `.krh` | Объявления API Kremen, без тел функций |
-| `.c`, `.h` | Backend, runtime и сгенерированный C |
-| `.S` | Asm с препроцессором |
-| `.o`, `.a` | Нативные объектные файлы и архивы |
+| `.kr` | Kremen source code |
+| `.krh` | Kremen API declarations, without function bodies |
+| `.c`, `.h` | Compiler/runtime implementation and generated C |
+| `.S` | Assembly source processed by the C preprocessor |
+| `.o`, `.a` | Native object files and archives |
 
-В начале допустимо `package main`. Объявления верхнего уровня — функции, структуры, enum и методы. Глобальные переменные, вложенные функции и замыкания основным языком не поддерживаются. Точка входа — `func main()` без параметров и результата.
+`package main` is optional at the beginning of a file. Top-level declarations are functions, methods, structs, enums, and imports. The full language has no global variables, nested functions, or closures. The entry point is `func main()` with no arguments or result.
+
+Statements end at a suitable newline or an explicit `;`. Comments use `//` or `/* ... */`. Blocks use braces. Parameter syntax is `name type`; a function's result type follows its parameter list. Omitting the result type means the function returns no value.
+
+An import names a local file or directory:
 
 ```go
-package main
-import vec "math/vec"
-
-func twice(value i64) i64 { return value * 2 }
-func main() { println(twice(21), vec.answer()) }
+import "math/vec"
+import vectors "math/vec"
 ```
 
-`import "math/vec"` получает имя `vec`; явный псевдоним пишется перед строкой. Путь локальный, без скачивания пакетов. Можно импортировать файл без `.kr` либо каталог с несколькими `.kr` и `.krh`. Пути разрешаются относительно исходного модуля и проверяются после разрешения символических ссылок; выход за корень проекта и циклы импортов запрещены. Корень по умолчанию — каталог входного файла, переопределение: `--root /project`.
+These are alternative imports: the first uses `vec` as its qualifier; the second uses `vectors`. The path is resolved relative to the importing file's directory. Import a file without its `.kr` extension, or a directory containing multiple `.kr` and `.krh` files. No dependency is downloaded. Cycles and paths outside the project root, including symlink escapes, are rejected. The default root is the entry file's directory; `--root /absolute/project` selects a wider root.
 
-Парный `.krh` описывает типы и сигнатуры; определения обязаны совпасть по именам, полям и типам. Объявление функции без тела относится к `.krh` либо требует `extern`; обычное объявление из заголовка должно иметь определение в исходниках. Произвольный C FFI и подключение внешних объектов через CLI пока не завершены.
+A complete module example is in [examples/modules](../examples/modules/main.kr):
 
-Инструкции разделяются переводом строки или `;`. Комментарии: `//` и `/* ... */`. Тела функций и управляющих конструкций заключаются в `{ ... }`. Параметр записывается `имя тип`, тип результата — после `)`; отсутствие типа означает отсутствие результата.
+```sh
+./build/kremen run examples/modules/main.kr
+```
 
-## Переменные и типы
+A paired `.krh` file is loaded automatically. Its type definitions and function signatures must agree with the implementation. A non-`extern` function declared in a header must have an implementation. Import the `.kr` implementation, not the `.krh` file. Headers are optional; use them when you want a separate API declaration. General C FFI and command-line linking of arbitrary external objects are unfinished.
+
+## Bindings and types
+
+These are alternative local declaration forms:
 
 ```go
 var count i64 = 4
@@ -37,48 +46,56 @@ next := 5
 const limit i64 = 10
 ```
 
-`var` изменяем, `const` запрещает присваивание; `:=` выводит тип. Литерал без контекста получает `i64`. Неиспользуемые имена — ошибка; намеренно неиспользуемые начинаются с `_`. Затенение видимых имён запрещено. Отбросить результат явно можно через `_ = operation()`.
+`var` and `:=` create mutable bindings; `const` prevents assignment. A literal without a more specific context defaults to `i64`. A variable needs a type or an initializer; a constant needs an initializer. Unused bindings and parameters are errors unless their names start with `_`. Shadowing a visible or reserved name is rejected. `_ = expression` explicitly discards a value.
 
-| Тип | Значение |
+| Type | Meaning |
 | --- | --- |
-| `i8`, `i16`, `i32`, `i64` | Знаковые целые |
-| `u8`, `u16`, `u32`, `u64` | Беззнаковые целые |
-| `bool` | `true`, `false` |
-| `string` | Неизменяемая последовательность байтов |
-| `[N]T` | Массив фиксированной длины |
-| `[]T` | Дескриптор динамической памяти/представления |
-| `&T`, `&mut T` | Обычная и изменяемая ссылка |
-| `*T` | Сырой указатель, операции в `unsafe` |
-| `!T` | Успех со значением либо положительный код ошибки |
-| `(T1, T2)` | Кортеж |
-| `arena`, `file` | Проверяемые дескрипторы ресурсов |
+| `i8`, `i16`, `i32`, `i64` | Signed integers of the stated bit width |
+| `u8`, `u16`, `u32`, `u64` | Unsigned integers of the stated bit width |
+| `bool` | `true` or `false` |
+| `string` | Immutable byte sequence |
+| `[N]T` | Fixed-size array of `T` |
+| `[]T` | Slice descriptor for shared dynamic storage |
+| `&T`, `&mut T` | Shared read reference or exclusive mutable reference |
+| `*T` | Raw pointer |
+| `!T` | Success containing `T`, or a positive error code |
+| `(T1, T2)` | Tuple with ordered members |
+| `arena`, `file` | Checked resource handles |
+| `thread` | Creator-owned handle for a native worker thread |
 
-Структуры и enum — именованные типы. Разные целочисленные типы не смешиваются неявно: `i32(value)` выполняет проверяемое преобразование. Литералы бывают десятичными, `0xff`, `0b1010`, `0o17`. Есть арифметика `+ - * / %`, побитовые `& | ^ ~ << >>`, сравнения, логические `&& || !`, составные присваивания, инструкции `++` и `--`. Условие обязано быть `bool`. Короткое замыкание и порядок вычисления аргументов слева направо сохраняются.
+Structs and enums are named types. Integer types do not mix implicitly: `i32(value)` explicitly converts and checks the range. Integer literals may be decimal, hexadecimal (`0xff`), binary (`0b1010`), or octal (`0o17`). Floating point and general user-defined generics are not implemented.
 
-Нулевая инициализация допускается для обычных значений. Результаты, ссылки, указатели и отдельные дескрипторы `arena`/`file` требуют явного инициализатора. Для enum нулевое значение — первый вариант с нулевой полезной нагрузкой; если она требует явного результата `!T`, нулевая инициализация запрещена. Результаты внутри составных значений также нельзя оставить неинициализированными.
+Ordinary values may be zero-initialized. Results, references, pointers, and standalone `arena`/`file`/`thread` handles require initialization. A composite containing a result also cannot be left zero-initialized. The zero value of an enum is its first variant with zeroed payload, provided that payload permits zero initialization.
 
-Строковые escape: `\n`, `\r`, `\t`, `\0`, `\\`, `\"`. `len(string)` возвращает байты, строки могут содержать NUL. Изменяемого побайтового доступа к строкам нет. Дробных типов и универсальных пользовательских generic-функций пока нет.
+Strings support `\n`, `\r`, `\t`, `\0`, `\\`, `\"`, `\xNN`, `\uNNNN`, and `\UNNNNNNNN` escapes. Unicode escapes must denote valid scalar values; `\xNN` supplies a byte. Literal source text must use valid UTF-8. Strings may contain NUL bytes. `len(text)` counts bytes, not displayed characters. Mutable byte indexing of strings is not provided.
 
-## Условия и циклы
+## Operators and control flow
+
+Arithmetic: `+ - * / %`. Bitwise: `& | ^ ~ << >>`. Comparisons: `== != < <= > >=`. Boolean operators: `&& || !`. Compound assignments and statement forms `++` and `--` are supported. An `if` or loop condition must be `bool`.
+
+Expressions and arguments are evaluated left to right. `&&` and `||` evaluate their right operand only when needed. Integer overflow, invalid shifts, division by zero, and out-of-range conversions are errors; optimization does not remove safety checks.
 
 ```go
-if count > 0 { println(count) } else { println(0) }
-for i := 0; i < 3; i++ { println(i) }
-for count > 0 { count -= 1 }
-for { break }
+func main() {
+    var remaining = 3
+    if remaining > 0 { println("ready") } else { println("empty") }
+    for index := 0; index < 3; index++ { println(index) }
+    for remaining > 0 { remaining -= 1 }
+    for { break }
+}
 ```
 
-`break` завершает ближайший цикл, `continue` переходит к следующей итерации с выполнением шага трёхчастного `for`. `return` завершает функцию. Компилятор проверяет недостижимость и наличие результата на всех возможных путях. `break` внутри `match` относится к окружающему циклу.
+`break` leaves the nearest loop. `continue` starts its next iteration, including the post step of a three-clause loop. `return` leaves a function. The compiler rejects unreachable statements and missing returns. A `break` inside `match` still refers to the surrounding loop.
 
-## Массивы, структуры и методы
+## Arrays, structs, and methods
 
 ```go
 type Counter struct { value i64 }
-func (c &mut Counter) add(delta i64) { c.value += delta }
-func (c Counter) current() i64 { return c.value }
+func (counter &mut Counter) add(amount i64) { counter.value += amount }
+func (counter Counter) current() i64 { return counter.value }
 
 func main() {
-    var values [3]i64 = [3]i64{10, 20, 30}
+    var values = [3]i64{10, 20, 30}
     values[1] = 25
     var counter = Counter{value: values[1]}
     counter.add(2)
@@ -86,30 +103,40 @@ func main() {
 }
 ```
 
-Длина массива — положительный литерал и часть типа; массивы копируются по значению. Литерал структуры задаёт каждое поле ровно один раз. По значению передаются также структуры, enum и кортежи. Ссылочный получатель метода заимствует исходную именованную переменную; обычный получатель получает копию. Методы допускаются у собственных структур и enum модуля. Наследования, интерфейсов и виртуальной диспетчеризации нет.
+Array length is a positive literal and part of its type. Array indices start at zero and are checked. Arrays, structs, enums, and tuples are copied by value. A struct literal supplies every field exactly once.
 
-Индекс массива/среза проверяется перед доступом. Текущие ограничения: до 1 000 000 элементов в типе массива, расчётный размер одного значения до 1 MiB, глубина анализа раскладки до 128. Это ограничения компилятора, а не общий лимит памяти программы.
+A value receiver gets a copy. A reference receiver borrows the named local receiver; `&mut` allows changes to it. Methods belong to the declaring module's own struct or enum types. There is no inheritance, interface system, or virtual dispatch.
 
-## Ссылки и указатели
+An array type may have at most 1,000,000 elements; the estimated layout of a single value is limited to 1 MiB. Layout analysis has a depth limit of 128. These are compiler limits, not a total program-memory budget.
+
+## References and raw pointers
+
+This complete example changes a variable through a reference, then through a pointer:
 
 ```go
-var number = 1
-{
-    var reference = &mut number
-    *reference += 1
-}
-println(number)
-unsafe {
-    var pointer = raw(&mut number)
-    *pointer += 1
+func main() {
+    var number = 1
+    {
+        var reference = &mut number
+        *reference += 1
+    }
+    unsafe {
+        var pointer = raw(&mut number)
+        *pointer += 1
+    }
+    println(number)
 }
 ```
 
-Заимствуется именованная переменная целиком. Допустимы несколько обычных ссылок либо одна изменяемая; конфликты чтения и записи проверяются статически. Локальная ссылка удерживает заимствование до конца своего блока. Ссылки нельзя переприсваивать, возвращать из функций или хранить в составных значениях. Временное заимствование аргумента обычно заканчивается после вызова; для `defer` — после выхода из блока.
+A borrow covers the whole named variable. Multiple shared references may coexist; a mutable reference excludes conflicting access. A local reference holds its loan until the end of its lexical block. A temporary argument borrow normally ends after the call; a deferred argument keeps its loan until cleanup.
 
-Создание через `raw(reference)` и разыменование сырого указателя требуют `unsafe`; создание raw не отменяет учёт заимствований. Арифметики указателей и произвольного преобразования целого в адрес нет. Проверка null не доказывает корректность произвольной памяти в `unsafe`.
+References and raw pointers cannot be reassigned, returned, or stored inside structs, enums, tuples, results, arrays, or slices. There are no user-specified lifetime parameters. These restrictions are intentionally conservative.
 
-## Срезы и динамическая память
+`raw(reference)` and raw-pointer dereferencing require `unsafe`. Converting to a raw pointer preserves the loan. A pointer from `raw(&number)` remains read-only; writes or writable `*T` parameters require provenance from `&mut`. Pointer arithmetic and integer-to-address casts are not provided. A null check cannot prove that arbitrary raw memory is valid.
+
+## Slices and allocation
+
+Inside a function:
 
 ```go
 unsafe {
@@ -121,9 +148,11 @@ unsafe {
 }
 ```
 
-`alloc[T](count)` возвращает обнулённый `[]T`; `free(values)` требует полного исходного среза. Оба вызова требуют `unsafe`. `slice(values, start, end)` создаёт представление без копирования; границы включают `start`, исключают `end`. `len` возвращает `i64`. Присваивание среза копирует дескриптор, а не память. После освобождения все его копии считаются устаревшими. Повторное освобождение и доступ к устаревшему дескриптору вызывают диагностическую остановку. Автоматического увеличения, `append` и GC нет.
+`alloc[T](count)` returns a zero-filled `[]T`. `free(values)` requires the original full allocation, not a partial view. Both operations require `unsafe`. Allocating zero-filled results or composites containing results is rejected because a result needs explicit success or failure initialization.
 
-## Результаты ошибок
+`slice(values, start, end)` creates a view without copying data; start is inclusive and end exclusive. `len` returns `i64`. Descriptor copies share an owner. Freeing invalidates every copy; stale access, repeated release, and invalid bounds produce runtime errors. Assignment rechecks a slice owner after evaluating its right-hand side, since a call on that side could have freed or reset it. There is no automatic growth, `append`, or garbage collector.
+
+## Error results
 
 ```go
 func checked(value i64) !i64 {
@@ -140,38 +169,83 @@ func main() {
 }
 ```
 
-`!T` имеет `.ok` (`bool`), `.value` (`T`) и `.code` (`i64`, 0 при успехе). `ok`/`fail` требуют контекста `!T`; код ошибки обязан быть положительным. Доступ к `.value` при ошибке останавливает программу. `?` возвращает ту же ошибку из функции, возвращающей `!U`; успех становится значением `T`.
+`!T` has read-only fields `.ok` (`bool`), `.value` (`T`), and `.code` (`i64`, zero on success). `ok` and `fail` need an expected `!T` type, obtained from a return type or annotation such as `var answer !i64 = ok(42)`. A failure code must be positive. Accessing `.value` on failure stops the program.
 
-`catch` возвращает успешное значение либо вычисляет выражение после `catch`. Необязательное `code =>` связывает код только в запасном выражении. Тип запасного значения обязан совпасть с `T`. Операнд и выбранная ветвь вычисляются по одному разу. Можно также разобрать результат через `match`:
+`?` extracts success or returns the same failure code from the surrounding result-returning function. Its success type may differ from that function's success type. `catch fallback` extracts success or lazily evaluates a replacement of type `T`. `catch code => fallback` additionally binds an `i64` code inside that fallback. Each operand and selected branch is evaluated once.
+
+You can also use `match result { ok(value) => { ... }; fail(code) => { ... } }`. Results use ordinary values and branches, without language-level exception unwinding.
+
+## Input, output, and fatal errors
+
+| Built-in | Behavior |
+| --- | --- |
+| `print(values...)` | Print integers, booleans, or strings, with spaces between arguments |
+| `println(values...)` | As above, followed by a newline |
+| `readInt()` | Read an `i64`; stop on invalid input |
+| `readIntResult()` | Return `!i64`; codes 1 EOF, 2 format, 3 range, 4 stream error |
+| `readLine()` | Return a line as `string` |
+| `len(value)` | Return array, slice, or string length as `i64` |
+| `assert(condition)` | Stop with a diagnostic if false |
+| `panic(message)` | Report a string message and run the calling thread's cleanup; main exits, while a worker's join fails |
+
+Printing a struct or enum directly is unsupported; print its individual fields or match its variants.
+
+## Defer and cleanup
 
 ```go
-var result = checked(2)
-match result {
-    ok(value) => { println(value) }
-    fail(code) => { println("ошибка", code) }
-}
-```
-
-Результаты не используют исключения, `setjmp` или раскрутку стека программы. `readIntResult()` возвращает `!i64`: коды 1 — EOF, 2 — формат, 3 — диапазон, 4 — ошибка потока. `readInt()` останавливается при ошибке; `readLine()` возвращает строку, сохраняемую runtime до завершения.
-
-## Defer и очистка ресурсов
-
-```go
-func display() {
+func main() {
     var value = 1
-    defer println("захвачено", value)
+    defer println("captured", value)
     value = 2
     println(value)
 }
 ```
 
-Вывод: `2`, затем `захвачено 1`. `defer` принимает вызов с результатом void. Получатель метода и аргументы вычисляются при регистрации; вызов выполняется позже, в обратном порядке регистраций текущего лексического блока. Во вложенном блоке очистка происходит раньше, чем во внешнем.
+This prints `2`, then `captured 1`. `defer` requires a void call. Its arguments and method receiver are evaluated at registration. The call runs later, in reverse registration order, when the current lexical block exits.
 
-Очистка выполняется при обычном выходе, `return`, `?`, `break`, `continue`, пользовательском `panic` и runtime-ошибке. На каждой итерации цикла — свои регистрации. Значение возврата вычисляется до очистки. Ссылочный аргумент держит заимствование до выполнения очистки; собственник не должен менять конфликтующий ресурс заранее.
+Cleanup runs on ordinary block exit, `return`, `?`, `break`, `continue`, user `panic`, and runtime safety failure. Each loop iteration has its own registrations. A return value is computed before cleanup. A reference captured by `defer` keeps its borrow until cleanup.
 
-Это явный механизм деструкции; пользовательских автоматически вызываемых деструкторов типов нет. `panic` выполняет все активные очистки и завершает процесс ненулевым кодом. `recover`/перехват panic не поддерживаются. Для ожидаемых ошибок предназначен `catch`. При `SIGKILL`, сбое самого процесса или аварии C-toolchain выполнение `defer` не гарантируется.
+This is explicit cleanup; there are no implicit user-defined destructors. There is no `recover` or panic-catching mechanism. Expected failure belongs in `!T`, `catch`, `?`, or `match`. In a worker thread, panic runs that worker's cleanup and makes its join return `ECANCELED`; see [threads](#threads). Cleanup is not guaranteed after SIGKILL, process corruption, or a C-toolchain crash.
 
-## Арены
+## Threads
+
+The full runtime uses native POSIX threads. A worker is a named, non-receiver function with exactly one `i64` parameter and an `i64` result. Starting a worker copies its integer argument; joining retrieves its integer result.
+
+| Call | Result and purpose |
+| --- | --- |
+| `threadSpawn(worker, argument i64)` | `!thread`: start the named worker |
+| `threadJoin(handle thread)` | `!i64`: wait and retrieve its result |
+| `threadClose(handle thread)` | Void, idempotent wait suitable for `defer` |
+
+```go
+func square(value i64) i64 { return value * value }
+
+func compute() !i64 {
+    var first = threadSpawn(square, 6)?
+    defer threadClose(first)
+    var second = threadSpawn(square, 8)?
+    defer threadClose(second)
+    var left = threadJoin(first)?
+    var right = threadJoin(second)?
+    return ok(left + right)
+}
+
+func main() {
+    println(compute() catch code => -code)
+}
+```
+
+On success this prints `100`. Spawn and join failures use positive OS error codes. A worker panic is reported at its source location, cleans up that worker, and makes its creator's join fail with `ECANCELED`. An unhandled failed child makes creator cleanup fail; failure from an explicitly joined child can be handled through ordinary results.
+
+Only the creator may join or close a handle. Copies refer to the same worker state. A second explicit join returns `EBADF`; `threadClose` is a no-op after a completed join. Outstanding children are joined before the creator's thread resources are reclaimed, including at main-thread exit. There is no forced cancellation: a nonterminating worker can keep its creator waiting.
+
+Thread handles can be held in local variables and local `!thread` results, or passed to a helper executing in the same creator thread. They cannot be returned, borrowed, placed in ordinary composites, or nested inside further results. The worker interface cannot receive references, pointers, strings, slices, or other resource handles. Worker functions cannot capture local variables. Each worker has its own runtime allocation, arena, file, and cleanup bookkeeping. Limits are 256 unjoined children and 65,536 retained thread handles per creator. Generated `print`/`println` calls and input operations are serialized; filesystem effects on shared paths still need a program-level design.
+
+See [Working with threads](threads.md) for a step-by-step explanation and the current boundaries. Mutexes, atomics, channels, detached jobs, and timed joins are not part of this release. Full-language generated C must be compiled and linked with `-pthread`.
+
+## Arenas
+
+Inside a function:
 
 ```go
 arenablock memory {
@@ -184,11 +258,11 @@ arenablock memory {
 }
 ```
 
-`arenablock name` создаёт арену и регистрирует её освобождение при выходе. Отложенные вызовы тела выполняются раньше освобождения арены. Ручные `arenaNew()`, `arenaAlloc[T](memory, count)`, `arenaReset(memory)`, `arenaFree(memory)` требуют `unsafe`.
+`arenablock name` creates an arena and registers its release at block exit. Deferred calls in the body run before the automatic arena release. Manual `arenaNew()`, `arenaAlloc[T](arena, count)`, `arenaReset(arena)`, and `arenaFree(arena)` require `unsafe`.
 
-Память выделяется обнулёнными участками bump-арены, обычно чанками 64 KiB. Reset освобождает все чанки и инвалидирует ранее выданные срезы; арена остаётся доступной для новых выделений. Free инвалидирует и сам дескриптор. Освобождать отдельный arena-срез через `free` нельзя. Вышедшие за блок срезы не продлевают жизнь арены: доступ диагностируется во время выполнения. Повторное ручное освобождение — ошибка; автоматическая очистка `arenablock` после ручного free идемпотентна.
+Allocations are zero-filled regions in bump-allocated chunks, usually 64 KiB. Reset releases all chunks and invalidates old slices; the arena remains available for new allocation. Free also invalidates the handle. Do not individually free arena slices. A slice escaping the block does not extend the arena's lifetime: later access traps. Repeated manual free is an error; automatic block cleanup after a manual free is idempotent.
 
-## Enum и сопоставление
+## Enums and matching
 
 ```go
 type Event enum {
@@ -198,7 +272,7 @@ type Event enum {
 }
 func show(event Event) {
     match event {
-        Empty => { println("пусто") }
+        Empty => { println("empty") }
         Number(value) => { println(value) }
         Event.Pair(value, _) => { println(value) }
     }
@@ -206,11 +280,11 @@ func show(event Event) {
 func main() { show(Event.Number(42)) }
 ```
 
-Enum — тегированный union без отдельного выделения памяти. До 256 вариантов; полезная нагрузка может содержать обычные составные значения, но не ссылки/указатели. Даже вариант без полезной нагрузки создаётся с `()`. Прямые рекурсивные значения запрещены; рекурсия через динамические срезы не требует бесконечной раскладки.
+An enum is a tagged union stored as a value, without a separate allocation. It has between 1 and 256 variants. A payload may contain ordinary composite values, but not references or pointers. Even a payload-free constructor uses `()`. Directly recursive value layouts are rejected; recursion through slices need not create an infinite layout.
 
-`match` — инструкция, не выражение. Обязательны все варианты либо последний `_ => { ... }`. Повторы, неверная арность и ветви после `_` — ошибки. Имена в паттерне связывают неизменяемые копии полезной нагрузки; `_` её отбрасывает. Допускается квалификация `Event.Number` или `module.Event.Number`. Вложенные паттерны, литеральные паттерны и guards пока отсутствуют.
+`match` is a statement. Cover every variant, or end with `_ => { ... }`. Duplicate variants, wrong payload arity, and arms after `_` are errors. Pattern names bind immutable payload copies; `_` discards one. Qualified patterns such as `Event.Number` or `module.Event.Number` are supported. Nested patterns, literal patterns, and guards are not implemented.
 
-## Кортежи
+## Tuples
 
 ```go
 func pair() (i64, string) { return (7, "seven") }
@@ -222,59 +296,52 @@ func main() {
 }
 ```
 
-Типы структурные, порядок и число членов значимы. Индекс — `.0`, `.1` либо `[константа]`; динамический индекс запрещён, поскольку члены могут иметь разные типы. Максимум 32 члена. `()` — пустой unit-кортеж, `(value,)` и `(T,)` — одноэлементные, `(value)` — группировка выражения.
+Tuple types are structural: order, member types, and arity matter. Access uses `.0`, `.1`, or a constant index. A dynamic index is not allowed because members may have different types. The maximum arity is 32. `()` is the empty unit tuple; `(value,)` and `(T,)` are one-member forms; `(value)` merely groups an expression.
 
-`var (a, b) = expression` и `const (a, b) = expression` вычисляют выражение один раз и требуют точного совпадения арности. `_` отбрасывает член. Присваивание кортежа копирует его по значению. Ссылки и указатели внутри кортежей запрещены.
+`var (a, b) = expression` and `const (a, b) = expression` evaluate once and require matching arity. `_` discards a member. Assignment copies the tuple by value. Address types cannot be tuple members.
 
-## Файловый API
+## Filesystem built-ins
 
-Функции встроены в текущий runtime; импорт библиотеки не требуется. Ошибки ОС представлены положительными кодами `errno`; их числа зависят от платформы. `errorMessage(code)` возвращает строку описания. Пути с NUL отвергаются; остальные права, симлинки и разрешение путей определяются ОС.
+No import is needed for the current file API. Filesystem failures use positive OS `errno` values; their numbers vary by platform. `errorMessage(code)` describes them. NUL bytes in paths are rejected. File contents can contain NUL. Other path behavior, permissions, and symlinks follow the host OS.
 
-| Вызов | Результат / действие |
+| Call | Result and purpose |
 | --- | --- |
-| `fsRead(path string)` | `!string`, весь файл, включая NUL |
-| `fsWrite(path string, data string)` | `!bool`, создать/перезаписать |
-| `fsAppend(path string, data string)` | `!bool`, добавить/создать |
-| `fsExists(path string)` | `!bool`; отсутствующий путь — успех `false` |
-| `fsIsDir(path string)` | `!bool`, проверить каталог через stat |
-| `fsSize(path string)` | `!i64`, размер в байтах |
-| `fsMkdir(path string)` | `!bool`, один каталог, без рекурсивного создания |
-| `fsRemove(path string)` | `!bool`, файл либо пустой каталог |
-| `fsRename(from string, to string)` | `!bool`, правила rename ОС |
-| `fsList(path string)` | `![]string`, имена без `.`/`..`, отсортированы по байтам |
-| `fsCwd()` | `!string`, текущий каталог |
-| `fsOpen(path string, mode string)` | `!file`, режим `r`, `w`, `a`, `rb`, `wb`, `ab` |
-| `fsClose(handle file)` | `!bool`, закрыть; повторный вызов — ошибка |
-| `fsReadAll(handle file)` | `!string`, от текущей позиции до EOF |
-| `fsWriteAll(handle file, data string)` | `!i64`, число записанных байтов |
-| `fileClose(handle file)` | void, идемпотентный cleanup для `defer` |
-| `errorMessage(code i64)` | `string`, текст ошибки ОС |
+| `fsRead(path string)` | `!string`: read a whole file |
+| `fsWrite(path string, data string)` | `!bool`: create or replace contents |
+| `fsAppend(path string, data string)` | `!bool`: append contents |
+| `fsExists(path string)` | `!bool`: a missing path is successful `false` |
+| `fsIsDir(path string)` | `!bool`: test directory status |
+| `fsSize(path string)` | `!i64`: file size |
+| `fsMkdir(path string)` | `!bool`: create one directory |
+| `fsRemove(path string)` | `!bool`: remove a file or empty directory |
+| `fsRename(from string, to string)` | `!bool`: rename a path |
+| `fsList(path string)` | `![]string`: names in byte-sorted order, without `.` or `..` |
+| `fsCwd()` | `!string`: current directory |
+| `fsOpen(path string, mode string)` | `!file`: modes `r`, `w`, `a`, `rb`, `wb`, `ab` |
+| `fsClose(handle file)` | `!bool`: close, with an error on repeated close |
+| `fsReadAll(handle file)` | `!string`: read from current position to EOF |
+| `fsWriteAll(handle file, data string)` | `!i64`: bytes written |
+| `fileClose(handle file)` | Void, idempotent cleanup suitable for `defer` |
+| `errorMessage(code i64)` | `string`: OS error description |
 
-```go
-func readFile(path string) !string {
-    var handle = fsOpen(path, "rb")?
-    defer fileClose(handle)
-    return fsReadAll(handle)
-}
-```
+Handle copies refer to the same resource. Closing invalidates all copies; later operations return an error. `fileClose` ignores an already closed handle, but an actual close failure panics. Closure is final even if `fsClose` reports an OS error. Writes may partially modify a file before failure and do not promise `fsync` durability.
 
-Копии `file` ссылаются на один ресурс: после закрытия все становятся недействительными, операции возвращают ошибку. `fileClose` игнорирует уже закрытый handle; реальная ошибка fclose вызывает остановку. Закрытие и при `fsClose` считается окончательным даже при ошибке ОС. `fsWriteAll` не обещает fsync/долговечность записи.
+A read is limited to 64 MiB; directory listing is limited to 1,000,000 entries. Free a successful listing's slice explicitly in `unsafe`; its name strings stay managed until process exit. Input/file strings also stay managed until exit. The filesystem API is not confined to the import root.
 
-Чтение ограничено 64 MiB на вызов, список — 1 000 000 элементов. Успешный `fsList` возвращает срез, который освобождается явно через `unsafe { free(entries) }`; строки имён и прочитанные строки сохраняются runtime до конца процесса. Запись не является транзакцией и может частично изменить файл при ошибке. Файловый API не ограничивает программу каталогом проекта: ограничения импортов относятся только к загрузке исходников.
-
-## Диагностика и инструменты
-
-Ошибки компиляции содержат путь, строку, столбец, код и указатель на место. Неиспользуемые имена, затенение и отброшенные результаты считаются ошибками. C backend также собирается с `-Wall -Wextra -Wpedantic -Werror`. Runtime-сбои показывают причину и строку операции; это не полноценный stack trace.
+## Tools and diagnostics
 
 ```sh
 kremen check source.kr
-kremen build source.kr -O3 -o build/program
+kremen build source.kr -O3 -o program
 kremen run source.kr
-kremen emit-c source.kr -o build/program.c
+kremen emit-c source.kr -o program.c
 kremen fmt -w source.kr api.krh
 kremen fmt --check source.kr api.krh
+kremen check source.kr --diagnostic-format=json
 ```
 
-Подробнее о стоимости проверок и границах гарантий: [safety.md](safety.md). Проверяемые примеры и команды: [validation.md](validation.md).
+`-O0` through `-O3` select optimization, with `-O3` as default. `--cc /path/to/cc` selects one compiler executable; `CC` provides the default. `--` ends option parsing, for example `kremen check -- -source.kr`. `-o` is accepted by `build` and `emit-c`, not by `check` or `run`. Full-language `emit-c` writes stdout if `-o` is omitted. The separate self-hosted command requires an output file for `emit-c`.
 
-В 0.4 есть отдельный `kremen selfhost` с собственным строго типизированным подмножеством `i64`/`bool`/`string`, точкой входа `func main() i64` и драйвером на Kremen. Его синтаксис и гарантии отличаются от полного языка, описанного выше. Команды и самопересборка: [selfhosting.md](selfhosting.md).
+`fmt` reads stdin or one file and writes stdout. `-w` rewrites files; `--check` reports layout differences without writing. Multiple files require `-w` or `--check`.
+
+Compile errors include path, line, byte column, code, source context, token underline, and relevant earlier locations. `--diagnostic-format=json` selects structured frontend diagnostics; `--diagnostic-format=text` selects the default human-readable output. Runtime errors include source location and an embedded bounded excerpt; they are not stack traces. The JSON option does not convert C-backend or runtime messages. See [Understanding errors](diagnostics.md). The compiler limits a source file to 4 MiB, its arena to 512 MiB, tokens per file to 1,000,000, source files to 512, modules to 128, and parse/AST depth to 256. Safety boundaries are explained in [Safety and memory](safety.md).

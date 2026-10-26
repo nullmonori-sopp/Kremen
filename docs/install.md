@@ -1,67 +1,101 @@
-# Установка и архивы Kremen 0.4.0
+# Installing Kremen
 
-## Требования
+The release archive contains source code and an installer. The installer builds the compiler on your computer, then copies both toolchains, their support files, documentation, and examples into a directory you choose.
 
-Проверенная система — Linux x86-64 с GCC и libc. Нужны C11-компилятор, `make`, POSIX shell, `install`, `mktemp`, `find`, `sort`, `cp`, `mv`. Сборка не использует Python или сеть. Для упаковки нужны также GNU tar/find/sort, `zip`, `sha256sum`, `xargs`. На других архитектурах выбирается C-реализация копирования; прочие ОС не проверялись.
+## Requirements
 
-Архив `kremen-v0.4.0.zip` (либо `kremen-v0.4.0.tar.gz`) содержит исходники и инсталлятор `kremen/install.sh`. Компилятор собирается на машине установки, готовые платформенные бинарные файлы в исходный архив не включены. `kremen.zip` — копия ZIP текущего выпуска.
+The tested release platform is Linux x86-64 with GCC, libc, and POSIX threads. Install a C11 compiler, POSIX thread headers and linking support, `make`, a POSIX shell, and ordinary tools including `install`, `mktemp`, `find`, `sort`, `cp`, and `mv`. These normally come with the system C development tools. Use your operating system's package manager if one is missing. Python and network access are not required to build Kremen.
 
-## Проверка и установка
+A C compiler remains necessary for `kremen build`, `kremen run`, and bootstrap rebuilds. The full compiler's `check`, `fmt`, and `emit-c` operations do not invoke it. The self-hosted subset's `check` also checks the generated C, so that command does need it.
+
+Full-language `build` and `run` add `-pthread` automatically. Include that flag yourself when compiling output from `emit-c`. The separate bootstrap subset does not implement worker threads and keeps its existing C-backend flags.
+
+The Makefile selects assembly only on Linux x86-64. `make USE_ASM=0` forces the portable C implementation. Other POSIX platforms have code paths but have not been validated as release targets. Packaging additionally needs GNU tar/find/sort, `zip`, `sha256sum`, and `xargs`; the source-input tests use `timeout`.
+
+## Unpack and verify
+
+Place the release files in one directory:
+
+```text
+kremen-v0.4.3.zip
+kremen-v0.4.3.tar.gz
+kremen-v0.4.3.sha256
+```
+
+If you downloaded both archives, verify them and unpack either one:
 
 ```sh
-sha256sum -c kremen-v0.4.0.sha256
-unzip kremen-v0.4.0.zip
+sha256sum -c kremen-v0.4.3.sha256
+unzip kremen-v0.4.3.zip
 cd kremen
 sha256sum -c SHA256SUMS
-sh install.sh --help
+```
+
+For the tar archive, use `tar -xzf kremen-v0.4.3.tar.gz` instead of `unzip`. The external checksum file lists both archives; a missing archive is reported as missing. If you downloaded only one, compare its `sha256sum` output with its line in the checksum file. Checksums detect changed bytes; they are not a publisher signature.
+
+`kremen.zip` is a copy of the current ZIP release. Its contents match `kremen-v0.4.3.zip`.
+
+## Choose local use or installation
+
+For local use from the source directory:
+
+```sh
+make
+./build/kremen run examples/tutorial/01_hello.kr
+```
+
+No installation is required. [Your first program](getting-started.md) uses this workflow.
+
+For an installation in your home directory:
+
+```sh
 sh install.sh
 export PATH="$HOME/.local/bin:$PATH"
 kremen --version
-kremen run examples/hello.kr
 kremen selfhost --version
-kremen selfhost check selfhost/example.kr
 ```
 
-Внешний `.sha256` проверяет оба архива; для этой команды они должны лежать рядом. Внутренний `SHA256SUMS` проверяет файлы распакованного исходного выпуска. Эти суммы обнаруживают повреждение, но не являются цифровой подписью издателя.
+The default prefix is `$HOME/.local`. The prefix is the directory under which `bin/` and `share/` are created. Adding its `bin/` to `PATH` lets the shell find `kremen` by name. The `export` command affects the current shell; the installer does not modify startup files.
 
-Для другого компилятора: `CC=/absolute/path/to/gcc sh install.sh`. `CC` должен обозначать исполняемый файл компилятора. Для другого префикса:
+To use a different prefix or C compiler:
 
 ```sh
-sh install.sh --prefix /absolute/path/to/kremen
+CC=/absolute/path/to/gcc sh install.sh --prefix /absolute/path/to/kremen
 /absolute/path/to/kremen/bin/kremen --version
 ```
 
-Префикс должен быть абсолютным, отличаться от `/` и быть доступным для записи. Пробелы в пути поддерживаются. Инсталлятор не запрашивает административные права и не меняет `PATH` сам. Если нужных системных инструментов нет, установите их средствами своей ОС.
+`CC` names one executable, not a shell command containing extra flags. The prefix must be absolute, writable, and different from `/`. Spaces are supported. If `HOME` is unset, supply `--prefix`. The installer does not run `sudo` or download dependencies.
 
-## Состав установки
+## What gets installed
 
-| Путь относительно префикса | Назначение |
+| Path inside the prefix | Contents |
 | --- | --- |
-| `bin/kremen` | Нативный компилятор и форматтер |
-| `bin/kremen-selfhost` | CLI и компилятор bootstrap-подмножества на Kremen |
-| `share/kremen/runtime/kremen_rt.h` | Runtime, встраиваемый в генерируемый C |
-| `share/kremen/selfhost/` | Kremen-исходники, C seed и C-примитивы для самопересборки |
-| `share/kremen/install.marker`, `install.manifest` | Принадлежность установки и перечень её файлов |
-| `share/doc/kremen/` | Markdown-документация и примеры |
+| `bin/kremen` | Full-language native compiler and formatter |
+| `bin/kremen-selfhost` | Kremen-written compiler and CLI for the bootstrap subset |
+| `share/kremen/runtime/kremen_rt.h` | Runtime embedded in generated full-language C |
+| `share/kremen/selfhost/` | Bootstrap sources, seed, runtime, host primitives, and platform header |
+| `share/kremen/install.marker`, `install.manifest` | Ownership marker and installed-file list |
+| `share/doc/kremen/` | License, English Markdown documentation, examples, and saved benchmark reports |
 
-Сначала собираются основной компилятор и проверяемый bootstrap, затем копируются файлы. Весь префикс можно перенести в другой каталог; бинарные файлы ищут ресурсы относительно своего фактического расположения. Перенос одного бинарного файла без runtime не является полной установкой. Полученные пользовательские программы содержат runtime и не требуют дерева исходников Kremen для запуска.
+Installation compiles both toolchains before changing the destination. Repeating the command upgrades an installation owned by this installer. It refuses to overwrite an unrelated compiler or occupied data directory without a valid ownership marker.
 
-`kremen selfhost bootstrap -o /path/to/next` пересобирает bootstrap и его драйвер. При запуске такого бинарного файла вне стандартного дерева укажите полный каталог ресурсов через `KREMEN_SELFHOST_ROOT`. Он должен содержать исходники `bootstrap.kr`, `toolchain.kr`, `runtime.c/.h`, `host.c/.h` и `driver.c`. Подробности: [selfhosting.md](selfhosting.md).
+You can move the whole prefix. The tools find resources relative to their executable. Moving just one compiler binary without its data is not a complete installation. Programs you build embed the full runtime and can run independently of the source tree, on a compatible host platform.
 
-Повтор той же команды обновляет принадлежащую Kremen установку. Инсталлятор отказывается перезаписывать чужой `bin/kremen` и занятые каталоги своих данных без корректного маркера.
+A separately rebuilt bootstrap binary can use an explicit absolute `KREMEN_SELFHOST_ROOT`. That directory must contain `bootstrap.kr`, `toolchain.kr`, `stage0.c`, `runtime.c`, `runtime.h`, `host.c`, `host.h`, `platform.h`, and `driver.c`. See [Self-hosting](selfhosting.md).
 
-## Удаление и проверки
+## Remove an installation
 
-Сохраните исходный архив или распакованный `install.sh`:
+Keep a copy of `install.sh` from the source distribution:
 
 ```sh
 sh install.sh --prefix /absolute/path/to/kremen --uninstall
-make test-install
 ```
 
-Удаление проверяет манифест, удаляет перечисленные файлы и только пустые каталоги Kremen. Другие файлы префикса сохраняются. Проверка установщика использует временный каталог, включая пути с пробелами, обновление, перенос, запуск, отказ при конфликте и удаление.
+Use the same prefix you installed into, or its current path if you moved it. Removal validates the manifest, removes owned files, and removes only empty Kremen directories. Other files in the prefix are preserved.
 
-## Повторная упаковка
+## Check or rebuild a release
+
+From the source directory:
 
 ```sh
 make test
@@ -70,4 +104,6 @@ make test-install
 make dist
 ```
 
-`make dist` создаёт архивы и внешний `.sha256` рядом с каталогом проекта, обновляет внутренний `SHA256SUMS`. Для другого каталога: `sh tools/package.sh /absolute/output`. В выпуск не попадают `build/`, `selfhost/build/`, кеши и файлы Python. Тесты перед `dist` выполняются отдельно: сама упаковка не заменяет проверку.
+`make dist` creates versioned ZIP/tar.gz archives and external checksums next to the source directory, and refreshes `SHA256SUMS` inside it. Use `sh tools/package.sh /absolute/output` for another output directory. Build directories, Python files, caches, and existing archives are excluded. Packaging does not run the tests for you.
+
+The [validation record](validation.md) lists what was exercised. [Repository update instructions](repository-update.md) explain which source and generated seed files to commit.

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.3 — 2026-10-26
+
+- Add native POSIX workers: `threadSpawn`, `threadJoin`, and deferred `threadClose`, with copied `i64` input/output and creator-owned handles.
+- Keep defer stacks and runtime resource bookkeeping thread-local; join outstanding children at creator exit and report worker panic through `ECANCELED`.
+- Reject unsafe worker signatures, captured/shared addresses, returned handles, and handles inside ordinary aggregates.
+- Preserve side effects and bounds checks in unary expressions involving constant array lengths.
+- Correct C-compatible result and slice layouts near the value-size limit; cache layouts and use hashed structural type lookup in the backend.
+- Add surrounding source context, related-location underlines, import origins, typo suggestions, exact NUL-byte locations, and JSON frontend diagnostics.
+- Extend regression coverage, release documentation, source packaging, and continuous integration. See [release notes](docs/v0.4.3.md).
+
 ## 0.4.2 — 2026-10-22
 
 - Rewrite all Markdown documentation in English; add first-program instructions, ten guided lessons, complete runnable examples, an error guide, and a documentation map.
