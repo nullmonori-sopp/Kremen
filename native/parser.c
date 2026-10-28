@@ -152,6 +152,7 @@ static Type *parse_type(Parser *p) {
             if (!qualified.len) km_buf_append(&qualified, name.text, name.len);
             km_buf_puts(&qualified, ".");
             km_buf_append(&qualified, part.text, part.len);
+            start.len = part.offset + part.len - start.offset;
         }
         if (qualified.len) text = qualified.data;
         t = km_named_type(p->ctx, text, name);

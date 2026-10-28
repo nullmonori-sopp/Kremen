@@ -14,9 +14,10 @@ static char current_executable[PATH_MAX];
 #endif
 
 static void usage(void) {
-    puts("Kremen 0.4.3 — native C11 toolchain\n"
+    puts("Kremen 0.4.4 — native C11 toolchain\n"
          "usage: kremen check|build|run|emit-c source.kr [options]\n"
          "       kremen fmt [--check|-w] [file.kr file.krh ...]\n"
+         "       kremen explain [CODE|--list]\n"
          "       kremen selfhost check|build|run|emit-c|bootstrap [options]\n"
          "options: -o FILE, -O0..-O3 (default -O3), --root DIR, --cc COMPILER\n"
          "         --diagnostic-format=text|json\n"
@@ -61,7 +62,7 @@ static int atomic_write(const char *path, const char *data, bool preserve_mode) 
     free(temp); return failed ? 1 : 0;
 }
 static int build(Context *ctx, const char *source, const char *output) {
-    if (protected_output(ctx, output)) { fputs("kremen: output would overwrite source\n", stderr); return 1; }
+    if (protected_output(ctx, output)) km_error(ctx, (Token){0}, "E001", "output would overwrite a source or toolchain resource");
     mkdir_parents(output); char *directory = km_sprintf(ctx, "%s.kremen-XXXXXX", output);
     if (!mkdtemp(directory)) { perror(directory); return 1; }
     char absolute[PATH_MAX];
@@ -112,10 +113,9 @@ static int selfhost(int argc, char **argv) {
 int main(int argc, char **argv) {
     (void)km_platform_executable(argv[0], current_executable, sizeof current_executable);
     if (argc < 2 || !strcmp(argv[1], "--help") || !strcmp(argv[1], "help")) { usage(); return argc < 2 ? 1 : 0; }
-    if (!strcmp(argv[1], "--version")) { puts("Kremen 0.4.3 (native C11)"); return 0; }
+    if (!strcmp(argv[1], "--version")) { puts("Kremen 0.4.4 (native C11)"); return 0; }
     if (!strcmp(argv[1], "selfhost")) return selfhost(argc, argv);
-    const char *command = argv[1]; bool fmt = !strcmp(command, "fmt");
-    if (!fmt && strcmp(command, "check") && strcmp(command, "build") && strcmp(command, "run") && strcmp(command, "emit-c")) { usage(); return 1; }
+    const char *command = argv[1]; bool fmt = !strcmp(command, "fmt"), explain = !strcmp(command, "explain");
     Context *ctx = calloc(1, sizeof *ctx); if (!ctx) return 2;
     km_init(ctx); ctx->failure_ready = true;
     /* Choose diagnostic rendering before loading resources or parsing options.
@@ -127,10 +127,11 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--diagnostic-format=text")) ctx->diagnostic_json = false;
     }
     if (setjmp(ctx->failure)) { km_destroy(ctx); free(ctx); return 1; }
-    ctx->runtime_path = runtime_path(ctx);
+    if (!fmt && !explain && strcmp(command, "check") && strcmp(command, "build") && strcmp(command, "run") && strcmp(command, "emit-c"))
+        km_error(ctx, (Token){0}, "E001", "unknown command '%s'; run 'kremen --help'", command);
     const char *cc = getenv("CC"); if (cc && *cc) ctx->cc = km_strdup(ctx, cc);
     const char *output = NULL; const char **files = km_alloc(ctx, (size_t)argc * sizeof *files); size_t count = 0;
-    bool format_check = false, write_format = false, positional_only = false;
+    bool format_check = false, write_format = false, positional_only = false, explain_list = false;
     for (int i = 2; i < argc; i++) {
         if (positional_only) files[count++] = argv[i];
         else if (!strcmp(argv[i], "--")) positional_only = true;
@@ -140,32 +141,43 @@ int main(int argc, char **argv) {
                 km_error(ctx, (Token){0}, "E001", "diagnostic format must be 'text' or 'json'");
             ctx->diagnostic_json = !strcmp(value, "json");
         }
-        else if ((!strcmp(argv[i], "-o") || !strcmp(argv[i], "--output")) && i + 1 < argc && !fmt && strcmp(command, "check") && strcmp(command, "run") && argv[i + 1][0]) output = argv[++i];
-        else if (!strcmp(argv[i], "--cc") && i + 1 < argc && !fmt && argv[i + 1][0]) ctx->cc = km_strdup(ctx, argv[++i]);
+        else if ((!strcmp(argv[i], "-o") || !strcmp(argv[i], "--output")) && i + 1 < argc && !fmt && !explain && strcmp(command, "check") && strcmp(command, "run") && argv[i + 1][0]) output = argv[++i];
+        else if (!strcmp(argv[i], "--cc") && i + 1 < argc && !fmt && !explain && argv[i + 1][0]) ctx->cc = km_strdup(ctx, argv[++i]);
         else if (!strcmp(argv[i], "--root") && i + 1 < argc) {
-            if (fmt) km_error(ctx, (Token){0}, "E001", "--root is not a formatter option");
+            if (fmt || explain) km_error(ctx, (Token){0}, "E001", "--root is not an option for %s", command);
             char resolved[PATH_MAX];
             if (!realpath(argv[++i], resolved)) km_error(ctx, (Token){0}, "E010", "cannot resolve project root '%s': %s", argv[i], strerror(errno));
             ctx->project_root = km_strdup(ctx, resolved);
-        } else if (!fmt && !strncmp(argv[i], "-O", 2) && strlen(argv[i]) == 3 && argv[i][2] >= '0' && argv[i][2] <= '3') ctx->optimization = argv[i][2] - '0';
+        } else if (!fmt && !explain && !strncmp(argv[i], "-O", 2) && strlen(argv[i]) == 3 && argv[i][2] >= '0' && argv[i][2] <= '3') ctx->optimization = argv[i][2] - '0';
+        else if (explain && !strcmp(argv[i], "--list")) explain_list = true;
         else if (fmt && !strcmp(argv[i], "--check")) format_check = true;
         else if (fmt && (!strcmp(argv[i], "-w") || !strcmp(argv[i], "--write"))) write_format = true;
         else if (argv[i][0] == '-') km_error(ctx, (Token){0}, "E001", "unknown or incomplete option '%s'", argv[i]);
         else files[count++] = argv[i];
     }
-    if ((!fmt && count != 1) || (fmt && format_check && write_format) || (fmt && count > 1 && !format_check && !write_format)) { usage(); km_destroy(ctx); free(ctx); return 1; }
+    if (explain) {
+        if (count > 1 || (explain_list && count)) km_error(ctx, (Token){0}, "E001", "explain expects one diagnostic code or --list");
+        if (!count) km_explain_list(stdout);
+        else if (!km_explain(files[0], stdout)) km_error(ctx, (Token){0}, "E001", "unknown diagnostic code '%s'; run 'kremen explain --list'", files[0]);
+        km_destroy(ctx); free(ctx); return 0;
+    }
+    if (!fmt && count != 1) km_error(ctx, (Token){0}, "E001", "%s expects exactly one source path, got %zu", command, count);
+    if (fmt && format_check && write_format) km_error(ctx, (Token){0}, "E001", "fmt --check and -w cannot be combined");
+    if (fmt && count > 1 && !format_check && !write_format) km_error(ctx, (Token){0}, "E001", "formatting multiple files requires --check or -w");
+    ctx->runtime_path = runtime_path(ctx);
     int result = 0;
     if (fmt) {
         if (!count) {
-            if (write_format) { fputs("kremen fmt: -w requires a file path\n", stderr); km_destroy(ctx); free(ctx); return 1; }
+            if (write_format) km_error(ctx, (Token){0}, "E001", "fmt -w requires a file path");
             Buffer input = {0}; char chunk[4096]; size_t n;
             while ((n = fread(chunk, 1, sizeof chunk, stdin))) {
-                if (input.len + n > 4 * 1024 * 1024 || memchr(chunk, 0, n)) { free(input.data); fputs("kremen fmt: invalid or oversized stdin\n", stderr); km_destroy(ctx); free(ctx); return 1; }
+                if (input.len + n > 4 * 1024 * 1024) { free(input.data); km_error(ctx, (Token){0}, "E010", "formatter stdin exceeds 4 MiB"); }
                 km_buf_append(&input, chunk, n);
             }
-            if (ferror(stdin)) { free(input.data); perror("kremen fmt: stdin"); km_destroy(ctx); free(ctx); return 1; }
+            if (ferror(stdin)) { int failure = errno; free(input.data); km_error(ctx, (Token){0}, "E010", "cannot read formatter stdin: %s", strerror(failure)); }
             Source *src = km_alloc(ctx, sizeof *src); src->path = "<stdin>"; src->len = input.len;
             src->data = km_strndup(ctx, input.data ? input.data : "", input.len); free(input.data);
+            km_validate_source(ctx, src);
             km_sources_push(ctx, &ctx->sources, src);
             char *formatted = km_format(ctx, src);
             if (format_check) result = strcmp(src->data, formatted) != 0;
@@ -177,7 +189,10 @@ int main(int argc, char **argv) {
                 Source missing = {.path = (char *)files[i]};
                 km_error(ctx, (Token){.src = &missing, .line = 1, .col = 1}, "E010", "cannot open source: %s", strerror(errno));
             }
-            if (!extension(path, ".kr") && !extension(path, ".krh")) { fputs("kremen fmt: expected .kr or .krh\n", stderr); result = 1; break; }
+            if (!extension(path, ".kr") && !extension(path, ".krh")) {
+                Source invalid = {.path = path};
+                km_error(ctx, (Token){.src = &invalid, .line = 1, .col = 1}, "E012", "formatter expects .kr or .krh");
+            }
             Source *src = km_read_source(ctx, path, extension(path, ".krh")); char *formatted = km_format(ctx, src);
             bool changed = strcmp(src->data, formatted) != 0;
             if (format_check && changed) { fprintf(stderr, "%s: requires formatting\n", files[i]); result = 1; }
@@ -191,7 +206,7 @@ int main(int argc, char **argv) {
         else {
             char *generated = km_codegen(ctx);
             if (!strcmp(command, "emit-c")) {
-                if (output && protected_output(ctx, output)) { fputs("kremen: output would overwrite source\n", stderr); result = 1; }
+                if (output && protected_output(ctx, output)) km_error(ctx, (Token){0}, "E001", "output would overwrite a source or toolchain resource");
                 else if (output) result = atomic_write(output, generated, false); else fputs(generated, stdout);
             } else if (!strcmp(command, "build")) {
                 const char *path = output ? output : "a.out"; result = build(ctx, generated, path); if (!result) printf("Built %s\n", path);

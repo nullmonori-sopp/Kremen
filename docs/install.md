@@ -17,23 +17,23 @@ The Makefile selects assembly only on Linux x86-64. `make USE_ASM=0` forces the 
 Place the release files in one directory:
 
 ```text
-kremen-v0.4.3.zip
-kremen-v0.4.3.tar.gz
-kremen-v0.4.3.sha256
+kremen-v0.4.4.zip
+kremen-v0.4.4.tar.gz
+kremen-v0.4.4.sha256
 ```
 
 If you downloaded both archives, verify them and unpack either one:
 
 ```sh
-sha256sum -c kremen-v0.4.3.sha256
-unzip kremen-v0.4.3.zip
+sha256sum -c kremen-v0.4.4.sha256
+unzip kremen-v0.4.4.zip
 cd kremen
 sha256sum -c SHA256SUMS
 ```
 
-For the tar archive, use `tar -xzf kremen-v0.4.3.tar.gz` instead of `unzip`. The external checksum file lists both archives; a missing archive is reported as missing. If you downloaded only one, compare its `sha256sum` output with its line in the checksum file. Checksums detect changed bytes; they are not a publisher signature.
+For the tar archive, use `tar -xzf kremen-v0.4.4.tar.gz` instead of `unzip`. The external checksum file lists both archives; a missing archive is reported as missing. If you downloaded only one, compare its `sha256sum` output with its line in the checksum file. Checksums detect changed bytes; they are not a publisher signature.
 
-`kremen.zip` is a copy of the current ZIP release. Its contents match `kremen-v0.4.3.zip`.
+`kremen.zip` is a copy of the current ZIP release. Its contents match `kremen-v0.4.4.zip`.
 
 ## Choose local use or installation
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.4 — 2026-10-28
+
+- Add offline `kremen explain CODE` and a list of all 39 native diagnostic categories, with reasons, remedies, and examples.
+- Link text and JSON errors to their explanation command; report more CLI, formatter, and protected-output failures through structured diagnostics.
+- Infer integer context from imported functions, methods, borrowed receivers, and nested method calls without executing or borrowing them during the hint pass.
+- Underline the actual unknown type, include the full qualified type range, and search imported type names for spelling suggestions.
+- Format short compiler strings once, retaining the long-string fallback; add boundary and variadic-argument regressions and a reproducible emitter comparison.
+- Extend installer, clean-archive CI, documentation, and regressions. Record the staged [roadmap to 0.5](docs/roadmap.md); learning profiles remain future work. See [release notes](docs/v0.4.4.md).
+
 ## 0.4.3 — 2026-10-26
 
 - Add native POSIX workers: `threadSpawn`, `threadJoin`, and deferred `threadClose`, with copied `i64` input/output and creator-owned handles.

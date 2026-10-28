@@ -21,11 +21,11 @@ COMPILER=${CC:-cc}
 if [ "${SANITIZE:-0}" = 1 ]; then
     "$COMPILER" -std=c11 -pthread -Wall -Wextra -Wpedantic -Werror -O1 -g -DKM_NO_PROC_SELF_EXE=1 \
         -fsanitize=address,undefined -fno-sanitize-recover=all \
-        "$ROOT/tests/native/platform_stability.c" "$ROOT/native/core.c" "$ROOT/native/fast_copy.c" \
+        "$ROOT/tests/native/platform_stability.c" "$ROOT/native/core.c" "$ROOT/native/diagnostics.c" "$ROOT/native/fast_copy.c" \
         "$ROOT/selfhost/host.c" "$ROOT/selfhost/runtime.c" -o "$WORK/probe"
 else
     "$COMPILER" -std=c11 -pthread -Wall -Wextra -Wpedantic -Werror -O2 -DKM_NO_PROC_SELF_EXE=1 \
-        "$ROOT/tests/native/platform_stability.c" "$ROOT/native/core.c" "$ROOT/native/fast_copy.c" \
+        "$ROOT/tests/native/platform_stability.c" "$ROOT/native/core.c" "$ROOT/native/diagnostics.c" "$ROOT/native/fast_copy.c" \
         "$ROOT/selfhost/host.c" "$ROOT/selfhost/runtime.c" -o "$WORK/probe"
 fi
 mkdir "$WORK/path with spaces"

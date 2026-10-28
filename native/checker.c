@@ -31,6 +31,8 @@ static bool block(Checker *, Node *, bool);
 static Type *valid_type(Checker *, Type *, Node *, bool);
 static Type *hint(Checker *, Node *);
 static Place place(Checker *, Node *, bool, bool);
+static Type *builtin_type(Checker *, TypeKind);
+static char *type_expression_name(Checker *, Node *);
 static size_t tuple_field(Checker *c,Type *t,const char *name,Node *n) {
     size_t value=0;
     if(!name||!*name)km_error(c->ctx,n->tok,"E140","tuple field must be a numeric index");
@@ -203,15 +205,19 @@ static Type *valid_type(Checker *c, Type *t, Node *n, bool allow_void) {
     }
     if(t->kind==TY_STRUCT||t->kind==TY_ENUM) {
         if(t->decl) return t->decl->type;
-        Node *s=find_struct(c,module_of(n),t->name,t->tok.src?t->tok:n->tok);
+        Token location=t->tok.src?t->tok:n->tok;
+        const char *local;
+        Module *module=qualified_module(c,module_of(n),t->name,&local,location);
+        Node *s=struct_slot(c,module,local)->node;
         if(!s) {
             Suggestion best={.distance=3};
-            Module *module=module_of(n);
-            for(size_t i=0;i<cx(c)->structs.len;i++){Node *candidate=cx(c)->structs.data[i];if(module_of(candidate)==module)suggest_candidate(&best,t->name,candidate->name,candidate->tok);}
+            for(size_t i=0;i<cx(c)->structs.len;i++){Node *candidate=cx(c)->structs.data[i];if(module_of(candidate)==module)suggest_candidate(&best,local,candidate->name,candidate->tok);}
             static const char *names[]={"bool","string","arena","file","thread","i8","i16","i32","i64","u8","u16","u32","u64"};
-            for(size_t i=0;i<sizeof(names)/sizeof(*names);i++)suggest_candidate(&best,t->name,names[i],(Token){0});
+            if(local==t->name)for(size_t i=0;i<sizeof(names)/sizeof(*names);i++)suggest_candidate(&best,local,names[i],(Token){0});
             suggest_finish(c,&best);
-            km_error(cx(c),n->tok,"E105","unknown type '%s'",t->name);
+            if(best.name&&!best.tied&&local!=t->name)
+                cx(c)->diagnostic_hint=km_sprintf(cx(c),"Did you mean '%.*s%s'?",(int)(local-t->name),t->name,best.name);
+            km_error(cx(c),location,"E105","unknown type '%s'",t->name);
         }
         return s->type;
     }
@@ -549,6 +555,27 @@ static Type *hint(Checker *c,Node *n) {
         Node *f=find_fn(c,module_of(c->fn),n->callee->name,NULL);if(f)return f->result;
         if(eq(n->callee->name,"readInt")||eq(n->callee->name,"len"))return cx(c)->ints[3];
         if(eq(n->callee->name,"readLine"))return cx(c)->t_string;
+        if(eq(n->callee->name,"readIntResult"))return km_type(cx(c),TY_RESULT,cx(c)->ints[3]);
+        for(size_t i=0;i<sizeof(resource_specs)/sizeof(*resource_specs);i++)if(eq(n->callee->name,resource_specs[i].name)) {
+            Type *result=builtin_type(c,resource_specs[i].result);
+            return resource_specs[i].fallible?km_type(cx(c),TY_RESULT,result):result;
+        }
+    }
+    if(n->kind==N_CALL&&n->callee->kind==N_FIELD) {
+        Node *callee=n->callee,*receiver=callee->base;
+        char *name=type_expression_name(c,receiver);
+        Node *owner=name?find_struct(c,module_of(c->fn),name,receiver->tok):NULL;
+        if(owner&&owner->kind==N_ENUM)return owner->type;
+        if(receiver->kind==N_NAME&&!has_binding(c,receiver->name)) {
+            Module *module=module_of(c->fn);
+            for(Import *i=module?module->imports:NULL;i;i=i->next)if(eq(i->alias,receiver->name)) {
+                Node *f=find_fn(c,i->target,callee->name,NULL);return f?f->result:NULL;
+            }
+        }
+        Type *base=hint(c,receiver);if(base&&base->kind==TY_REF)base=base->elem;
+        if(base&&(base->kind==TY_STRUCT||base->kind==TY_ENUM)) {
+            Node *f=find_fn(c,NULL,callee->name,base);return f?f->result:NULL;
+        }
     }
     if(n->kind==N_FIELD) {
         Type *t=hint(c,n->base);if(t&&t->kind==TY_REF)t=t->elem;

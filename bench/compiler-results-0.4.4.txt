@@ -1,0 +1,55 @@
+Reference: Kremen 0.4.3 (native C11)
+Current: Kremen 0.4.4 (native C11)
+Host: Linux 6.18.55 x86_64
+Functions: 3000
+Runs per batch: 15
+Input cksum: 3018077853 265615
+Generated C is byte-identical.
+
+Round 1, reference
+real 1.911226665
+user 1.519492000
+sys 0.386673000
+runs 15
+mean 0.127415111
+maxrss_kib 44832
+
+Round 1, current
+real 1.938670154
+user 1.567294000
+sys 0.361327000
+runs 15
+mean 0.129244677
+maxrss_kib 44952
+
+Round 2, current
+real 2.030068424
+user 1.586702000
+sys 0.434144000
+runs 15
+mean 0.135337895
+maxrss_kib 44936
+
+Round 2, reference
+real 2.381094938
+user 1.907988000
+sys 0.466795000
+runs 15
+mean 0.158739663
+maxrss_kib 44936
+
+Round 3, reference
+real 1.908564216
+user 1.503258000
+sys 0.400851000
+runs 15
+mean 0.127237614
+maxrss_kib 44824
+
+Round 3, current
+real 1.840728658
+user 1.434190000
+sys 0.402522000
+runs 15
+mean 0.122715244
+maxrss_kib 44936

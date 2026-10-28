@@ -11,6 +11,8 @@ sh "$ROOT/install.sh" --help > "$WORK/log"
 if sh "$ROOT/install.sh" --prefix relative > "$WORK/log" 2>&1; then exit 1; fi
 sh "$ROOT/install.sh" --prefix "$PREFIX" > "$WORK/log" 2>&1 || { cat "$WORK/log"; exit 1; }
 "$PREFIX/bin/kremen" --version | grep -F "$(cat "$ROOT/VERSION")" > /dev/null
+"$PREFIX/bin/kremen" explain E131 > "$WORK/explanation"
+grep -F 'Borrow conflict' "$WORK/explanation" > /dev/null
 "$PREFIX/bin/kremen" selfhost --version | grep -F 'selfhost' > /dev/null
 "$PREFIX/bin/kremen-selfhost" check "$ROOT/selfhost/example.kr" > "$WORK/log"
 "$PREFIX/bin/kremen" run "$ROOT/examples/hello.kr" > "$WORK/actual"
@@ -35,6 +37,8 @@ printf '720|18|ok\n' > "$WORK/selfhost-expected"
 cmp "$WORK/selfhost-expected" "$WORK/selfhost-example"
 "$MOVED/bin/kremen" emit-c "$ROOT/examples/hello.kr" -o "$WORK/probe-moved.c"
 grep -F 'installed runtime lookup probe' "$WORK/probe-moved.c" > /dev/null
+"$MOVED/bin/kremen" explain W001 > "$WORK/explanation"
+grep -F 'Unused variable' "$WORK/explanation" > /dev/null
 "$MOVED/bin/kremen" run "$MOVED/share/doc/kremen/examples/threads.kr" > "$WORK/actual"
 printf 'sum of squares: 100\n' > "$WORK/expected-threads"
 cmp "$WORK/expected-threads" "$WORK/actual"

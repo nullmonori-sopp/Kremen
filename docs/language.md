@@ -1,6 +1,6 @@
 # Kremen language reference
 
-This page describes the full language accepted by `kremen` in 0.4.3. It is a reference for rules and built-ins. If the terms are unfamiliar, start with [the tutorial](tutorial.md). The compiler under `selfhost/` accepts a smaller language; its [reference](../selfhost/README.md) is separate.
+This page describes the full language accepted by `kremen` in 0.4.4. It is a reference for rules and built-ins. If the terms are unfamiliar, start with [the tutorial](tutorial.md). The compiler under `selfhost/` accepts a smaller language; its [reference](../selfhost/README.md) is separate.
 
 Examples that show only a declaration or block are fragments to put inside a program. Complete programs include `func main()`.
 

@@ -1,0 +1,195 @@
+#include "kremen.h"
+
+/* Kept in the executable: explanations work offline, without source files,
+ * a runtime header, a C compiler, or a network service. Codes are categories;
+ * the original diagnostic remains the authority for the particular failure. */
+typedef struct {
+    const char *code, *title, *reason, *remedy, *example;
+} Explanation;
+
+static const Explanation explanations[] = {
+    {"E001", "Invalid command or option",
+     "The command line does not describe a supported operation. An option may be misspelled, missing its argument, or used with the wrong command.",
+     "Run kremen --help. Pass one source to check, build, run, or emit-c. Put -- before source paths beginning with a dash.",
+     "kremen check main.kr\nkremen build main.kr -O3 -o build/app"},
+    {"E010", "Source input could not be read",
+     "The compiler could not open, read, or list an input, or an input exceeded a supported size limit. Source files must be regular files; FIFOs are rejected without waiting.",
+     "Check the reported path, permissions, file kind, and size. Native source files and formatter stdin are limited to 4 MiB.",
+     "kremen check examples/hello.kr"},
+    {"E011", "Compiler allocation limit",
+     "A compiler allocation failed, overflowed its size calculation, or would exceed the 512 MiB arena budget.",
+     "Check available memory and reduce the input that triggers the limit. Report unexpectedly large compiler memory use with a small reproducer and the compiler version.",
+     "kremen --version"},
+    {"E012", "Source or module has the wrong form",
+     "An implementation path does not end in .kr, or a directory module has no .kr implementation sources.",
+     "Use .kr for implementations and .krh for matching declarations. Import an implementation or a directory containing implementations.",
+     "import \"math/vec\""},
+    {"E013", "Import could not be resolved",
+     "An import path, qualifier, or alias is invalid, missing, or outside the selected project root. Imports are relative local paths.",
+     "Check the path relative to the importing file. Import the .kr implementation; its .krh is loaded automatically. Use --root deliberately when a wider project boundary is needed.",
+     "import vec \"math/vec\""},
+    {"E014", "Module dependency cycle or limit",
+     "A module is imported again while it is still loading, or the program exceeds the supported module count of 128.",
+     "Follow the import-origin notes. Move shared declarations into a module that both users can import without a cycle.",
+     "// main imports math; math must not import main."},
+    {"E100", "Invalid source token or expression",
+     "The lexer found an invalid character, escape, integer, string, or literal NUL byte. The message can also identify an unsupported expression.",
+     "Read the marked byte and the exact message. Use valid UTF-8 in strings and supported escapes; write \\0 inside a string when a zero byte is intended.",
+     "println(\"first\\nsecond\")"},
+    {"E101", "Invalid declaration at file scope",
+     "An operation appeared where the checker expects a type or function declaration.",
+     "Place executable statements inside a function. Keep imports and declarations at file scope.",
+     "func main() { println(\"Hello\") }"},
+    {"E102", "Duplicate or reserved declaration",
+     "Two declarations use the same identity, or a declaration attempts to replace a builtin or another reserved name.",
+     "Rename the declaration or remove the duplicate. Matching headers and implementations must describe one compatible declaration.",
+     "func calculateTotal() i64 { return 42 }"},
+    {"E103", "Invalid method receiver",
+     "A method receiver is not a supported named value type, or the method is declared outside the receiver type's module.",
+     "Declare the method with its struct or enum in the same module. Use a reference receiver for supported borrowed access.",
+     "type Counter struct { value i64 }\nfunc (c Counter) get() i64 { return c.value }"},
+    {"E104", "Missing or invalid entry point",
+     "The root module must define func main() with no parameters and no result. A header or extern declaration alone cannot supply it.",
+     "Add a main implementation in the root module. Put reusable work in other functions and call them from main.",
+     "func main() { println(\"Hello, Kremen!\") }"},
+    {"E105", "Unknown or unsupported value type",
+     "A type name is unknown, void was used as a value, an array length is unsupported, or a value exceeds the 1 MiB size limit.",
+     "Check the marked type and any spelling suggestion. Arrays contain 1 to 1000000 elements and must still fit the value-size limit. Use a slice when dynamic storage is appropriate.",
+     "var count i64 = 3\nvar values = [3]i64{1, 2, 3}"},
+    {"E106", "Recursive value has no finite layout",
+     "A value contains itself directly or through other value fields, or its layout nesting exceeds the supported depth. Copying such a value would require an unbounded size.",
+     "Break the by-value cycle. A supported slice indirection can give a recursive data structure a finite descriptor layout.",
+     "type Node struct { children []Node }"},
+    {"E107", "Unknown name or callable",
+     "A variable, function, imported function, or method cannot be found in the current scope or module.",
+     "Check spelling, declaration scope, and import qualifiers. A spelling suggestion names a possible declaration; verify that it is the one you intended.",
+     "var total = 3\nprintln(total)"},
+    {"E108", "Declaration shadows an existing name",
+     "A new local or parameter would hide another active binding, declaration, builtin, or import alias.",
+     "Use a distinct name. If you intended to update an existing mutable variable, use = instead of declaring it again. Read the previous-declaration note.",
+     "var count = 1\ncount = 2\nprintln(count)"},
+    {"E110", "Syntax, types, or declarations disagree",
+     "This category includes missing syntax, incompatible values, and headers that disagree with implementations. Kremen does not implicitly convert between integer types.",
+     "Read the specific message first. Match the expected type and declaration, or add the missing delimiter. Use an explicit checked integer conversion when the conversion is intended.",
+     "var small i8 = 7\nvar wider i64 = i64(small)\nprintln(wider)"},
+    {"E111", "Invalid write or structural limit",
+     "An assignment targets an immutable or nonassignable value, or source structure exceeds a nesting, token, or cleanup limit.",
+     "For a write, check the target and binding mutability. For a structural limit, split a very large expression or deeply nested block into smaller functions.",
+     "var count = 1\ncount += 1\nprintln(count)"},
+    {"E112", "Operator is not defined for these values",
+     "An arithmetic, comparison, dereference, or other operator received an unsupported operand type.",
+     "Check each operand's type. Arithmetic uses integers; dereference requires a reference or raw pointer. Convert integer values explicitly when needed.",
+     "var value = 4\nprintln(value + 2)"},
+    {"E113", "Invalid field access or initializer",
+     "A field does not exist, an initializer repeats a field, or the accessed value has no supported fields.",
+     "Check the declared field names and the spelling suggestion. Result fields are ok, value, and code; value access also requires a successful result at runtime.",
+     "type Point struct { x i64; y i64 }\nvar p = Point{x: 1, y: 2}\nprintln(p.x)"},
+    {"E114", "Invalid indexing operation",
+     "The indexed value is not an array, slice, or tuple, or its index is not an integer.",
+     "Check the container and index types. Tuple indices must additionally be valid constants. Kremen strings do not expose array-style indexing.",
+     "var values = [2]i64{4, 5}\nprintln(values[0])"},
+    {"E115", "Known index or slice bound is invalid",
+     "The checker can already determine that an index is negative or outside an array, or that a slice bound is negative. Dynamic accesses are checked at runtime as well.",
+     "Arrays start at index zero. For a slice view, use ordered bounds within its length; the upper bound is exclusive.",
+     "var values = [2]i64{4, 5}\nprintln(values[1])"},
+    {"E116", "Value needs a valid initializer",
+     "A binding lacks required type or initialization information, binds void, or an aggregate initializer has the wrong shape. Result and resource values cannot be silently zero-initialized.",
+     "Initialize every required struct field and exactly the declared number of array elements. Give results an explicit success or failure value.",
+     "var answer !i64 = ok(42)\nprintln(answer.value)"},
+    {"E117", "Expression result was ignored",
+     "A statement computes a value and discards it without saying so. This can hide an unhandled result or a call whose return value was forgotten.",
+     "Use or assign the value. Handle results with match, catch, or ?. Use _ = expression only when discarding the result is a deliberate decision.",
+     "var input = readIntResult()\nprintln(input.ok)"},
+    {"E118", "Loop control used outside a loop",
+     "break or continue has no enclosing loop to control.",
+     "Place the operation inside its intended loop. Use return when you intend to leave the current function.",
+     "for { break }"},
+    {"E119", "Invalid function or builtin call",
+     "The callable, argument count, signature, type arguments, or contextual result type is invalid. Postfix ? also needs a result-returning enclosing function.",
+     "Read the named operation's requirements. Annotate ok/fail with !T context; failure codes must be positive. Pass arguments with matching types.",
+     "func readValue() !i64 { return ok(readIntResult()?) }"},
+    {"E120", "Function can finish without a result",
+     "A function declares a result type, but at least one reachable path can leave its body without returning that type.",
+     "Return a value on every reachable path, or change the declared result when no value is intended.",
+     "func choose(flag bool) i64 {\n    if flag { return 1 }\n    return 2\n}"},
+    {"E121", "Unreachable statement",
+     "A preceding return, loop exit, panic, or terminal control-flow construct prevents the following statement from running.",
+     "Remove the unreachable operation or move it to the path where it belongs. A defer must be registered before the path exits.",
+     "func report() {\n    defer println(\"finished\")\n    return\n}"},
+    {"E122", "Known arithmetic precondition fails",
+     "A constant divisor is zero, a shift count is outside the integer width, or a shift operand is known to be negative.",
+     "Use a nonzero divisor and a shift count from zero up to, but not including, the operand width. Dynamic violations are checked at runtime.",
+     "var value i64 = 8\nprintln(value >> 1)"},
+    {"E123", "Integer constant does not fit",
+     "A literal, constant operation, or checked conversion falls outside its integer type's range. Signed minimum divided or reduced modulo minus one also overflows.",
+     "Check the intended range and choose a suitable type or calculation. Widen operands before the operation when a wider result is intended.",
+     "var small i8 = 120\nprintln(i64(small) + 20)"},
+    {"E130", "Unsupported address or lifetime construction",
+     "The expression would create an unsupported reference, pointer, aggregate, or escaping address. The current borrowing model is lexical and intentionally restricts where addresses can be stored.",
+     "Borrow a named local explicitly. Keep its owner alive, end the loan in a block, and return ordinary values rather than local references or raw pointers.",
+     "var number = 1\n{ var reference = &number; println(*reference) }"},
+    {"E131", "Borrow conflict or read-only access",
+     "An access conflicts with an active loan, or a write uses a shared reference or a raw pointer derived from one. Loans last to the end of their lexical block.",
+     "Follow the conflicting-borrow note. Shorten the loan with a block, finish deferred work that holds it, or use a valid exclusive borrow. unsafe does not remove borrowing rules.",
+     "var number = 1\n{ var reference = &number; println(*reference) }\nnumber = 2\nprintln(number)"},
+    {"E132", "Operation requires explicit unsafe scope",
+     "A manual allocation, raw-pointer operation, arena operation, or external call requires an explicit unsafe block.",
+     "Check the operation's ownership, bounds, and lifetime requirements before placing it in a small unsafe block. The block does not make invalid accesses valid.",
+     "unsafe {\n    var values = alloc[i64](2)\n    defer free(values)\n    println(len(values))\n}"},
+    {"E140", "Invalid tuple operation",
+     "A tuple has invalid arity, member types, destructuring, or indexing. Tuples support at most 32 members and constant member indices.",
+     "Match the number of bindings to the members. Use .0 or a valid constant index to select a member; use an array or slice for dynamic homogeneous indexing.",
+     "var pair = (42, true)\nprintln(pair.0, pair.1)"},
+    {"E141", "Invalid enum or match",
+     "An enum, variant constructor, payload pattern, or match is invalid. A match must cover every possible case and must not repeat or hide later cases.",
+     "Match the variant's payload arity and type. Add missing cases or a final wildcard when a fallback is intended. Results use ok(value) and fail(code) patterns.",
+     "var answer !i64 = ok(42)\nmatch answer {\n    ok(value) => { println(value) }\n    fail(code) => { println(code) }\n}"},
+    {"E142", "catch needs a result",
+     "catch was applied to a value that is not !T. Its fallback must produce the result's success type.",
+     "Use catch on a fallible operation. Bind the code with catch code => expression when the fallback needs to inspect the failure.",
+     "var value = readIntResult() catch code => -code\nprintln(value)"},
+    {"E143", "Invalid deferred cleanup",
+     "defer requires a function call whose result is void. Its receiver and arguments are captured when the defer is registered; the call runs when the block exits.",
+     "Use a void cleanup operation. Handle a fallible close explicitly or use the dedicated deferred cleanup operation, such as fileClose or threadClose.",
+     "defer println(\"leaving this block\")"},
+    {"E150", "Invalid worker or thread-handle use",
+     "A worker has the wrong signature or a creator-owned thread handle would escape through a return, address, or composite. Workers currently exchange copied i64 values only.",
+     "Supply a named Kremen func(i64) i64 worker. Keep its handle in the creator, handle spawn/join results, and schedule threadClose after a successful spawn.",
+     "func square(value i64) i64 { return value * value }\n// In a result-returning function:\n// var job = threadSpawn(square, 7)?\n// defer threadClose(job)"},
+    {"E900", "Unsupported compiler lowering",
+     "The backend encountered a construct or internal state that it cannot lower to C. A valid program reaching this category may reveal a compiler bug.",
+     "Keep the source and exact diagnostic, record kremen --version, and reduce the program before reporting it. Do not suppress backend or C-compiler errors.",
+     "kremen emit-c main.kr -o main.c"},
+    {"W001", "Unused variable or parameter",
+     "A declared local, receiver, or parameter is never read. Warning checks are fatal by default because an unused value can reveal an incomplete calculation.",
+     "Use or remove the declaration. Prefix an intentionally unused binding with _. A leading underscore acknowledges unusedness; it does not release a resource.",
+     "func answer(_unused i64) i64 { return 42 }"}
+};
+
+static const Explanation *find_explanation(const char *code) {
+    size_t low = 0, high = sizeof explanations / sizeof *explanations;
+    while (low < high) {
+        size_t middle = low + (high - low) / 2;
+        int order = strcmp(code, explanations[middle].code);
+        if (!order) return &explanations[middle];
+        if (order < 0) high = middle; else low = middle + 1;
+    }
+    return NULL;
+}
+
+bool km_has_explanation(const char *code) { return find_explanation(code) != NULL; }
+
+bool km_explain(const char *code, FILE *output) {
+    const Explanation *entry = find_explanation(code);
+    if (!entry) return false;
+    fprintf(output, "%s: %s\n\nWhy this happens\n%s\n\nWhat to check\n%s\n\nExample\n%s\n",
+            entry->code, entry->title, entry->reason, entry->remedy, entry->example);
+    return true;
+}
+
+void km_explain_list(FILE *output) {
+    fputs("Kremen diagnostic categories\n\n", output);
+    for (size_t i = 0; i < sizeof explanations / sizeof *explanations; i++)
+        fprintf(output, "%s  %s\n", explanations[i].code, explanations[i].title);
+    fputs("\nRun kremen explain CODE for an explanation and example.\n", output);
+}

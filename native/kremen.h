@@ -72,6 +72,9 @@ void km_buf_printf(Buffer *, const char *, ...);
 _Noreturn void km_error(Context *, Token, const char *, const char *, ...);
 void km_diagnostic_span(Token, DiagnosticSpan *);
 unsigned km_name_distance(const char *, const char *);
+bool km_has_explanation(const char *);
+bool km_explain(const char *, FILE *);
+void km_explain_list(FILE *);
 void km_init(Context *);
 void km_destroy(Context *);
 Node *km_node(Context *, NodeKind, Token);
@@ -89,6 +92,7 @@ bool km_check(Context *);
 char *km_codegen(Context *);
 char *km_format(Context *, Source *);
 Source *km_read_source(Context *, const char *, bool);
+void km_validate_source(Context *, Source *);
 char *km_resolve(Context *, const char *, const char *);
 void *km_fast_copy(void *, const void *, size_t);
 

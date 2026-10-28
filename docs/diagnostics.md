@@ -2,7 +2,7 @@
 
 An error message is a report about a specific operation, not a judgment about your ability to program. Read the first line, find the marked code, and make one small change. Then run `check` again.
 
-This page describes 0.4.3. Examples shorten directory names for readability; the full compiler normally prints the resolved source path.
+This page describes 0.4.4. Examples shorten directory names for readability; the full compiler normally prints the resolved source path.
 
 ## Read the location first
 
@@ -25,6 +25,7 @@ example.kr:2:21: error[E110]: type mismatch: expected i64, got string
    |                     ^~~~~~
  3 |     println(count)
  help: Check the value and its declared type; Kremen does not convert types implicitly.
+ explain: kremen explain E110
 ```
 
 Read the first line from left to right:
@@ -37,6 +38,20 @@ Read the first line from left to right:
 The numbered lines are your source, including nearby context when available. `^` marks the beginning of the token, and `~` continues its underline. Here the variable requires an integer, but `"many"` is a string. If you meant a number, write `var count i64 = 5`. If you meant text, use `var count string = "many"` instead. Choose the type that matches your program's intent.
 
 A code such as `E110` is useful when reporting a problem, but it is not a substitute for reading the message. Several checks share a code. An `error[W001]` is also fatal: Kremen treats its warning checks as errors by default.
+
+## Ask for an explanation offline
+
+```sh
+kremen explain E131
+kremen explain W001
+kremen explain --list
+```
+
+`explain` prints why that category occurs, what to check, and a small example. The catalog is built into the full compiler and works without a project, runtime header, C compiler, network, or account. Running `kremen explain` without a code lists the catalog too. Some examples are code fragments intended to be placed inside a function.
+
+The original error message identifies the particular check. For example, `E110` covers both syntax and type disagreements, so its general explanation does not replace the marked source and message. The command supports the 39 current native categories, including fatal `W001`; the self-hosted subset has its own diagnostic scheme.
+
+An unknown code is a command-line error, not a guessed explanation. This is an initial part of the teaching tools. There is no `--mode=learn` or lesson runner in this release; see the [roadmap](roadmap.md) for planned work.
 
 ## Common mistakes and their fixes
 
@@ -56,6 +71,8 @@ A code such as `E110` is useful when reporting a problem, but it is not a substi
 A column points at the token associated with the failed check. For a compound operation it may mark the operator or the start of the indexed value. It is a useful starting point, not a claim that changing only that token is always the right fix.
 
 For an unknown name, the checker can suggest a nearby spelling when it finds a unique close candidate. This includes variables, functions, imported functions, types, fields, methods, and enum variants. A suggestion is help for a likely typo, not an automatic rename. Check that the proposed name is actually the one you intended. A misspelled imported function is reported as a function lookup failure in that module, rather than incorrectly blaming the module's qualifier as an unknown variable.
+
+Unknown types are marked at the type annotation itself. Qualified annotations include the complete marked name, and their suggestions search the imported module. A misspelling such as `vec.Vectro` can suggest `vec.Vector`; it must not suggest an unrelated primitive as though that primitive belonged to `vec`.
 
 ## Follow a borrow back to where it began
 
@@ -136,12 +153,13 @@ Use `--diagnostic-format=text` for the default readable output. The option is ac
 | `excerpt` | Bounded displayed source window, with tabs expanded |
 | `caret`, `underline_width` | Zero-based display-cell offset and underline width in that excerpt |
 | `hint` | Optional help text, or `null` |
+| `explain` | Offline command for that diagnostic category, or `null`; added in 0.4.4 |
 | `related` | Earlier declaration/borrow locations, with their explanatory messages |
 | `imports` | Import-origin locations leading to the failing source |
 
 Editor integrations should use the file/range fields to select source. The displayed excerpt can be clipped and should not be used to reconstruct the whole line. JSON strings escape control characters and invalid UTF-8 bytes so malformed input still produces a valid error record. Visual caret width retains the Unicode limits explained above.
 
-This option covers Kremen frontend diagnostics and some compiler-option errors. It does not convert external C-compiler output, program stdout, or runtime errors into JSON. The separate self-hosted subset also keeps its own text diagnostics. A tool invoking `build` or `run` must distinguish the frontend from later stages rather than assuming every stderr line is a JSON object.
+This option covers Kremen frontend diagnostics and command validation, including unknown commands, missing or extra sources, invalid formatter modes, invalid formatter input, and protected output paths. It does not convert external C-compiler output, program stdout, runtime errors, every late OS failure, or formatting-drift reports into JSON. The separate self-hosted subset also keeps its own text diagnostics. A tool invoking `build` or `run` must distinguish the frontend from later stages rather than assuming every stderr line is a JSON object. Successful `explain` output is ordinary text on stdout even when this diagnostic option is selected.
 
 ## Which component produced the error?
 

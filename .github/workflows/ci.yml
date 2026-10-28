@@ -21,9 +21,15 @@ jobs:
         run: make USE_ASM=0 all check
       - name: Verify source archives
         run: |
+          KREMEN_RELEASE_VERSION=$(cat VERSION)
           make dist
           cd ..
-          sha256sum -c kremen-v0.4.3.sha256
+          sha256sum -c "kremen-v$KREMEN_RELEASE_VERSION.sha256"
+          mkdir "release check"
+          tar -xzf "kremen-v$KREMEN_RELEASE_VERSION.tar.gz" -C "release check"
+          cd "release check/kremen"
+          sha256sum -c SHA256SUMS
+          make all selfhost check
   sanitizers:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

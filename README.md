@@ -1,4 +1,4 @@
-# Kremen 0.4.3
+# Kremen 0.4.4
 
 Kremen is a small compiled language for learning and experimenting with systems programming. Its syntax is inspired by Go. It has explicit integer types, structs and methods, checked references, raw pointers, arrays, slices, results, scoped resource cleanup, and native worker threads.
 
@@ -62,17 +62,21 @@ This prints `42`, then `finished`. `!i64` means the function returns either an i
 ./build/kremen emit-c examples/tutorial/04_functions.kr -o build/answer.c
 ./build/kremen fmt -w examples/tutorial/04_functions.kr
 ./build/kremen fmt --check examples/tutorial/04_functions.kr
+./build/kremen explain E131
+./build/kremen explain --list
 ```
 
-`check` checks Kremen without invoking a C compiler. `run` builds a temporary executable and runs it. `build` keeps the executable. `emit-c` lets you inspect the generated C, which includes the runtime. `fmt` gives the code its canonical layout.
+`check` checks Kremen without invoking a C compiler. `run` builds a temporary executable and runs it. `build` keeps the executable. `emit-c` lets you inspect the generated C, which includes the runtime. `fmt` gives the code its canonical layout. `explain` provides an offline explanation and example for a diagnostic code.
 
 The default C flags for full-language programs are `-std=c11 -Wall -Wextra -Wpedantic -Werror -O3 -pthread`. Safety checks stay enabled at every optimization level. The language also rejects unused bindings and shadowed names. An intentional unused name starts with `_`.
 
 ## What changed
 
-Version 0.4.3 adds native POSIX worker threads with explicit spawn/join operations and automatic cleanup of outstanding children. Workers receive integer values; references, slices, and resource handles cannot be shared through this interface. This keeps the first threading model small enough to check. Read [Working with threads](docs/threads.md) before using it.
+Version 0.4.4 adds `kremen explain`, with reasons, remedies, and examples for all 39 native diagnostic categories. It corrects integer inference around imported functions and methods, locates unknown type names precisely, improves structured command-line errors, and avoids repeated formatting work for short compiler strings. Read the [0.4.4 notes](docs/v0.4.4.md) for compatibility and validation.
 
-Compiler diagnostics now include surrounding source context, better related locations, and an optional JSON format for editor tools. The [0.4.3 notes](docs/v0.4.3.md) describe the compiler changes and current limits. [0.4.2](docs/v0.4.2.md) introduced the English learning material and embedded runtime source excerpts; [0.4.1](docs/v0.4.1.md) fixed borrowing and bootstrap behavior. [Repository update instructions](docs/repository-update.md) explain which files belong in a source update.
+[0.4.3](docs/v0.4.3.md) introduced independent POSIX workers and JSON diagnostics; the [thread guide](docs/threads.md) explains their boundaries. [0.4.2](docs/v0.4.2.md) introduced the English learning material and embedded runtime source excerpts; [0.4.1](docs/v0.4.1.md) fixed borrowing and bootstrap behavior. [Repository update instructions](docs/repository-update.md) explain which files belong in a source update.
+
+The [roadmap to 0.5](docs/roadmap.md) describes gradual work toward `work` and `learn` profiles. Those profiles and the proposed lesson commands are not implemented in 0.4.4. The current compiler keeps one strict set of language rules; `explain` is the first reusable part of the teaching tools.
 
 ## Where to go next
 

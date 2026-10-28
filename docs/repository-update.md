@@ -1,12 +1,58 @@
 # Updating an existing repository
 
-Use the complete 0.4.3 source tree when updating an older project. It includes the preceding stabilization and documentation work. Copying only the new files is not enough: the existing compiler, runtime, build rules, tests, seed, and documentation also changed.
+Use the complete 0.4.4 source tree when updating an older project. It includes the preceding stabilization and documentation work. Copying only the new files is not enough: keep compiler sources, build rules, tests, installed resources, and documentation from the same release.
 
-The historical lists below compare the released 0.4.0 and 0.4.1 checksum manifests with the 0.4.2 source distribution. Paths are relative to the `kremen` project root. They describe release contents, not any additional local edits in your own repository. Merge those edits before replacing files.
+The lists below compare released checksum manifests. Paths are relative to the `kremen` project root. They describe release contents, not any additional local edits in your own repository. Merge those edits before replacing files.
 
-## Updating to 0.4.3
+## From 0.4.3 to 0.4.4
 
-The current update changes checker, code generation, diagnostics, runtime, build commands, tests, and documentation. New material includes the worker-thread guide, 0.4.3 release notes, worker examples, compiler/runtime regressions, a JSON diagnostic validator, and the GitHub Actions workflow. See [0.4.3 notes](v0.4.3.md) for behavior and compatibility; the old 0.4.2 lists are not a complete 0.4.3 update manifest.
+Add these files:
+
+```text
+bench/compiler-results-0.4.4.txt
+bench/compiler.sh
+docs/roadmap.md
+docs/v0.4.4.md
+native/diagnostics.c
+tests/native/compiler_core_044.c
+tests/native/stabilization_044.sh
+```
+
+Replace these existing files:
+
+```text
+.github/workflows/ci.yml
+CHANGELOG.md
+Makefile
+README.md
+VERSION
+bench/README.md
+docs/README.md
+docs/diagnostics.md
+docs/install.md
+docs/language.md
+docs/repository-update.md
+docs/safety.md
+docs/v0.2.md
+docs/validation.md
+native/checker.c
+native/core.c
+native/kremen.h
+native/main.c
+native/parser.c
+selfhost/toolchain.kr
+tests/native/install.sh
+tests/native/sanitize.sh
+tests/native/toolchain_stability.sh
+```
+
+Regenerate and replace `SHA256SUMS` after the source is final. No files are removed. The runtime, `native/codegen.c`, bootstrap compiler source, and verified C seed retain their 0.4.3 contents. Keep the new `native/diagnostics.c` in every custom native-compiler link command; core diagnostics and the CLI both use its offline catalog.
+
+The source installer automatically includes the new Markdown guides and saved benchmark report. Archive names in CI now come from `VERSION`, and CI builds a fresh extraction as well. [0.4.4 notes](v0.4.4.md) explain the behavior; [the roadmap](roadmap.md) describes future profile work separately.
+
+## Historical update to 0.4.3
+
+The 0.4.3 update changes checker, code generation, diagnostics, runtime, build commands, tests, and documentation. New material includes the worker-thread guide, 0.4.3 release notes, worker examples, compiler/runtime regressions, a JSON diagnostic validator, and the GitHub Actions workflow. See [0.4.3 notes](v0.4.3.md) for behavior and compatibility; the old 0.4.2 lists are not a complete 0.4.3 update manifest.
 
 Update both the new files and changed existing files. In particular, keep the matching `native/` sources and `runtime/kremen_rt.h` together: the new worker calls require the new runtime and `-pthread` backend flag. Keep the generated bootstrap seed, its sources, version strings, and installed rebuild resources in sync. The full compiler and self-hosted subset still have different feature sets.
 

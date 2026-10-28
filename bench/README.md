@@ -2,7 +2,7 @@
 
 The scripts here measure specific compiler and runtime workloads. They do not establish that Kremen is faster than another language for arbitrary applications. All runners are native C and shell; the old Python comparison mode is gone.
 
-Saved reports in this directory are **0.4.1 measurements**. They remain historical observations from that build and container, not new 0.4.3 performance claims. Run the scripts again to measure your own checkout.
+The checking, bootstrap, and string-runtime reports are **0.4.1 measurements**. They remain historical observations from that build and container. [compiler-results-0.4.4.txt](compiler-results-0.4.4.txt) is a separate comparison of full C emission by 0.4.3 and 0.4.4. Run the scripts again to measure your own checkout.
 
 ## Full-frontend checking
 
@@ -60,3 +60,16 @@ The 0.4.1 C seed grew from roughly 26 KiB to 157 KiB as operations gained explic
 The checker caches computed type layouts, and the full backend interns structural types through a hash table. These changes reduce repeated analysis and lookup work. They do not remove arithmetic or lifetime checks, and there is no release-wide speedup percentage attached to them.
 
 Worker threads introduce their own costs: thread creation, join operations, bookkeeping, and synchronization around shared standard streams. Compare a substantial independent workload both sequentially and concurrently; the small squaring example in the documentation is a teaching example, not a throughput test. Run timing experiments without simultaneous builds or sanitizer jobs, use the same input and compiler options, and report the workload along with its results.
+
+## Full C emission in 0.4.4
+
+```sh
+make
+sh bench/compiler.sh /path/to/reference/kremen 15 3000
+```
+
+Supply an already built reference compiler. The current compiler defaults to `build/kremen`; set `KREMEN_BENCH_CURRENT` to choose another executable. Both must accept the same generated corpus. The script emits C once to warm each executable, requires byte-identical output, then runs three alternating batches and compares the outputs again. It records versions, host, corpus checksum, wall/CPU time, and maximum child RSS. It includes compiler process startup, frontend work, generation, and atomic output; it excludes the external C compiler and application execution.
+
+0.4.4 formats short compiler strings once using a 512-byte stack buffer; long strings keep their allocation fallback. This reduces formatting calls, but overall performance depends on the workload. The saved comparison uses GCC 14.2.0 native builds with default `-O3` on Linux x86-64, 3,000 helper functions, a 265,615-byte input, and 15 processes per batch. No compiler builds or sanitizer jobs ran during the saved comparison; the host was not otherwise isolated.
+
+Per-process wall means for 0.4.3 were 0.1274, 0.1587, and 0.1272 seconds. For 0.4.4 they were 0.1292, 0.1353, and 0.1227 seconds. One new-version round was slower, and the reference's second round varied substantially. These observations do not justify a guaranteed percentage speedup. Generated C was byte-identical throughout. The raw [report](compiler-results-0.4.4.txt) retains each batch's CPU time and RSS as well.

@@ -41,8 +41,10 @@ char *km_strndup(Context *ctx, const char *s, size_t n) {
 char *km_strdup(Context *ctx, const char *s) { return km_strndup(ctx, s, strlen(s)); }
 char *km_sprintf(Context *ctx, const char *format, ...) {
     va_list a, copy; va_start(a, format); va_copy(copy, a);
-    int n = vsnprintf(NULL, 0, format, a); va_end(a);
+    char local[512];
+    int n = vsnprintf(local, sizeof local, format, a); va_end(a);
     if (n < 0) { va_end(copy); fputs("kremen: formatting error\n", stderr); exit(2); }
+    if ((size_t)n < sizeof local) { va_end(copy); return km_strndup(ctx, local, (size_t)n); }
     char *s = km_alloc(ctx, (size_t)n + 1); vsnprintf(s, (size_t)n + 1, format, copy); va_end(copy); return s;
 }
 
@@ -293,6 +295,9 @@ _Noreturn void km_error(Context *ctx, Token tok, const char *code, const char *f
         fprintf(stderr, ",\"message_truncated\":%s,", truncated ? "true" : "false");
         diagnostic_json_location(tok);
         fputs(",\"hint\":", stderr); diagnostic_json_string(hint);
+        fputs(",\"explain\":", stderr);
+        if (km_has_explanation(code)) fprintf(stderr, "\"kremen explain %s\"", code);
+        else fputs("null", stderr);
         fputs(",\"related\":[", stderr);
         if (ctx->related_message && ctx->related_token.src) {
             fputs("{\"message\":", stderr); diagnostic_json_string(ctx->related_message);
@@ -320,6 +325,7 @@ _Noreturn void km_error(Context *ctx, Token tok, const char *code, const char *f
             diagnostic_text_location(item, false);
         }
         if (hint) fprintf(stderr, " help: %s\n", hint);
+        if (km_has_explanation(code)) fprintf(stderr, " explain: kremen explain %s\n", code);
     }
     va_end(args);
     ctx->related_message = NULL; ctx->diagnostic_hint = NULL;
@@ -388,6 +394,21 @@ void km_init(Context *ctx) {
 }
 void km_destroy(Context *ctx) { ArenaBlock *b = ctx->arena; while (b) { ArenaBlock *next = b->next; free(b); b = next; } ctx->arena = NULL; ctx->arena_bytes = 0; }
 
+void km_validate_source(Context *ctx, Source *src) {
+    const char *nul = memchr(src->data, 0, src->len);
+    if (nul) {
+        Token invalid = {.src = src, .len = 1, .offset = (size_t)(nul - src->data), .line = 1, .col = 1};
+        for (size_t i = 0; i < invalid.offset; i++) {
+            if (src->data[i] == '\r') {
+                if (i + 1 < invalid.offset && src->data[i + 1] == '\n') i++;
+                invalid.line++; invalid.col = 1;
+            } else if (src->data[i] == '\n') { invalid.line++; invalid.col = 1; }
+            else invalid.col++;
+        }
+        km_error(ctx, invalid, "E100", "NUL byte in source %s", src->path);
+    }
+}
+
 Source *km_read_source(Context *ctx, const char *path, bool header) {
     Source missing = {.path = (char *)path};
     Token tok = {.src = &missing, .line = 1, .col = 1};
@@ -408,18 +429,7 @@ Source *km_read_source(Context *ctx, const char *path, bool header) {
     src->data = km_alloc(ctx, src->len + 1);
     size_t got = fread(src->data, 1, src->len, f); bool failed = ferror(f) != 0; fclose(f);
     if (got != src->len || failed) km_error(ctx, tok, "E010", "cannot read %s", path);
-    const char *nul = memchr(src->data, 0, src->len);
-    if (nul) {
-        Token invalid = {.src = src, .len = 1, .offset = (size_t)(nul - src->data), .line = 1, .col = 1};
-        for (size_t i = 0; i < invalid.offset; i++) {
-            if (src->data[i] == '\r') {
-                if (i + 1 < invalid.offset && src->data[i + 1] == '\n') i++;
-                invalid.line++; invalid.col = 1;
-            } else if (src->data[i] == '\n') { invalid.line++; invalid.col = 1; }
-            else invalid.col++;
-        }
-        km_error(ctx, invalid, "E100", "NUL byte in source %s", path);
-    }
+    km_validate_source(ctx, src);
     if (ctx->sources.len >= 512) km_error(ctx, tok, "E010", "too many source files (limit 512)");
     km_sources_push(ctx, &ctx->sources, src); return src;
 }
