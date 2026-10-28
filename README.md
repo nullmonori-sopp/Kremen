@@ -1,4 +1,4 @@
-# Kremen 0.4.4
+# Kremen 0.4.5
 
 Kremen is a small compiled language for learning and experimenting with systems programming. Its syntax is inspired by Go. It has explicit integer types, structs and methods, checked references, raw pointers, arrays, slices, results, scoped resource cleanup, and native worker threads.
 
@@ -64,6 +64,7 @@ This prints `42`, then `finished`. `!i64` means the function returns either an i
 ./build/kremen fmt --check examples/tutorial/04_functions.kr
 ./build/kremen explain E131
 ./build/kremen explain --list
+./build/kremen check examples/learn/checked_input.kr --mode=learn
 ```
 
 `check` checks Kremen without invoking a C compiler. `run` builds a temporary executable and runs it. `build` keeps the executable. `emit-c` lets you inspect the generated C, which includes the runtime. `fmt` gives the code its canonical layout. `explain` provides an offline explanation and example for a diagnostic code.
@@ -72,17 +73,18 @@ The default C flags for full-language programs are `-std=c11 -Wall -Wextra -Wped
 
 ## What changed
 
-Version 0.4.4 adds `kremen explain`, with reasons, remedies, and examples for all 39 native diagnostic categories. It corrects integer inference around imported functions and methods, locates unknown type names precisely, improves structured command-line errors, and avoids repeated formatting work for short compiler strings. Read the [0.4.4 notes](docs/v0.4.4.md) for compatibility and validation.
+Version 0.4.5 adds `--mode=work|learn`. Work is the default; learn adds five explicit checking requirements without changing accepted programs' runtime behavior. It also fixes exponential method-tree traversal, closes source-resolution symlink bypasses, and safely renders source-controlled diagnostic text. Read the [0.4.5 notes](docs/v0.4.5.md) for compatibility and validation.
 
-[0.4.3](docs/v0.4.3.md) introduced independent POSIX workers and JSON diagnostics; the [thread guide](docs/threads.md) explains their boundaries. [0.4.2](docs/v0.4.2.md) introduced the English learning material and embedded runtime source excerpts; [0.4.1](docs/v0.4.1.md) fixed borrowing and bootstrap behavior. [Repository update instructions](docs/repository-update.md) explain which files belong in a source update.
+[0.4.4](docs/v0.4.4.md) introduced offline explanations; the catalog now covers 44 diagnostic categories, including `L001` through `L005`. [0.4.3](docs/v0.4.3.md) introduced independent POSIX workers and JSON diagnostics; the [thread guide](docs/threads.md) explains their boundaries. [Repository update instructions](docs/repository-update.md) explain which files belong in a source update.
 
-The [roadmap to 0.5](docs/roadmap.md) describes gradual work toward `work` and `learn` profiles. Those profiles and the proposed lesson commands are not implemented in 0.4.4. The current compiler keeps one strict set of language rules; `explain` is the first reusable part of the teaching tools.
+The [profile guide](docs/profiles.md) explains the first work/learn interface and its limits. The [roadmap to 0.5](docs/roadmap.md) describes subsequent learning tools. Project profile files, a lesson runner, and browser execution are not implemented yet.
 
 ## Where to go next
 
 - [Documentation map](docs/README.md): choose a learning path.
 - [Language reference](docs/language.md): syntax, types, built-ins, and limits.
 - [Understanding errors](docs/diagnostics.md): read a diagnostic and fix common mistakes.
+- [Work and learn profiles](docs/profiles.md): select additional learning requirements.
 - [Safety and memory](docs/safety.md): what the compiler checks and what `unsafe` means.
 - [Working with threads](docs/threads.md): start independent jobs, collect results, and understand cleanup.
 - [Self-hosting](docs/selfhosting.md) and [bootstrap reference](selfhost/README.md).

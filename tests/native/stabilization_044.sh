@@ -33,8 +33,8 @@ pass 'short/long formatting preserves variadic arguments, boundaries, bytes and 
 
 "$KREMEN" explain --list > "$WORK/catalog" 2> "$WORK/error" || fail 'list explanations'
 [ ! -s "$WORK/error" ] || fail 'catalog stderr'
-awk '/^[EW][0-9][0-9][0-9]  / { print $1 }' "$WORK/catalog" > "$WORK/codes"
-grep -oh '"[EW][0-9][0-9][0-9]"' "$ROOT"/native/*.c | tr -d '"' | LC_ALL=C sort -u > "$WORK/emitted-codes"
+awk '/^[ELW][0-9][0-9][0-9]  / { print $1 }' "$WORK/catalog" > "$WORK/codes"
+grep -oh '"[ELW][0-9][0-9][0-9]"' "$ROOT"/native/*.c | tr -d '"' | LC_ALL=C sort -u > "$WORK/emitted-codes"
 cmp -s "$WORK/emitted-codes" "$WORK/codes" || fail 'explanation catalog coverage and order'
 pass 'catalog covers every native diagnostic code in stable order'
 while IFS= read -r code; do

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.5 — 2026-10-28
+
+- Add full-language `--mode=work|learn`, with compatible work defaults and five learning requirements checked after shared semantics. Keep accepted source's C output identical between profiles.
+- Add `L001`–`L005` explanations, a checked-input example, profile-aware JSON diagnostics, and cached checks for discarded result-bearing aggregates.
+- Fix exponential traversal of checked method-call receivers during backend type scanning and defer-callback discovery.
+- Apply canonical project-root checks to directory sources, automatic headers, and entry modules; validate that `--root` names a directory.
+- Escape terminal controls, bidi directives, and invalid bytes in frontend diagnostic text and runtime source paths. Bound text messages, preserve JSON byte information, and locate `catch` at its operator.
+- Add security regressions, dual-profile checks, and a fixed-seed mutation corpus. Extend installation, sanitizers, and English guides. See [release notes](docs/v0.4.5.md).
+
 ## 0.4.4 — 2026-10-28
 
 - Add offline `kremen explain CODE` and a list of all 39 native diagnostic categories, with reasons, remedies, and examples.

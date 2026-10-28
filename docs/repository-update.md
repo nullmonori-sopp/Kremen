@@ -1,8 +1,63 @@
 # Updating an existing repository
 
-Use the complete 0.4.4 source tree when updating an older project. It includes the preceding stabilization and documentation work. Copying only the new files is not enough: keep compiler sources, build rules, tests, installed resources, and documentation from the same release.
+Use the complete 0.4.5 source tree when updating an older project. It includes the preceding stabilization and documentation work. Copying only the new files is not enough: keep compiler sources, build rules, tests, installed resources, and documentation from the same release.
 
 The lists below compare released checksum manifests. Paths are relative to the `kremen` project root. They describe release contents, not any additional local edits in your own repository. Merge those edits before replacing files.
+
+## From 0.4.4 to 0.4.5
+
+Add these files:
+
+```text
+docs/profiles.md
+docs/v0.4.5.md
+examples/learn/checked_input.kr
+native/learn.c
+tests/native/diagnostic_security_045.c
+tests/native/malformed_045.c
+tests/native/malformed_045.sh
+tests/native/profiles_045.sh
+tests/native/security_045.sh
+```
+
+Replace these existing files:
+
+```text
+CHANGELOG.md
+Makefile
+README.md
+VERSION
+bench/README.md
+docs/README.md
+docs/diagnostics.md
+docs/install.md
+docs/language.md
+docs/repository-update.md
+docs/roadmap.md
+docs/safety.md
+docs/v0.2.md
+docs/validation.md
+native/checker.c
+native/codegen.c
+native/core.c
+native/diagnostics.c
+native/kremen.h
+native/main.c
+native/modules.c
+native/parser.c
+runtime/kremen_rt.h
+selfhost/README.md
+selfhost/toolchain.kr
+tests/native/install.sh
+tests/native/sanitize.sh
+tests/native/stabilization_044.sh
+```
+
+Regenerate and replace `SHA256SUMS` after all source edits. No source files are removed. Keep `native/learn.c` in custom native-compiler link commands; the full checker calls it for `--mode=learn`. The Makefile and sanitizer runner already include it.
+
+The default profile is `work`; `learn` adds the five checks documented in [Work and learn profiles](profiles.md). Existing valid programs can keep using the default. Source resolution now checks the canonical paths of entry files, imported implementations, and paired headers against the project root. If an intentional source symlink points to a shared directory outside that root, select a common parent with `--root`; see [the language guide](language.md).
+
+The installer automatically includes the new guide and example. Its script, the packaging script, and the CI workflow keep their 0.4.4 contents. The bootstrap compiler and its verified C seed are unchanged; the subset driver's version changes in `selfhost/toolchain.kr`, but the subset does not gain profiles. See [0.4.5 notes](v0.4.5.md) for the fixes, compatibility details, and validation.
 
 ## From 0.4.3 to 0.4.4
 

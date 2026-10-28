@@ -1,0 +1,23 @@
+package main
+func readPositiveCount()!i64 {
+	var count = readIntResult()?
+	if count <= 0 {
+		return fail(1001)
+	}
+	return ok(count)
+}
+func main() {
+	var input = readPositiveCount()
+	match input {
+		ok(count) => {
+			println(100 / count)
+		}
+		fail(code) => {
+			if code == 1001 {
+				println("Count must be greater than zero.")
+			} else {
+				println("Cannot read count:", errorMessage(code))
+			}
+		}
+	}
+}

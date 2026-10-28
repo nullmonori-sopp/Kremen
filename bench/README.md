@@ -73,3 +73,9 @@ Supply an already built reference compiler. The current compiler defaults to `bu
 0.4.4 formats short compiler strings once using a 512-byte stack buffer; long strings keep their allocation fallback. This reduces formatting calls, but overall performance depends on the workload. The saved comparison uses GCC 14.2.0 native builds with default `-O3` on Linux x86-64, 3,000 helper functions, a 265,615-byte input, and 15 processes per batch. No compiler builds or sanitizer jobs ran during the saved comparison; the host was not otherwise isolated.
 
 Per-process wall means for 0.4.3 were 0.1274, 0.1587, and 0.1272 seconds. For 0.4.4 they were 0.1292, 0.1353, and 0.1227 seconds. One new-version round was slower, and the reference's second round varied substantially. These observations do not justify a guaranteed percentage speedup. Generated C was byte-identical throughout. The raw [report](compiler-results-0.4.4.txt) retains each batch's CPU time and RSS as well.
+
+## Method-tree work in 0.4.5
+
+0.4.5 removes duplicate traversal of aliased method receivers from two backend walks. The regression suite emits, compiles, and runs 90-call chains with and without deferred methods, in both profiles, under a command deadline. This fixes exponential compiler work on that source shape. It does not establish an application throughput improvement.
+
+The saved 0.4.4 report remains historical. The 0.4.5 runtime has additional diagnostic-path rendering code, so the strict byte-identity comparison with a 0.4.4 compiler will correctly report a difference. Use the emitter script when comparing compatible emitters; use the checking runner for frontend-only measurements. Profile equality tests separately require work and learn to emit identical C for accepted input on the same compiler.

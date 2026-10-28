@@ -13,6 +13,9 @@ sh "$ROOT/install.sh" --prefix "$PREFIX" > "$WORK/log" 2>&1 || { cat "$WORK/log"
 "$PREFIX/bin/kremen" --version | grep -F "$(cat "$ROOT/VERSION")" > /dev/null
 "$PREFIX/bin/kremen" explain E131 > "$WORK/explanation"
 grep -F 'Borrow conflict' "$WORK/explanation" > /dev/null
+"$PREFIX/bin/kremen" explain L003 > "$WORK/explanation"
+grep -F 'Bind and use' "$WORK/explanation" > /dev/null
+"$PREFIX/bin/kremen" check "$PREFIX/share/doc/kremen/examples/learn/checked_input.kr" --mode=learn > "$WORK/log"
 "$PREFIX/bin/kremen" selfhost --version | grep -F 'selfhost' > /dev/null
 "$PREFIX/bin/kremen-selfhost" check "$ROOT/selfhost/example.kr" > "$WORK/log"
 "$PREFIX/bin/kremen" run "$ROOT/examples/hello.kr" > "$WORK/actual"
@@ -39,6 +42,10 @@ cmp "$WORK/selfhost-expected" "$WORK/selfhost-example"
 grep -F 'installed runtime lookup probe' "$WORK/probe-moved.c" > /dev/null
 "$MOVED/bin/kremen" explain W001 > "$WORK/explanation"
 grep -F 'Unused variable' "$WORK/explanation" > /dev/null
+printf '4\n' > "$WORK/learning-input"
+"$MOVED/bin/kremen" run "$MOVED/share/doc/kremen/examples/learn/checked_input.kr" --mode=learn < "$WORK/learning-input" > "$WORK/actual"
+printf '25\n' > "$WORK/learning-expected"
+cmp "$WORK/learning-expected" "$WORK/actual"
 "$MOVED/bin/kremen" run "$MOVED/share/doc/kremen/examples/threads.kr" > "$WORK/actual"
 printf 'sum of squares: 100\n' > "$WORK/expected-threads"
 cmp "$WORK/expected-threads" "$WORK/actual"

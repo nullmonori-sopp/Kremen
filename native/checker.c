@@ -1130,5 +1130,6 @@ bool km_check(Context *ctx) {
         if(n->result->kind!=TY_VOID&&!terminal)km_error(ctx,n->tok,"E120","function '%s' can finish without returning %s",n->name,km_type_name(ctx,n->result));
         pop(c);
     }
+    if(ctx->mode==KM_MODE_LEARN)km_check_learn(ctx);
     return true;
 }

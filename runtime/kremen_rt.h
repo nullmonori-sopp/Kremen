@@ -108,11 +108,37 @@ typedef struct {
 static const kr_location *kr_source_locations;
 static size_t kr_source_location_count;
 
+/* Source paths are data, not terminal commands. This error-only renderer
+ * mirrors the frontend's UTF-8/control policy without a runtime allocation. */
+static void kr_report_path(const char *path) {
+    const unsigned char *p = (const unsigned char *)path;
+    size_t remaining = strlen(path);
+    while (remaining) {
+        unsigned char first = *p;
+        size_t length = first < 128 ? 1 : first >= 0xc2 && first <= 0xdf ? 2 :
+            first >= 0xe0 && first <= 0xef ? 3 : first >= 0xf0 && first <= 0xf4 ? 4 : 0;
+        bool valid = length != 0 && length <= remaining;
+        for (size_t i = 1; valid && i < length; i++) if ((p[i] & 0xc0) != 0x80) valid = false;
+        if (valid && ((first == 0xe0 && p[1] < 0xa0) || (first == 0xed && p[1] >= 0xa0) ||
+            (first == 0xf0 && p[1] < 0x90) || (first == 0xf4 && p[1] >= 0x90))) valid = false;
+        if (!valid) { (void)fprintf(stderr, "\\x%02x", (unsigned)first); p++; remaining--; continue; }
+        uint32_t scalar = length == 1 ? first : first & (length == 2 ? 0x1fu : length == 3 ? 0x0fu : 0x07u);
+        for (size_t i = 1; i < length; i++) scalar = (scalar << 6) | (p[i] & 0x3fu);
+        if (scalar < 32 || (scalar >= 0x7f && scalar <= 0x9f) || scalar == 0x061c || scalar == 0x200e ||
+            scalar == 0x200f || (scalar >= 0x2028 && scalar <= 0x202e) || (scalar >= 0x2066 && scalar <= 0x2069)) {
+            if (scalar < 128) (void)fprintf(stderr, "\\x%02x", (unsigned)scalar);
+            else (void)fprintf(stderr, "\\u%04x", (unsigned)scalar);
+        } else (void)fwrite(p, 1, length, stderr);
+        p += length; remaining -= length;
+    }
+}
+
 static void kr_report_error(const char *message, size_t length, int id) {
     (void)pthread_mutex_lock(&kr_diagnostic_mutex);
     const kr_location *location = id > 0 && (size_t)id <= kr_source_location_count ? &kr_source_locations[id - 1] : NULL;
     if (location != NULL) {
-        (void)fprintf(stderr, "%s:%d:%d: runtime error: ", location->path, location->line, location->column);
+        kr_report_path(location->path);
+        (void)fprintf(stderr, ":%d:%d: runtime error: ", location->line, location->column);
     } else if (id > 0) {
         (void)fprintf(stderr, "runtime error at line %d: ", id);
     } else {

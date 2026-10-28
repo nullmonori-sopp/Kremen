@@ -208,8 +208,12 @@ static void scan_node(Generator *g, Node *node)
     if (node->symbol) scan_type(g, node->symbol->type);
     Node *children[] = {node->left, node->right, node->value, node->base,
                         node->index, node->callee, node->condition, node->body,
-                        node->otherwise, node->init, node->post, node->receiver};
+                        node->otherwise, node->init, node->post};
     for (size_t i = 0; i < sizeof children / sizeof children[0]; ++i) scan_node(g, children[i]);
+    /* A checked method call's receiver aliases callee->base. Following both
+     * edges turns a chain of n calls into an exponential traversal. Function
+     * receiver declarations are real children and still need one visit. */
+    if (node->kind != N_CALL) scan_node(g, node->receiver);
     Nodes lists[] = {node->items, node->params, node->args, node->fields, node->values};
     for (size_t i = 0; i < sizeof lists / sizeof lists[0]; ++i) {
         for (size_t j = 0; j < lists[i].len; ++j) scan_node(g, lists[i].data[j]);
@@ -666,8 +670,9 @@ static void defer_callbacks(Generator *g,Node *node) {
         for(size_t i=0;i<source->args.len;i++)km_nodes_push(g->ctx,&copy.args,captured_name(g,source->args.data[i]->type,km_sprintf(g->ctx,"captured->arg_%zu",i),source->tok));
         (void)call(g,&copy);g->indent--;line(g,"}");
     }
-    Node *children[]={node->left,node->right,node->value,node->base,node->index,node->callee,node->condition,node->body,node->otherwise,node->init,node->post,node->receiver};
+    Node *children[]={node->left,node->right,node->value,node->base,node->index,node->callee,node->condition,node->body,node->otherwise,node->init,node->post};
     for(size_t i=0;i<sizeof children/sizeof children[0];i++)defer_callbacks(g,children[i]);
+    if(node->kind!=N_CALL)defer_callbacks(g,node->receiver);
     Nodes vectors[]={node->items,node->params,node->args,node->fields,node->values};
     for(size_t i=0;i<sizeof vectors/sizeof vectors[0];i++)for(size_t j=0;j<vectors[i].len;j++)defer_callbacks(g,vectors[i].data[j]);
 }

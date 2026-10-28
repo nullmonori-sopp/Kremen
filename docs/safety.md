@@ -1,6 +1,6 @@
 # Safety and memory in Kremen
 
-Kremen checks many mistakes before a program runs and checks others while it runs. These checks are useful, but they do not make every possible program correct. This page explains the actual boundaries of the full language in 0.4.4. The self-hosted subset has a different, smaller set of checks.
+Kremen checks many mistakes before a program runs and checks others while it runs. These checks are useful, but they do not make every possible program correct. This page explains the actual boundaries of the full language in 0.4.5. The self-hosted subset has a different, smaller set of checks.
 
 If you are new to memory, begin with [tutorial lesson 9](tutorial.md#9-understand-ownership-before-using-dynamic-memory). A variable owns a value. A reference borrows access to that value. A slice describes storage owned by a runtime allocation. Copying a slice does not copy its elements or extend the lifetime of that storage.
 
@@ -13,6 +13,8 @@ A borrow covers an entire named variable. Multiple shared references allow readi
 References and pointers cannot be returned, reassigned, or stored in composite values. This version has no lifetime parameters. Its conservative rules reject some programs that a more expressive lifetime system could prove safe.
 
 The compiler also checks enum matches for coverage, duplicate variants, payload types, and arm order. Tuple indices must be constants. A result needs explicit initialization; zero-filled storage cannot silently create an invalid `!T`.
+
+The `work` and `learn` profiles share these guarantees. Learn adds explicit initialization and structural error-handling requirements after the common checks. It does not turn work into an unchecked profile or prove every application failure is handled. See [Work and learn profiles](profiles.md).
 
 ## What the runtime checks
 
@@ -56,7 +58,13 @@ Input and file strings, and directory-name strings, remain managed until their o
 
 NUL bytes are rejected in filesystem paths before calling the C API. File data may contain NUL. Filesystem operations follow host permissions and symlinks. The import-root restriction applies to source loading; it does not restrict the executing program's filesystem access. Writes may partially succeed and do not promise durable storage through `fsync`.
 
+Source loading checks the canonical path of every implementation, automatic header, directory-module entry, and entry module against the selected root. Internal symlinks remain usable; a symlink to a source outside that boundary requires an explicitly wider `--root`. This source-resolution boundary is not an OS sandbox and does not defend against hostile concurrent filesystem replacement.
+
 The compiler bounds its own source sizes, token counts, nesting, and arena usage. Bounded diagnostic excerpts avoid reading outside source storage on long or malformed lines. Compiler limits do not impose the same limits on a compiled program's own data.
+
+Checked method-call receiver pointers alias existing syntax. Backend and learning walks visit that syntax once, avoiding the exponential repeated work fixed in 0.4.5. Learning's result-shape analysis caches shared type graphs as well.
+
+Frontend diagnostic paths and messages escape terminal controls and direction-changing Unicode; unsafe excerpt scalars become visible cells. Text messages use the same bounded buffer as JSON. Saved runtime paths are escaped without allocation. Program-owned output and external C/OS output have their own formats.
 
 ## Toolchain and platform boundary
 

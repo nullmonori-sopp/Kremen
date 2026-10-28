@@ -1,8 +1,10 @@
 # Kremen language reference
 
-This page describes the full language accepted by `kremen` in 0.4.4. It is a reference for rules and built-ins. If the terms are unfamiliar, start with [the tutorial](tutorial.md). The compiler under `selfhost/` accepts a smaller language; its [reference](../selfhost/README.md) is separate.
+This page describes the full language accepted by `kremen` in 0.4.5. It is a reference for rules and built-ins. If the terms are unfamiliar, start with [the tutorial](tutorial.md). The compiler under `selfhost/` accepts a smaller language; its [reference](../selfhost/README.md) is separate.
 
 Examples that show only a declaration or block are fragments to put inside a program. Complete programs include `func main()`.
+
+Semantic commands default to `--mode=work`. `--mode=learn` adds the five requirements in [Work and learn profiles](profiles.md) after the shared checker succeeds. Accepted source has the same runtime behavior and C output in both profiles with the same options. The ordinary binding and match rules below describe work; learn additionally requires explicit initializers, result observation, used failure codes, explicit match cases, and fallible integer input.
 
 ## Files and local imports
 
@@ -26,6 +28,8 @@ import vectors "math/vec"
 ```
 
 These are alternative imports: the first uses `vec` as its qualifier; the second uses `vectors`. The path is resolved relative to the importing file's directory. Import a file without its `.kr` extension, or a directory containing multiple `.kr` and `.krh` files. No dependency is downloaded. Cycles and paths outside the project root, including symlink escapes, are rejected. The default root is the entry file's directory; `--root /absolute/project` selects a wider root.
+
+The selected root must be a directory containing the canonical entry-module path and all loaded sources. Directory entries and paired headers receive the same check as the import itself. Filesystem operations performed by the compiled program are separate from this source-loading rule.
 
 A complete module example is in [examples/modules](../examples/modules/main.kr):
 

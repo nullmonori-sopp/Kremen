@@ -14,13 +14,14 @@ static char current_executable[PATH_MAX];
 #endif
 
 static void usage(void) {
-    puts("Kremen 0.4.4 — native C11 toolchain\n"
+    puts("Kremen 0.4.5 — native C11 toolchain\n"
          "usage: kremen check|build|run|emit-c source.kr [options]\n"
          "       kremen fmt [--check|-w] [file.kr file.krh ...]\n"
          "       kremen explain [CODE|--list]\n"
          "       kremen selfhost check|build|run|emit-c|bootstrap [options]\n"
          "options: -o FILE, -O0..-O3 (default -O3), --root DIR, --cc COMPILER\n"
          "         --diagnostic-format=text|json\n"
+         "         --mode=work|learn (default work; full-language checks)\n"
          "         -- ends compiler options (for source paths starting with -)\n"
          "C backend: -std=c11 -Wall -Wextra -Wpedantic -Werror -pthread\n"
          "source .kr; API declarations .krh; assembly .S; native objects .o/.a");
@@ -113,7 +114,7 @@ static int selfhost(int argc, char **argv) {
 int main(int argc, char **argv) {
     (void)km_platform_executable(argv[0], current_executable, sizeof current_executable);
     if (argc < 2 || !strcmp(argv[1], "--help") || !strcmp(argv[1], "help")) { usage(); return argc < 2 ? 1 : 0; }
-    if (!strcmp(argv[1], "--version")) { puts("Kremen 0.4.4 (native C11)"); return 0; }
+    if (!strcmp(argv[1], "--version")) { puts("Kremen 0.4.5 (native C11)"); return 0; }
     if (!strcmp(argv[1], "selfhost")) return selfhost(argc, argv);
     const char *command = argv[1]; bool fmt = !strcmp(command, "fmt"), explain = !strcmp(command, "explain");
     Context *ctx = calloc(1, sizeof *ctx); if (!ctx) return 2;
@@ -141,12 +142,20 @@ int main(int argc, char **argv) {
                 km_error(ctx, (Token){0}, "E001", "diagnostic format must be 'text' or 'json'");
             ctx->diagnostic_json = !strcmp(value, "json");
         }
+        else if (!strncmp(argv[i], "--mode=", 7)) {
+            if (fmt || explain) km_error(ctx, (Token){0}, "E001", "--mode is not an option for %s", command);
+            const char *value = argv[i] + 7;
+            if (strcmp(value, "work") && strcmp(value, "learn")) km_error(ctx, (Token){0}, "E001", "mode must be 'work' or 'learn'");
+            ctx->mode = !strcmp(value, "learn") ? KM_MODE_LEARN : KM_MODE_WORK;
+        }
         else if ((!strcmp(argv[i], "-o") || !strcmp(argv[i], "--output")) && i + 1 < argc && !fmt && !explain && strcmp(command, "check") && strcmp(command, "run") && argv[i + 1][0]) output = argv[++i];
         else if (!strcmp(argv[i], "--cc") && i + 1 < argc && !fmt && !explain && argv[i + 1][0]) ctx->cc = km_strdup(ctx, argv[++i]);
         else if (!strcmp(argv[i], "--root") && i + 1 < argc) {
             if (fmt || explain) km_error(ctx, (Token){0}, "E001", "--root is not an option for %s", command);
             char resolved[PATH_MAX];
             if (!realpath(argv[++i], resolved)) km_error(ctx, (Token){0}, "E010", "cannot resolve project root '%s': %s", argv[i], strerror(errno));
+            struct stat root_state;
+            if (stat(resolved, &root_state) != 0 || !S_ISDIR(root_state.st_mode)) km_error(ctx, (Token){0}, "E010", "project root must be a directory: %s", argv[i]);
             ctx->project_root = km_strdup(ctx, resolved);
         } else if (!fmt && !explain && !strncmp(argv[i], "-O", 2) && strlen(argv[i]) == 3 && argv[i][2] >= '0' && argv[i][2] <= '3') ctx->optimization = argv[i][2] - '0';
         else if (explain && !strcmp(argv[i], "--list")) explain_list = true;
@@ -195,21 +204,22 @@ int main(int argc, char **argv) {
             }
             Source *src = km_read_source(ctx, path, extension(path, ".krh")); char *formatted = km_format(ctx, src);
             bool changed = strcmp(src->data, formatted) != 0;
-            if (format_check && changed) { fprintf(stderr, "%s: requires formatting\n", files[i]); result = 1; }
+            if (format_check && changed) { km_diagnostic_text(stderr, files[i]); fputs(": requires formatting\n", stderr); result = 1; }
             else if (write_format && changed) { if (atomic_write(path, formatted, true)) result = 1; }
             else if (!format_check && !write_format) fputs(formatted, stdout);
         }
     } else {
         (void)km_load(ctx, files[0]);
         if (!km_check(ctx)) result = 1;
-        else if (!strcmp(command, "check")) printf("%s: OK\n", files[0]);
+        else if (!strcmp(command, "check")) { km_diagnostic_text(stdout, files[0]); fputs(": OK\n", stdout); }
         else {
             char *generated = km_codegen(ctx);
             if (!strcmp(command, "emit-c")) {
                 if (output && protected_output(ctx, output)) km_error(ctx, (Token){0}, "E001", "output would overwrite a source or toolchain resource");
                 else if (output) result = atomic_write(output, generated, false); else fputs(generated, stdout);
             } else if (!strcmp(command, "build")) {
-                const char *path = output ? output : "a.out"; result = build(ctx, generated, path); if (!result) printf("Built %s\n", path);
+                const char *path = output ? output : "a.out"; result = build(ctx, generated, path);
+                if (!result) { fputs("Built ", stdout); km_diagnostic_text(stdout, path); fputc('\n', stdout); }
             } else {
                 char temporary[] = "/tmp/kremen-run-XXXXXX";
                 if (!mkdtemp(temporary)) { perror("kremen: temporary directory"); result = 1; }

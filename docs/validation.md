@@ -1,8 +1,8 @@
-# Validation record for 0.4.4
+# Validation record for 0.4.5
 
 Release environment: Linux x86-64, GCC 14.2.0, POSIX shell. Clang is not installed in this environment. Compiler and generated C use `-std=c11 -Wall -Wextra -Wpedantic -Werror`; full-language generated programs additionally use `-pthread`. Defaults are `-O3`, with `-O2` for the initial bootstrap stages.
 
-The current suites cover 419 checks. They retain the 390 checks from 0.4.3 and add 29 stabilization checks for explanations, command diagnostics, type ranges, imported/method inference, and compiler formatting. Negative cases must return the intended diagnostic, not terminate through a signal. Installer checks, bootstrap fixed points, and sanitizer runs are additional validation described below.
+The current suites cover 741 checks: the 419 checks from 0.4.4, 41 profile cases, 25 security cases, and 256 deterministic mutation/profile combinations. Negative cases must return the intended diagnostic, not terminate through a signal. Installer checks, bootstrap fixed points, and sanitizer runs are additional validation described below.
 
 ## Commands to reproduce
 
@@ -28,6 +28,9 @@ A clean subset build verifies the committed seed against stages 1, 2, and 3, run
 | `tests/native/diagnostics_043.sh` | 14 | Source context, JSON validity/ranges/escaping, related locations, import origins, NUL positions, EOF, and CLI rendering |
 | `tests/native/checker_codegen_043.sh` | 38 | Preserved effects/checks, host C layouts, structural type reuse, typo hints, thread signatures, handle boundaries, and imported workers |
 | `tests/native/stabilization_044.sh` | 29 | Offline catalog coverage, structured command/formatter/output errors, exact type ranges, imported/nested/borrowed method inference, and formatting boundaries |
+| `tests/native/profiles_045.sh` | 41 | All five learning rules, aggregate result discards, common borrowing/runtime checks, profile precedence, byte-identical C, error handling, and output preservation |
+| `tests/native/security_045.sh` | 25 | Long method/defer chains, canonical source/header/entry boundaries, symlinks, control-safe paths/messages/excerpts, bounded text, and runtime cleanup |
+| `tests/native/malformed_045.sh` | 256 | Fixed-seed mutated sources in both profiles; bounded termination with valid JSON errors or strict-C-valid output |
 | `tests/native/threads_043.sh` | 19 | Spawn/join results, deferred joins, worker panic, automatic child cleanup, strict worker types, and forbidden handle escape |
 | `tests/native/threads_runtime.sh` | 16 | Actual worker overlap, nested jobs, handle ownership, limits, repeated joins, thread-local resources, panic cleanup, and synchronized input/output |
 | `tests/native/tutorial.sh` | 11 | Ten lesson programs, successful/invalid integer input, expected output, and file contents |
@@ -40,9 +43,11 @@ A clean subset build verifies the committed seed against stages 1, 2, and 3, run
 
 The tutorial's file-writing program runs inside a temporary directory. Formatter tests compare behavior before and after formatting, not just text. FIFO tests use `timeout` so a blocked open is a test failure.
 
+The mutation generator uses seed `0x4b524d45`, eight small source templates, and byte insertions, replacements, deletions, or truncations to create 128 inputs. Original seeds and mutations run in work and learn. Accepted cases must pass strict C syntax checking; rejected cases must emit valid JSON carrying the active mode. A ten-second per-command deadline catches runaway work. Generated mutants are syntax-checked rather than executed. The corpus is reproducible and targeted; it does not replace coverage-guided fuzzing or establish exhaustive input coverage.
+
 ## AddressSanitizer and UndefinedBehaviorSanitizer
 
-`make test-sanitize` instruments the native compiler and the subset compiler, driver, runtime, and OS layer. It reruns semantic, frontend, diagnostic, runtime, toolchain, and input checks under ASan/UBSan, including the stabilization, checker/codegen, and threading regressions. The formatting helper and imported/method inference fixture are instrumented too. Generated C is also instrumented for selected v0.3, borrowing, bootstrap arithmetic, and seven slice-assignment lifetime scenarios.
+`make test-sanitize` instruments the native compiler and the subset compiler, driver, runtime, and OS layer. It reruns semantic, frontend, diagnostic, runtime, toolchain, and input checks under ASan/UBSan, including the profile, security, mutation, stabilization, checker/codegen, and threading regressions. Diagnostic and formatting helpers, the learning example, long chains, and imported/method fixtures are instrumented too. Generated C is also instrumented for selected v0.3, borrowing, bootstrap arithmetic, and seven slice-assignment lifetime scenarios. Mutated accepted programs receive strict C syntax checks; the generator itself is ordinary native C.
 
 `make test-thread-sanitize` runs the 16 C thread-runtime scenarios with ThreadSanitizer. The overlap test uses synchronization to require two workers to be active; success cannot be reproduced by simply executing workers sequentially. Ownership and cleanup tests exercise nested workers, worker-local allocations, and shared standard-stream locking. TSan is an additional host/toolchain check; support for every POSIX system is not implied.
 
@@ -64,7 +69,7 @@ Native diagnostic fixtures explicitly include both `-O0` and `-O3` builds.
 
 ## Installation and portability
 
-`make test-install` builds and installs both compilers into a temporary prefix containing spaces. It checks versions, offline explanations before and after relocation, installed tutorial output and reports, the license and thread guide, runtime lookup, prefix relocation, the installed worker example, subset program execution, upgrade, invalid-manifest refusal, unrelated-file preservation, collision refusal, and uninstall.
+`make test-install` builds and installs both compilers into a temporary prefix containing spaces. It checks versions, offline native/learning explanations, the installed learn-profile example before and after relocation, installed tutorial output and reports, the license and thread guide, runtime lookup, prefix relocation, the installed worker example, subset program execution, upgrade, invalid-manifest refusal, unrelated-file preservation, collision refusal, and uninstall.
 
 The platform suite forces `KM_NO_PROC_SELF_EXE=1` and tests argv/PATH fallback on Linux, including an empty PATH element and executable symlink. A fresh compiler copy is built without assembly from a checkout path containing an apostrophe, using a compiler path with similarly difficult characters. This validates those fallback paths on Linux; it is not evidence of release testing on macOS, Windows, or ARM.
 
@@ -72,7 +77,7 @@ The platform suite forces `KM_NO_PROC_SELF_EXE=1` and tests argv/PATH fallback o
 
 ```sh
 make dist
-unzip ../kremen-v0.4.4.zip -d /tmp/kremen-release-check
+unzip ../kremen-v0.4.5.zip -d /tmp/kremen-release-check
 cd /tmp/kremen-release-check/kremen
 sha256sum -c SHA256SUMS
 make all selfhost

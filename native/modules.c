@@ -10,6 +10,13 @@ static bool exists(const char *path) { struct stat st; return stat(path, &st) ==
 static bool is_dir(const char *path) { struct stat st; return stat(path, &st) == 0 && S_ISDIR(st.st_mode); }
 static char *parent(Context *ctx, const char *path) { const char *last = strrchr(path, '/'); return last ? km_strndup(ctx, path, last == path ? 1 : (size_t)(last - path)) : km_strdup(ctx, "."); }
 
+static void require_project_path(Context *ctx, const char *resolved, Token tok, const char *kind, const char *requested) {
+    if (!ctx->project_root) return;
+    size_t n = strlen(ctx->project_root);
+    if (strncmp(resolved, ctx->project_root, n) || (resolved[n] && resolved[n] != '/' && !(n == 1 && ctx->project_root[0] == '/')))
+        km_error(ctx, tok, "E013", "%s escapes project root: %s (use --root to select a wider project)", kind, requested);
+}
+
 char *km_resolve(Context *ctx, const char *from, const char *requested) {
     Token tok = ctx->import_token;
     if (!requested[0] || requested[0] == '/') km_error(ctx, tok, "E013", "imports require a relative local path: %s", requested);
@@ -19,16 +26,19 @@ char *km_resolve(Context *ctx, const char *from, const char *requested) {
     if (!exists(candidate) && !suffix(candidate, ".kr")) candidate = km_sprintf(ctx, "%s.kr", candidate);
     char resolved[PATH_MAX];
     if (!realpath(candidate, resolved)) km_error(ctx, tok, "E013", "cannot resolve import '%s' relative to %s: %s", requested, from, strerror(errno));
-    if (ctx->project_root) {
-        size_t n = strlen(ctx->project_root);
-        if (strncmp(resolved, ctx->project_root, n) || (resolved[n] && resolved[n] != '/' && !(n == 1 && ctx->project_root[0] == '/')))
-            km_error(ctx, tok, "E013", "import escapes project root: %s (use --root to select a wider project)", requested);
-    }
+    require_project_path(ctx, resolved, tok, "import", requested);
     return km_strdup(ctx, resolved);
 }
 
 static void load_source(Context *ctx, Module *module, const char *path, bool header) {
-    Source *src = km_read_source(ctx, path, header); src->module = module;
+    char resolved[PATH_MAX];
+    Source missing = {.path = (char *)path};
+    Token tok = ctx->import_token.src ? ctx->import_token : (Token){.src = &missing, .line = 1, .col = 1};
+    if (!realpath(path, resolved)) km_error(ctx, tok, "E010", "cannot resolve source %s: %s", path, strerror(errno));
+    /* Directory entries and automatically paired headers need the same
+     * canonical boundary check as the import expression itself. */
+    require_project_path(ctx, resolved, tok, "source", path);
+    Source *src = km_read_source(ctx, resolved, header); src->module = module;
     km_sources_push(ctx, &module->sources, src);
     Nodes decls = km_parse(ctx, src);
     for (size_t i = 0; i < decls.len; i++) {
@@ -86,6 +96,7 @@ Module *km_load(Context *ctx, const char *path) {
     m->cname = km_sprintf(ctx, "m%zu", ctx->modules.len);
     km_modules_push(ctx, &ctx->modules, m);
     if (!ctx->project_root) ctx->project_root = is_dir(resolved) ? km_strdup(ctx, resolved) : parent(ctx, resolved);
+    require_project_path(ctx, resolved, tok, "module", path);
     if (is_dir(resolved)) {
         DIR *dir = opendir(resolved);
         if (!dir) km_error(ctx, tok, "E010", "cannot list %s", resolved);

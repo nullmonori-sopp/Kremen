@@ -43,6 +43,8 @@ Function-body operands and arguments are explicitly sequenced left to right. `&&
 
 The subset does not implement imports, structs, enums, methods, tuples, arrays, references, pointers, slices, `!T`, `defer`, `catch`, `arenablock`, or the full language's worker-thread API. `unsafe` does not activate a borrow checker. The full compiler's memory and threading guarantees must not be assumed here.
 
+The full compiler's `--mode=work` and `--mode=learn` options are also unavailable in this subset. Use `kremen` for the [checking profiles](../docs/profiles.md), including their learning diagnostics.
+
 Limits are 8 MiB per input, parser depth 128, 512 operations per expression chain, and a 512 MiB string arena. Small strings use 64 KiB chunks; large strings use dedicated chunks. Known string lengths use a bounded cache without reading before arbitrary C string pointers.
 
 ## Diagnostics

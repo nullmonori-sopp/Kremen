@@ -127,6 +127,35 @@ static size_t diagnostic_utf8(const unsigned char *data, size_t available) {
     return length;
 }
 
+static uint32_t diagnostic_scalar(const unsigned char *data, size_t length) {
+    uint32_t scalar = length == 1 ? data[0] : data[0] & (length == 2 ? 0x1fu : length == 3 ? 0x0fu : 0x07u);
+    for (size_t i = 1; i < length; i++) scalar = (scalar << 6) | (data[i] & 0x3fu);
+    return scalar;
+}
+
+static bool diagnostic_control(uint32_t scalar) {
+    return scalar < 32 || (scalar >= 0x7f && scalar <= 0x9f) || scalar == 0x061c ||
+        scalar == 0x200e || scalar == 0x200f || (scalar >= 0x2028 && scalar <= 0x202e) ||
+        (scalar >= 0x2066 && scalar <= 0x2069);
+}
+
+/* File names and error messages are untrusted terminal text. Keep ordinary
+ * UTF-8 readable, but make controls, bidi directives and invalid bytes visible. */
+void km_diagnostic_text(FILE *output, const char *value) {
+    const unsigned char *p = (const unsigned char *)value;
+    size_t remaining = strlen(value);
+    while (remaining) {
+        size_t length = diagnostic_utf8(p, remaining);
+        if (!length) { fprintf(output, "\\x%02x", (unsigned)*p); p++; remaining--; continue; }
+        uint32_t scalar = diagnostic_scalar(p, length);
+        if (diagnostic_control(scalar)) {
+            if (scalar < 128) fprintf(output, "\\x%02x", (unsigned)scalar);
+            else fprintf(output, "\\u%04x", (unsigned)scalar);
+        } else fwrite(p, 1, length, output);
+        p += length; remaining -= length;
+    }
+}
+
 static void diagnostic_json_string(const char *value) {
     if (!value) { fputs("null", stderr); return; }
     const unsigned char *p = (const unsigned char *)value;
@@ -138,7 +167,12 @@ static void diagnostic_json_string(const char *value) {
         else if (byte < 32 || byte == 127) fprintf(stderr, "\\u%04x", (unsigned)byte);
         else if (byte >= 128) {
             size_t length = diagnostic_utf8(p, remaining);
-            if (length) { fwrite(p, 1, length, stderr); p += length; remaining -= length; continue; }
+            if (length) {
+                uint32_t scalar = diagnostic_scalar(p, length);
+                if (diagnostic_control(scalar)) fprintf(stderr, "\\u%04x", (unsigned)scalar);
+                else fwrite(p, 1, length, stderr);
+                p += length; remaining -= length; continue;
+            }
             fprintf(stderr, "\\u%04x", (unsigned)byte);
         } else fputc(byte, stderr);
         p++; remaining--;
@@ -163,13 +197,15 @@ static void diagnostic_end(Token tok, int *line, int *column, size_t *length) {
     }
 }
 
+static void diagnostic_span(Token, DiagnosticSpan *, bool);
+
 static void diagnostic_json_location(Token tok) {
     int end_line, end_column; size_t length;
     diagnostic_end(tok, &end_line, &end_column, &length);
     fputs("\"file\":", stderr); diagnostic_json_string(tok.src ? tok.src->path : "<program>");
     fprintf(stderr, ",\"line\":%d,\"column\":%d,\"end_line\":%d,\"end_column\":%d,\"offset\":%zu,\"length\":%zu",
             tok.line > 0 ? tok.line : 1, tok.col > 0 ? tok.col : 1, end_line, end_column, tok.offset, length);
-    DiagnosticSpan span; km_diagnostic_span(tok, &span);
+    DiagnosticSpan span; diagnostic_span(tok, &span, true);
     fputs(",\"excerpt\":", stderr); diagnostic_json_string(span.text);
     fprintf(stderr, ",\"caret\":%u,\"underline_width\":%u", span.caret, span.width);
 }
@@ -235,7 +271,7 @@ static const char *diagnostic_hint(Context *ctx, const char *code, const char *f
 
 /* Choose a bounded window around the token before computing its end. Keeping
  * these offsets ordered matters for errors near the end of very long lines. */
-void km_diagnostic_span(Token tok, DiagnosticSpan *span) {
+static void diagnostic_span(Token tok, DiagnosticSpan *span, bool raw) {
     memset(span, 0, sizeof *span);
     span->width = 1;
     if (!tok.src || !tok.src->data || tok.offset > tok.src->len) return;
@@ -249,17 +285,22 @@ void km_diagnostic_span(Token tok, DiagnosticSpan *span) {
     size_t token_end = tok.len > end - tok.offset ? end : tok.offset + tok.len;
     unsigned used = 0, cells = 0, token_cells = 0;
     if (clipped) { memcpy(span->text, "...", 3); used = 3; cells = 3; }
-    /* Expand tabs within the visible window; continuation bytes add no cells.
-     * Work per excerpt stays bounded even for a multi-megabyte source line. */
+    /* Expand tabs and replace unsafe scalars with one visible cell. Never
+     * emit a raw invalid continuation byte as a terminal control. */
     unsigned column = 0;
-    for (size_t i = start; i < end; i++) {
-        if (i == tok.offset) span->caret = cells;
-        unsigned width = data[i] == '\t' ? 4 - column % 4 : (data[i] & 0xc0) == 0x80 ? 0 : 1;
+    for (size_t i = start; i < end;) {
+        size_t length = diagnostic_utf8(data + i, end - i);
+        if (!length) length = 1;
+        if (tok.offset >= i && tok.offset < i + length) span->caret = cells;
+        unsigned width = data[i] == '\t' ? 4 - column % 4 : 1;
         if (data[i] == '\t') {
             for (unsigned j = 0; j < width; j++) span->text[used++] = ' ';
-        } else span->text[used++] = data[i] < 32 || data[i] == 127 ? '?' : (char)data[i];
+        } else if ((!raw || data[i] == 0) && (!diagnostic_utf8(data + i, end - i) || diagnostic_control(diagnostic_scalar(data + i, length)))) {
+            span->text[used++] = '?';
+        } else { memcpy(span->text + used, data + i, length); used += (unsigned)length; }
         column += width; cells += width;
-        if (i >= tok.offset && i < token_end) token_cells += width;
+        if (i + length > tok.offset && i < token_end) token_cells += width;
+        i += length;
     }
     if (tok.offset == end) span->caret = cells;
     if (end < tok.src->len && data[end] != '\n' && data[end] != '\r') {
@@ -268,6 +309,8 @@ void km_diagnostic_span(Token tok, DiagnosticSpan *span) {
     span->text[used] = 0;
     span->width = token_cells ? token_cells : 1;
 }
+
+void km_diagnostic_span(Token tok, DiagnosticSpan *span) { diagnostic_span(tok, span, false); }
 
 _Noreturn void km_error(Context *ctx, Token tok, const char *code, const char *format, ...) {
     const char *hint = diagnostic_hint(ctx, code, format);
@@ -280,16 +323,17 @@ _Noreturn void km_error(Context *ctx, Token tok, const char *code, const char *f
         origin = item.src;
     }
     va_list args; va_start(args, format);
+    char message[4096];
+    int needed = vsnprintf(message, sizeof message, format, args);
+    bool truncated = needed < 0 || (size_t)needed >= sizeof message;
+    if (needed < 0) strcpy(message, "cannot format diagnostic");
+    else if (truncated) {
+        size_t end = sizeof message - 4;
+        while (end && ((unsigned char)message[end] & 0xc0) == 0x80) end--;
+        memcpy(message + end, "...", 4);
+    }
+    va_end(args);
     if (ctx->diagnostic_json) {
-        char message[4096];
-        int needed = vsnprintf(message, sizeof message, format, args);
-        bool truncated = needed < 0 || (size_t)needed >= sizeof message;
-        if (needed < 0) strcpy(message, "cannot format diagnostic");
-        else if (truncated) {
-            size_t end = sizeof message - 4;
-            while (end && ((unsigned char)message[end] & 0xc0) == 0x80) end--;
-            memcpy(message + end, "...", 4);
-        }
         fputs("{\"kind\":\"error\",\"code\":", stderr); diagnostic_json_string(code);
         fputs(",\"message\":", stderr); diagnostic_json_string(message);
         fprintf(stderr, ",\"message_truncated\":%s,", truncated ? "true" : "false");
@@ -298,6 +342,7 @@ _Noreturn void km_error(Context *ctx, Token tok, const char *code, const char *f
         fputs(",\"explain\":", stderr);
         if (km_has_explanation(code)) fprintf(stderr, "\"kremen explain %s\"", code);
         else fputs("null", stderr);
+        fprintf(stderr, ",\"mode\":\"%s\"", ctx->mode == KM_MODE_LEARN ? "learn" : "work");
         fputs(",\"related\":[", stderr);
         if (ctx->related_message && ctx->related_token.src) {
             fputs("{\"message\":", stderr); diagnostic_json_string(ctx->related_message);
@@ -310,24 +355,26 @@ _Noreturn void km_error(Context *ctx, Token tok, const char *code, const char *f
         }
         fputs("]}\n", stderr);
     } else {
-        fprintf(stderr, "%s:%d:%d: error[%s]: ", tok.src ? tok.src->path : "<program>", tok.line ? tok.line : 1, tok.col ? tok.col : 1, code);
-        vfprintf(stderr, format, args); fputc('\n', stderr);
+        km_diagnostic_text(stderr, tok.src ? tok.src->path : "<program>");
+        fprintf(stderr, ":%d:%d: error[%s]: ", tok.line ? tok.line : 1, tok.col ? tok.col : 1, code);
+        km_diagnostic_text(stderr, message); fputc('\n', stderr);
         diagnostic_text_location(tok, true);
         if (ctx->related_message && ctx->related_token.src) {
             Token related = ctx->related_token;
-            fprintf(stderr, "%s:%d:%d: note: %s\n", related.src->path,
-                    related.line > 0 ? related.line : 1, related.col > 0 ? related.col : 1, ctx->related_message);
+            km_diagnostic_text(stderr, related.src->path);
+            fprintf(stderr, ":%d:%d: note: ", related.line > 0 ? related.line : 1, related.col > 0 ? related.col : 1);
+            km_diagnostic_text(stderr, ctx->related_message); fputc('\n', stderr);
             diagnostic_text_location(related, false);
         }
         for (size_t i = 0; i < import_count; i++) {
             Token item = imports[i];
-            fprintf(stderr, "%s:%d:%d: note: imported from here\n", item.src->path, item.line, item.col);
+            km_diagnostic_text(stderr, item.src->path);
+            fprintf(stderr, ":%d:%d: note: imported from here\n", item.line, item.col);
             diagnostic_text_location(item, false);
         }
-        if (hint) fprintf(stderr, " help: %s\n", hint);
+        if (hint) { fputs(" help: ", stderr); km_diagnostic_text(stderr, hint); fputc('\n', stderr); }
         if (km_has_explanation(code)) fprintf(stderr, " explain: kremen explain %s\n", code);
     }
-    va_end(args);
     ctx->related_message = NULL; ctx->diagnostic_hint = NULL;
     ctx->errors++;
     if (ctx->failure_ready) longjmp(ctx->failure, 1);

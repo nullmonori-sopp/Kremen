@@ -1,16 +1,16 @@
 # From 0.4.4 to 0.5
 
-The goal is to make Kremen useful for ordinary systems experiments and for structured learning. The planned `work` and `learn` profiles will share language semantics, safety rules, module formats, and the C backend. Learning adds explicit requirements and explanations; it will not make invalid memory accesses acceptable in another profile.
+The goal is to make Kremen useful for ordinary systems experiments and for structured learning. The initial `work` and `learn` profiles in 0.4.5 share language semantics, safety rules, module formats, and the C backend. Learning adds explicit requirements and explanations while retaining the shared safety checks.
 
-This is a development plan. Each release must be tested on its own merits, and unfinished work can move to a later milestone. Only the 0.4.4 row below describes work available in this release.
+This is a development plan. Each release must be tested on its own merits, and unfinished work can move to a later milestone. The 0.4.4 and 0.4.5 rows describe completed work; later rows remain planned. The first profile pilot moved forward to 0.4.5 so its real behavior could be tested before a larger lesson system.
 
 | Version | Focus | Evidence needed before calling it complete |
 | --- | --- | --- |
 | 0.4.4 | Offline explanations, semantic and source-range fixes, compiler formatting work | All native codes have explanations; inference and range regressions pass; normal, sanitizer, installation, and archive checks pass |
-| 0.4.5 | A more consistent diagnostic model and editor-facing data | Stable code/range tests, clear component boundaries, and safe handling of independent errors without misleading cascades |
+| 0.4.5 | Security hardening and the first work/learn pilot | Shared safety, five specified learning rules, equal C output for accepted source, canonical source boundaries, bounded safe diagnostics, and deterministic mutation regressions |
 | 0.4.6 | Introduce typed intermediate operations incrementally | Preserve evaluation order, panic and cleanup paths, bounds checks, and generated behavior through each lowering change |
 | 0.4.7 | Resource and function-effect groundwork | Specify ownership and effect rules first; check any implemented contracts across calls, including conservative treatment of unknown external effects |
-| 0.4.8 | A small opt-in `work`/`learn` profile pilot | A documented rule set, tested CLI precedence, identical behavior for accepted source, and useful feedback for every extra learning requirement |
+| 0.4.8 | Extend profile integration and diagnostic tooling | Tested project-configuration precedence if added, useful feedback, stable ranges, and careful recovery for independent errors without misleading cascades |
 | 0.4.9 | Deterministic lesson runner and a first learning track | Runnable lessons, observable tests, ordered hints, offline operation, and validation by people unfamiliar with the language |
 | 0.4.10 | Stabilize the release candidate | Compatibility review, bounded diagnostics, regression coverage, clean installations, complete English guides, and no placeholder commands |
 | 0.5.0 | Publish the tested profile and learning workflow | A coherent first course and a stable documented interface; remaining experimental features clearly identified |
@@ -19,7 +19,7 @@ The release after 0.4.10 is planned as 0.5.0, rather than 0.4.11. These are vers
 
 ## What exists today
 
-0.4.4 has one strict full-language compiler profile, an offline diagnostic catalog, ten tutorial programs, and independent integer workers. `kremen explain CODE` and `kremen explain --list` work now. Proposed `--mode=learn`, project profile configuration, `kremen learn`, and browser execution do not exist yet.
+0.4.5 has `--mode=work|learn`, an offline diagnostic catalog with 44 entries, ten tutorial programs, a checked-input learning example, and independent integer workers. [Work and learn profiles](profiles.md) specifies the five initial learning requirements. Project profile configuration, `kremen learn`, and browser execution do not exist yet.
 
 The first learning requirements should teach real properties: explicit failure handling, resource cleanup, checked ranges, and understanding allocation or blocking. A rule needs a precise definition and a useful remedy. Broad claims about program intent, absence of all deadlocks, or guaranteed execution time require evidence the compiler does not currently provide.
 

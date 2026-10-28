@@ -526,8 +526,8 @@ static Node *expression(Parser *p, int level, bool allow_struct) {
             Node *n = km_node(p->ctx, N_TRY, value->tok);
             n->value = value;
             value = n;
-        } else if (level == 0 && accept(p, "catch")) {
-            Node *n = km_node(p->ctx, N_CATCH, value->tok); n->value = value;
+        } else if (level == 0 && at(p, "catch")) {
+            Node *n = km_node(p->ctx, N_CATCH, take(p)); n->value = value;
             if (at(p, "ident") && !strcmp(peek(p, 1).kind, "=>")) {
                 n->name = take(p).text; expect(p, "=>");
             }

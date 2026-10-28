@@ -2,7 +2,7 @@
 
 An error message is a report about a specific operation, not a judgment about your ability to program. Read the first line, find the marked code, and make one small change. Then run `check` again.
 
-This page describes 0.4.4. Examples shorten directory names for readability; the full compiler normally prints the resolved source path.
+This page describes 0.4.5. Examples shorten directory names for readability; the full compiler normally prints the resolved source path, with unsafe terminal characters escaped.
 
 ## Read the location first
 
@@ -49,9 +49,9 @@ kremen explain --list
 
 `explain` prints why that category occurs, what to check, and a small example. The catalog is built into the full compiler and works without a project, runtime header, C compiler, network, or account. Running `kremen explain` without a code lists the catalog too. Some examples are code fragments intended to be placed inside a function.
 
-The original error message identifies the particular check. For example, `E110` covers both syntax and type disagreements, so its general explanation does not replace the marked source and message. The command supports the 39 current native categories, including fatal `W001`; the self-hosted subset has its own diagnostic scheme.
+The original error message identifies the particular check. For example, `E110` covers both syntax and type disagreements, so its general explanation does not replace the marked source and message. The command supports 44 categories: the preceding 39 native categories, including fatal `W001`, and learning requirements `L001` through `L005`. The self-hosted subset has its own diagnostic scheme.
 
-An unknown code is a command-line error, not a guessed explanation. This is an initial part of the teaching tools. There is no `--mode=learn` or lesson runner in this release; see the [roadmap](roadmap.md) for planned work.
+An unknown code is a command-line error, not a guessed explanation. Select `--mode=learn` on a semantic command to enable the first five additional requirements. [Work and learn profiles](profiles.md) describes their scope. A lesson runner and persistent project-profile configuration remain planned work in the [roadmap](roadmap.md).
 
 ## Common mistakes and their fixes
 
@@ -133,6 +133,8 @@ An error at the end of a file can point at a blank line. For example, an open `{
 
 If the failing source was imported, additional `imported from here` notes show the source locations that led to it. This helps distinguish a problem in the entry file from one in a dependency. A literal NUL byte in source is also reported at its actual byte position; write an escape such as `\0` inside a string instead of inserting a zero byte into the source file itself.
 
+The frontend makes terminal controls, direction-changing Unicode, and invalid bytes visible in file names and messages. Source excerpts use `?` cells for unsafe scalars. Ordinary UTF-8 remains readable; byte ranges still refer to the original source. Text and JSON messages use a 4,096-byte formatting buffer, with `...` when a longer message is clipped. The native runtime applies the same path-display policy to its saved source locations; program-owned output strings and panic messages keep their own semantics.
+
 ## Structured errors for editor tools
 
 The native compiler can write its frontend diagnostic as JSON:
@@ -154,10 +156,13 @@ Use `--diagnostic-format=text` for the default readable output. The option is ac
 | `caret`, `underline_width` | Zero-based display-cell offset and underline width in that excerpt |
 | `hint` | Optional help text, or `null` |
 | `explain` | Offline command for that diagnostic category, or `null`; added in 0.4.4 |
+| `mode` | Active full-language checking profile, `work` or `learn`; added in 0.4.5 |
 | `related` | Earlier declaration/borrow locations, with their explanatory messages |
 | `imports` | Import-origin locations leading to the failing source |
 
 Editor integrations should use the file/range fields to select source. The displayed excerpt can be clipped and should not be used to reconstruct the whole line. JSON strings escape control characters and invalid UTF-8 bytes so malformed input still produces a valid error record. Visual caret width retains the Unicode limits explained above.
+
+JSON also escapes direction-changing characters. Invalid UTF-8 bytes are reported as byte-valued Unicode escapes; a decoded JSON string alone cannot generally round-trip an invalid-UTF-8 filesystem name. Valid UTF-8 names retain their decoded path. The byte offsets and lengths describe the input file, including when its content is malformed.
 
 This option covers Kremen frontend diagnostics and command validation, including unknown commands, missing or extra sources, invalid formatter modes, invalid formatter input, and protected output paths. It does not convert external C-compiler output, program stdout, runtime errors, every late OS failure, or formatting-drift reports into JSON. The separate self-hosted subset also keeps its own text diagnostics. A tool invoking `build` or `run` must distinguish the frontend from later stages rather than assuming every stderr line is a JSON object. Successful `explain` output is ordinary text on stdout even when this diagnostic option is selected.
 

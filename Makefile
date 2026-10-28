@@ -14,7 +14,7 @@ COPY = native/fast_copy.S
 endif
 endif
 endif
-SOURCES = native/core.c native/diagnostics.c native/lexer.c native/parser.c native/modules.c native/checker.c native/codegen.c native/format.c native/main.c
+SOURCES = native/core.c native/diagnostics.c native/lexer.c native/parser.c native/modules.c native/checker.c native/learn.c native/codegen.c native/format.c native/main.c
 
 .PHONY: all test test-sanitize test-thread-sanitize test-install test-selfhost check examples bootstrap selfhost bench dist clean FORCE
 all: build/kremen
@@ -40,6 +40,9 @@ test: build/kremen
 	sh tests/native/diagnostics_043.sh ./build/kremen
 	sh tests/native/checker_codegen_043.sh ./build/kremen
 	sh tests/native/stabilization_044.sh ./build/kremen
+	sh tests/native/profiles_045.sh ./build/kremen
+	sh tests/native/security_045.sh ./build/kremen
+	sh tests/native/malformed_045.sh ./build/kremen
 	sh tests/native/threads_043.sh ./build/kremen
 	sh tests/native/threads_runtime.sh
 	sh tests/native/tutorial.sh ./build/kremen
@@ -73,6 +76,7 @@ examples: build/kremen
 	./build/kremen run examples/algebra.kr
 	./build/kremen run examples/resources.kr
 	./build/kremen run examples/threads.kr
+	printf '4\n' | ./build/kremen run examples/learn/checked_input.kr --mode=learn
 
 bootstrap:
 	sh selfhost/bootstrap.sh
