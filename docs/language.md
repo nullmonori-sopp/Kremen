@@ -1,6 +1,6 @@
 # Kremen language reference
 
-This page describes the full language accepted by `kremen` in 0.4.5. It is a reference for rules and built-ins. If the terms are unfamiliar, start with [the tutorial](tutorial.md). The compiler under `selfhost/` accepts a smaller language; its [reference](../selfhost/README.md) is separate.
+This page describes the full language accepted by `kremen` in 0.4.6. It is a reference for rules and built-ins. If the terms are unfamiliar, start with [the tutorial](tutorial.md). The compiler under `selfhost/` accepts a smaller language; its [reference](../selfhost/README.md) is separate.
 
 Examples that show only a declaration or block are fragments to put inside a program. Complete programs include `func main()`.
 
@@ -193,6 +193,12 @@ You can also use `match result { ok(value) => { ... }; fail(code) => { ... } }`.
 | `panic(message)` | Report a string message and run the calling thread's cleanup; main exits, while a worker's join fails |
 
 Printing a struct or enum directly is unsupported; print its individual fields or match its variants.
+
+Output can be buffered. Full-language programs check stdout after worker joining and cleanup at process termination; a failed final flush produces a runtime error and an unsuccessful exit. A delayed flush error has no individual print-call location. This does not change default host signal handling such as `SIGPIPE`.
+
+The four `readIntResult` codes are input-specific values, not OS `errno` values. Match them explicitly, as the [checked-input example](../examples/learn/checked_input.kr) does. Use `errorMessage` for the OS errors returned by filesystem and worker operations.
+
+An array's length is fixed by its type, but `len(expression)` still evaluates the expression and its safety checks. A call inside the expression runs once, and a bad index or failed-result access still fails. Querying an existing fixed array's length does not require copying the array's elements.
 
 ## Defer and cleanup
 

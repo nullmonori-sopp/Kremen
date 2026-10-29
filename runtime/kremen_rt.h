@@ -257,7 +257,20 @@ static void kr_cleanup(void) {
 
 static void kr_process_cleanup(void) {
     kr_cleanup();
-    if (kr_child_failure) { (void)fflush(NULL); _Exit(EXIT_FAILURE); }
+    /* Joining children above finishes their output and local cleanup before
+     * checking the process stream. Small writes may have succeeded only into
+     * stdio's buffer, so relying on exit's unchecked flush loses I/O errors. */
+    bool output_failed = fflush(stdout) == EOF || ferror(stdout);
+    if (output_failed) {
+        const char *message = "output failed during final flush";
+        kr_report_error(message, strlen(message), 0);
+    }
+    if (kr_child_failure || output_failed) {
+        (void)fflush(stderr);
+        /* Already inside atexit, with Kremen cleanup complete: do not panic
+         * or call exit again and risk re-entering termination callbacks. */
+        _Exit(EXIT_FAILURE);
+    }
 }
 
 static bool kr_register_cleanup(void) {

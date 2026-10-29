@@ -11,6 +11,11 @@ typedef struct {
     size_t next;
 } GenType;
 
+/* An operand has already run its source effects before its C value is used.
+ * Keep the checked type alongside the staged value instead of recovering it
+ * from the syntax when selecting a builtin's lowering operation. */
+typedef struct { Type *type; char *code; } LoweredValue;
+
 typedef struct {
     Context *ctx;
     Buffer out;
@@ -399,6 +404,26 @@ static const char *arithmetic(const char *op)
     return NULL;
 }
 
+static LoweredValue lower_value(Generator *g, Node *node)
+{
+    return (LoweredValue){node->type, expression(g, node)};
+}
+
+/* Fixed-array len needs evaluation and place checks, but never the elements.
+ * Forming a checked address preserves index/null/stale-slice/result checks
+ * without creating a potentially megabyte-sized by-value C temporary. Other
+ * expressions still run normally, including function calls and their effects. */
+static void discard_value(Generator *g, Node *node)
+{
+    bool place = node->kind == N_NAME || node->kind == N_FIELD || node->kind == N_INDEX ||
+                 (node->kind == N_UNARY && !strcmp(node->op, "*"));
+    if (place) line(g, "(void)&(%s);", lvalue(g, node, NULL));
+    else {
+        LoweredValue value = lower_value(g, node);
+        if (*value.code) line(g, "(void)%s;", value.code);
+    }
+}
+
 static char *call(Generator *g, Node *node)
 {
     const char *builtin = node->builtin;
@@ -408,44 +433,38 @@ static char *call(Generator *g, Node *node)
         line(g, "%s.ok = kr_thread_spawn(%s, %s, &%s.value, &%s.code);", result, node->function->cname, argument, result, result);
         return result;
     }
-    Buffer arguments = {0};
-    char **values = km_alloc(g->ctx, (node->args.len + 1) * sizeof *values);
+    if (builtin && !strcmp(builtin, "len") && node->args.data[0]->type->kind == TY_ARRAY) {
+        discard_value(g, node->args.data[0]);
+        return temporary(g, node->type, integer_literal(g, node->type, (uint64_t)node->args.data[0]->type->count, false));
+    }
+    LoweredValue *values = node->args.len ? km_alloc(g->ctx, node->args.len * sizeof *values) : NULL;
+    char *receiver = NULL;
     if (!builtin && node->receiver) {
         Type *expected = node->function->receiver->type;
-        char *receiver;
         if (expected->kind == TY_REF && node->receiver->type->kind != TY_REF) {
             receiver = temporary(g, expected, km_sprintf(g->ctx, "&(%s)", lvalue(g, node->receiver, NULL)));
         } else {
             receiver = expression(g, node->receiver);
         }
-        km_buf_puts(&arguments, receiver);
     }
     for (size_t i = 0; i < node->args.len; ++i) {
-        values[i] = expression(g, node->args.data[i]);
-        if (arguments.len) km_buf_puts(&arguments, ", ");
-        km_buf_puts(&arguments, values[i]);
+        values[i] = lower_value(g, node->args.data[i]);
     }
-    char *args = km_strndup(g->ctx, arguments.data ? arguments.data : "", arguments.len);
-    free(arguments.data);
     if (builtin && (!strcmp(builtin, "print") || !strcmp(builtin, "println"))) {
         line(g, "kr_output_begin();");
         for (size_t i = 0; i < node->args.len; ++i) {
             if (i) line(g, "kr_space();");
-            Type *type = node->args.data[i]->type;
+            Type *type = values[i].type;
             const char *suffix = type->kind == TY_INT ? (type->sign ? "i64" : "u64") : (type->kind == TY_BOOL ? "bool" : "string");
-            line(g, "kr_print_%s(%s);", suffix, values[i]);
+            line(g, "kr_print_%s(%s);", suffix, values[i].code);
         }
         if (!strcmp(builtin, "println")) line(g, "kr_newline();");
         line(g, "kr_output_end();");
         return "";
     }
     if (builtin && !strcmp(builtin, "len")) {
-        Type *type = node->args.data[0]->type;
-        if (type->kind == TY_ARRAY) {
-            line(g, "(void)%s;", values[0]);
-            return temporary(g, node->type, integer_literal(g, node->type, (uint64_t)type->count, false));
-        }
-        return temporary(g, node->type, km_sprintf(g->ctx, "kr_%s_len(%s, %d)", type->kind == TY_SLICE ? "slice" : "str", values[0], location(g, node)));
+        Type *type = values[0].type;
+        return temporary(g, node->type, km_sprintf(g->ctx, "kr_%s_len(%s, %d)", type->kind == TY_SLICE ? "slice" : "str", values[0].code, location(g, node)));
     }
     if (builtin && !strcmp(builtin, "readInt")) return temporary(g, node->type, km_sprintf(g->ctx, "kr_read_int(%d)", location(g, node)));
     if (builtin && !strcmp(builtin, "readLine")) return temporary(g, node->type, km_sprintf(g->ctx, "kr_read_line(%d)", location(g, node)));
@@ -455,45 +474,45 @@ static char *call(Generator *g, Node *node)
         return result;
     }
     if (builtin && !strcmp(builtin, "assert")) {
-        line(g, "kr_assert(%s, %d);", values[0], location(g, node));
+        line(g, "kr_assert(%s, %d);", values[0].code, location(g, node));
         return "";
     }
     if (builtin && !strcmp(builtin, "panic")) {
-        line(g, "kr_user_panic(%s, %d);", values[0], location(g, node));
+        line(g, "kr_user_panic(%s, %d);", values[0].code, location(g, node));
         return "";
     }
     if (builtin && !strcmp(builtin, "cast")) {
-        return temporary(g, node->type, km_sprintf(g->ctx, "kr_cast_%s_%s(%s, %d)", int_suffix(g, node->args.data[0]->type), int_suffix(g, node->type), values[0], location(g, node)));
+        return temporary(g, node->type, km_sprintf(g->ctx, "kr_cast_%s_%s(%s, %d)", int_suffix(g, node->args.data[0]->type), int_suffix(g, node->type), values[0].code, location(g, node)));
     }
-    if (builtin && !strcmp(builtin, "raw")) return temporary(g, node->type, values[0]);
+    if (builtin && !strcmp(builtin, "raw")) return temporary(g, node->type, values[0].code);
     if(builtin&&!strcmp(builtin,"arenaNew"))return temporary(g,node->type,km_sprintf(g->ctx,"kr_arena_new(%d)",location(g, node)));
-    if(builtin&&(!strcmp(builtin,"arenaFree")||!strcmp(builtin,"arenaReset"))){line(g,"kr_arena_%s(%s, %d);",!strcmp(builtin,"arenaFree")?"free":"reset",values[0],location(g, node));return "";}
-    if(builtin&&!strcmp(builtin,"arenaAlloc"))return temporary(g,node->type,km_sprintf(g->ctx,"kr_arena_alloc(%s, %s, sizeof(%s), %d)",values[0],values[1],ctype(g,node->type->elem),location(g, node)));
-    if(builtin&&!strcmp(builtin,"fileClose")){line(g,"kr_file_close(%s, %d);",values[0],location(g, node));return "";}
-    if(builtin&&!strcmp(builtin,"threadClose")){line(g,"kr_thread_close(%s, %d);",values[0],location(g,node));return "";}
+    if(builtin&&(!strcmp(builtin,"arenaFree")||!strcmp(builtin,"arenaReset"))){line(g,"kr_arena_%s(%s, %d);",!strcmp(builtin,"arenaFree")?"free":"reset",values[0].code,location(g, node));return "";}
+    if(builtin&&!strcmp(builtin,"arenaAlloc"))return temporary(g,node->type,km_sprintf(g->ctx,"kr_arena_alloc(%s, %s, sizeof(%s), %d)",values[0].code,values[1].code,ctype(g,node->type->elem),location(g, node)));
+    if(builtin&&!strcmp(builtin,"fileClose")){line(g,"kr_file_close(%s, %d);",values[0].code,location(g, node));return "";}
+    if(builtin&&!strcmp(builtin,"threadClose")){line(g,"kr_thread_close(%s, %d);",values[0].code,location(g,node));return "";}
     if(builtin&&!strcmp(builtin,"threadJoin")){
         char *result=temporary(g,node->type,"{0}");
-        line(g,"%s.ok = kr_thread_join(%s, &%s.value, &%s.code);",result,values[0],result,result);
+        line(g,"%s.ok = kr_thread_join(%s, &%s.value, &%s.code);",result,values[0].code,result,result);
         return result;
     }
-    if(builtin&&!strcmp(builtin,"errorMessage"))return temporary(g,node->type,km_sprintf(g->ctx,"kr_error_message(%s)",values[0]));
+    if(builtin&&!strcmp(builtin,"errorMessage"))return temporary(g,node->type,km_sprintf(g->ctx,"kr_error_message(%s)",values[0].code));
     if(builtin&&!strncmp(builtin,"fs",2)){
         char *r=temporary(g,node->type,"{0}");
-        if(!strcmp(builtin,"fsRead"))line(g,"%s.ok = kr_fs_read(%s, &%s.value, &%s.code);",r,values[0],r,r);
-        else if(!strcmp(builtin,"fsReadAll"))line(g,"%s.ok = kr_fs_read_all(%s, &%s.value, &%s.code);",r,values[0],r,r);
-        else if(!strcmp(builtin,"fsWriteAll"))line(g,"%s.ok = kr_fs_write_all(%s, %s, &%s.value, &%s.code);",r,values[0],values[1],r,r);
-        else if(!strcmp(builtin,"fsOpen"))line(g,"%s.ok = kr_fs_open(%s, %s, &%s.value, &%s.code);",r,values[0],values[1],r,r);
-        else if(!strcmp(builtin,"fsList"))line(g,"%s.ok = kr_fs_list(%s, &%s.value, &%s.code);",r,values[0],r,r);
+        if(!strcmp(builtin,"fsRead"))line(g,"%s.ok = kr_fs_read(%s, &%s.value, &%s.code);",r,values[0].code,r,r);
+        else if(!strcmp(builtin,"fsReadAll"))line(g,"%s.ok = kr_fs_read_all(%s, &%s.value, &%s.code);",r,values[0].code,r,r);
+        else if(!strcmp(builtin,"fsWriteAll"))line(g,"%s.ok = kr_fs_write_all(%s, %s, &%s.value, &%s.code);",r,values[0].code,values[1].code,r,r);
+        else if(!strcmp(builtin,"fsOpen"))line(g,"%s.ok = kr_fs_open(%s, %s, &%s.value, &%s.code);",r,values[0].code,values[1].code,r,r);
+        else if(!strcmp(builtin,"fsList"))line(g,"%s.ok = kr_fs_list(%s, &%s.value, &%s.code);",r,values[0].code,r,r);
         else if(!strcmp(builtin,"fsCwd"))line(g,"%s.ok = kr_fs_cwd(&%s.value, &%s.code);",r,r,r);
         else if(!strcmp(builtin,"fsExists")||!strcmp(builtin,"fsIsDir")||!strcmp(builtin,"fsSize")){
             char *raw=temporary(g,g->ctx->ints[3],"0");int op=!strcmp(builtin,"fsExists")?0:!strcmp(builtin,"fsIsDir")?1:2;
-            line(g,"%s.ok = kr_fs_stat(%s, %d, &%s, &%s.code);",r,values[0],op,raw,r);
+            line(g,"%s.ok = kr_fs_stat(%s, %d, &%s, &%s.code);",r,values[0].code,op,raw,r);
             line(g,"%s.value = %s%s;",r,raw,op==2?"":" != 0");
         }else{
-            if(!strcmp(builtin,"fsWrite")||!strcmp(builtin,"fsAppend"))line(g,"%s.ok = kr_fs_write(%s, %s, %s, &%s.code);",r,values[0],values[1],!strcmp(builtin,"fsAppend")?"true":"false",r);
-            else if(!strcmp(builtin,"fsMkdir")||!strcmp(builtin,"fsRemove"))line(g,"%s.ok = kr_fs_modify(%s, %d, &%s.code);",r,values[0],!strcmp(builtin,"fsMkdir")?0:1,r);
-            else if(!strcmp(builtin,"fsRename"))line(g,"%s.ok = kr_fs_rename(%s, %s, &%s.code);",r,values[0],values[1],r);
-            else if(!strcmp(builtin,"fsClose"))line(g,"%s.ok = kr_fs_close(%s, &%s.code);",r,values[0],r);
+            if(!strcmp(builtin,"fsWrite")||!strcmp(builtin,"fsAppend"))line(g,"%s.ok = kr_fs_write(%s, %s, %s, &%s.code);",r,values[0].code,values[1].code,!strcmp(builtin,"fsAppend")?"true":"false",r);
+            else if(!strcmp(builtin,"fsMkdir")||!strcmp(builtin,"fsRemove"))line(g,"%s.ok = kr_fs_modify(%s, %d, &%s.code);",r,values[0].code,!strcmp(builtin,"fsMkdir")?0:1,r);
+            else if(!strcmp(builtin,"fsRename"))line(g,"%s.ok = kr_fs_rename(%s, %s, &%s.code);",r,values[0].code,values[1].code,r);
+            else if(!strcmp(builtin,"fsClose"))line(g,"%s.ok = kr_fs_close(%s, &%s.code);",r,values[0].code,r);
             else km_error(g->ctx,node->tok,"E900","filesystem builtin missing in backend");
             line(g,"%s.value = %s.ok;",r,r);
         }
@@ -501,31 +520,41 @@ static char *call(Generator *g, Node *node)
     }
     if(builtin&&!strcmp(builtin,"variant")){
         Buffer payload={0};
-        for(size_t i=0;i<node->args.len;i++)km_buf_printf(&payload,"%s.kr_%zu = %s",i?", ":"",i,values[i]);
+        for(size_t i=0;i<node->args.len;i++)km_buf_printf(&payload,"%s.kr_%zu = %s",i?", ":"",i,values[i].code);
         char *r=temporary(g,node->type,km_sprintf(g->ctx,"(%s){.tag = %" PRIu64 ", .payload.kr_v_%" PRIu64 " = {%s}}",ctype(g,node->type),node->integer,node->integer,payload.len?payload.data:"0"));free(payload.data);return r;
     }
     if (builtin && !strcmp(builtin, "alloc")) {
-        char *count = checked_index(g, node->args.data[0], values[0]);
+        char *count = checked_index(g, node->args.data[0], values[0].code);
         return temporary(g, node->type, km_sprintf(g->ctx, "kr_slice_alloc(%s, sizeof(%s), %d)", count, ctype(g, node->type->elem), location(g, node)));
     }
     if (builtin && !strcmp(builtin, "free")) {
-        line(g, "kr_slice_free(%s, %d);", values[0], location(g, node));
+        line(g, "kr_slice_free(%s, %d);", values[0].code, location(g, node));
         return "";
     }
     if (builtin && !strcmp(builtin, "slice")) {
-        char *low = checked_index(g, node->args.data[1], values[1]);
-        char *high = checked_index(g, node->args.data[2], values[2]);
-        return temporary(g, node->type, km_sprintf(g->ctx, "kr_subslice(%s, %s, %s, %d)", values[0], low, high, location(g, node)));
+        char *low = checked_index(g, node->args.data[1], values[1].code);
+        char *high = checked_index(g, node->args.data[2], values[2].code);
+        return temporary(g, node->type, km_sprintf(g->ctx, "kr_subslice(%s, %s, %s, %d)", values[0].code, low, high, location(g, node)));
     }
     if (builtin && !strcmp(builtin, "ok")) {
-        return temporary(g, node->type, km_sprintf(g->ctx, "(%s){.ok = true, .value = %s, .code = 0}", ctype(g, node->type), values[0]));
+        return temporary(g, node->type, km_sprintf(g->ctx, "(%s){.ok = true, .value = %s, .code = 0}", ctype(g, node->type), values[0].code));
     }
     if (builtin && !strcmp(builtin, "fail")) {
-        line(g, "if (%s <= 0) kr_panic(\"failure code must be positive\", %d);", values[0], location(g, node));
-        return temporary(g, node->type, km_sprintf(g->ctx, "(%s){.ok = false, .code = %s}", ctype(g, node->type), values[0]));
+        line(g, "if (%s <= 0) kr_panic(\"failure code must be positive\", %d);", values[0].code, location(g, node));
+        return temporary(g, node->type, km_sprintf(g->ctx, "(%s){.ok = false, .code = %s}", ctype(g, node->type), values[0].code));
     }
     if (builtin) km_error(g->ctx, node->tok, "E900", "unknown builtin in backend: %s", builtin);
     Node *function = node->function;
+    /* Only real C calls need a serialized argument list. Builtins consumed
+     * the typed operands directly above and avoid this otherwise dead copy. */
+    Buffer arguments = {0};
+    if (receiver) km_buf_puts(&arguments, receiver);
+    for (size_t i = 0; i < node->args.len; i++) {
+        if (arguments.len) km_buf_puts(&arguments, ", ");
+        km_buf_puts(&arguments, values[i].code);
+    }
+    char *args = km_strndup(g->ctx, arguments.data ? arguments.data : "", arguments.len);
+    free(arguments.data);
     char *code = km_sprintf(g->ctx, "%s(%s)", function->cname, args);
     if (node->type->kind == TY_VOID) {
         line(g, "%s;", code);

@@ -21,6 +21,7 @@ typedef struct {
     Binding *bindings; Loan *loans; bool types_ready;
     Declaration *struct_names, *function_names; size_t declaration_cap;
     Binding **local_names; size_t local_cap, local_count; Scope *scope; bool deferred_call;
+    unsigned char *zero_result_cache; size_t zero_result_cap;
 } Checker;
 typedef struct { Type *type; Symbol *root, *via; } Place;
 typedef struct { uint64_t value; bool neg; } Number;
@@ -182,17 +183,26 @@ static bool contains_thread(Type *t) {
     if(t->kind==TY_TUPLE){for(size_t i=0;i<t->members.len;i++)if(contains_thread(t->members.data[i]))return true;}
     return (t->kind==TY_ARRAY||t->kind==TY_SLICE||t->kind==TY_RESULT||t->kind==TY_REF||t->kind==TY_PTR)&&contains_thread(t->elem);
 }
-/* A result's failure tag must always carry an explicit nonzero code. */
-static bool contains_result_value(Type *t) {
-    if(t->kind==TY_RESULT)return true;
-    if(t->kind==TY_ARRAY)return contains_result_value(t->elem);
-    if(t->kind==TY_TUPLE){for(size_t i=0;i<t->members.len;i++)if(contains_result_value(t->members.data[i]))return true;}
-    if(t->kind==TY_ENUM&&t->decl->fields.len){Node *v=t->decl->fields.data[0];for(size_t i=0;i<v->params.len;i++)if(contains_result_value(v->params.data[i]->type))return true;}
-    if(t->kind==TY_STRUCT) {
-        for(size_t i=0;i<t->decl->fields.len;i++)
-            if(contains_result_value(t->decl->fields.data[i]->type))return true;
+/* A result's failure tag must always carry an explicit nonzero code. This
+ * query concerns zero initialization: only an enum's first variant is active.
+ * Layouts have passed cycle checks. Cache shared type graphs across all uses
+ * instead of expanding a repeated-field tree for every local or allocation. */
+static bool contains_result_value(Checker *c,Type *t) {
+    if(t->id>=c->zero_result_cap) {
+        size_t cap=c->zero_result_cap?c->zero_result_cap:32;
+        while(cap<=(size_t)cx(c)->next_type)cap*=2;
+        unsigned char *cache=km_alloc(cx(c),cap);
+        if(c->zero_result_cap)memcpy(cache,c->zero_result_cache,c->zero_result_cap);
+        c->zero_result_cache=cache;c->zero_result_cap=cap;
     }
-    return false;
+    if(c->zero_result_cache[t->id])return c->zero_result_cache[t->id]==2;
+    bool found=t->kind==TY_RESULT;
+    if(t->kind==TY_ARRAY)found=contains_result_value(c,t->elem);
+    else if(t->kind==TY_TUPLE){for(size_t i=0;i<t->members.len&&!found;i++)found=contains_result_value(c,t->members.data[i]);}
+    else if(t->kind==TY_ENUM&&t->decl->fields.len){Node *v=t->decl->fields.data[0];for(size_t i=0;i<v->params.len&&!found;i++)found=contains_result_value(c,v->params.data[i]->type);}
+    else if(t->kind==TY_STRUCT){for(size_t i=0;i<t->decl->fields.len&&!found;i++)found=contains_result_value(c,t->decl->fields.data[i]->type);}
+    c->zero_result_cache[t->id]=found?2:1;
+    return found;
 }
 static void same(Checker *c, Type *a, Type *b, Node *n) {
     if(!km_type_equal(a,b)) km_error(cx(c),n->tok,"E110","type mismatch: expected %s, got %s",km_type_name(cx(c),b),km_type_name(cx(c),a));
@@ -661,7 +671,7 @@ static Type *call(Checker *c,Node *n,Type *expected,bool persistent) {
             n->typearg=valid_type(c,n->typearg,n,false);check_size(c,n->typearg,n);
             if(contains_thread(n->typearg))km_error(cx(c),n->tok,"E150","slice elements cannot contain thread handles");
             if(contains_address(n->typearg))km_error(cx(c),n->tok,"E130","slice elements cannot contain references or raw pointers");
-            if(contains_result_value(n->typearg))km_error(cx(c),n->tok,"E130","zero-filled allocation cannot contain result values; results require explicit initialization");
+            if(contains_result_value(c,n->typearg))km_error(cx(c),n->tok,"E130","zero-filled allocation cannot contain result values; results require explicit initialization");
             if(arena)same(c,expr(c,n->args.data[0],cx(c)->t_arena,false),cx(c)->t_arena,n->args.data[0]);
             Node *count=n->args.data[arena?1:0];same(c,expr(c,count,cx(c)->ints[3],false),cx(c)->ints[3],count);
             if(count->constant_negative)km_error(cx(c),n->tok,"E119","allocation length must be nonnegative");
@@ -966,7 +976,7 @@ static bool statement(Checker *c,Node *n) {
         Loan *baseline=c->loans;
         if(!n->value) {
             if(!want)km_error(cx(c),n->tok,"E116","variable requires a type or initializer");
-            if(n->flag||contains_address(want)||contains_result_value(want)||want->kind==TY_ARENA||want->kind==TY_FILE||want->kind==TY_THREAD)km_error(cx(c),n->tok,"E116","this value requires an explicit initializer");
+            if(n->flag||contains_address(want)||contains_result_value(c,want)||want->kind==TY_ARENA||want->kind==TY_FILE||want->kind==TY_THREAD)km_error(cx(c),n->tok,"E116","this value requires an explicit initializer");
             t=want;
         } else {
             t=expr(c,n->value,want,true);

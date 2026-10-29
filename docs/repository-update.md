@@ -1,8 +1,57 @@
 # Updating an existing repository
 
-Use the complete 0.4.5 source tree when updating an older project. It includes the preceding stabilization and documentation work. Copying only the new files is not enough: keep compiler sources, build rules, tests, installed resources, and documentation from the same release.
+Use the complete 0.4.6 source tree when updating an older project. It includes the preceding stabilization and documentation work. Copying only the new files is not enough: keep compiler sources, build rules, tests, installed resources, and documentation from the same release.
 
 The lists below compare released checksum manifests. Paths are relative to the `kremen` project root. They describe release contents, not any additional local edits in your own repository. Merge those edits before replacing files.
+
+## From 0.4.5 to 0.4.6
+
+Add these files:
+
+```text
+docs/v0.4.6.md
+tests/native/checker_046.sh
+tests/native/codegen_046.sh
+tests/native/input_046.sh
+tests/native/output_046.sh
+tests/native/output_failure_046.c
+tests/native/output_runtime_046.sh
+```
+
+Replace these existing files:
+
+```text
+CHANGELOG.md
+Makefile
+README.md
+VERSION
+bench/README.md
+docs/README.md
+docs/diagnostics.md
+docs/install.md
+docs/language.md
+docs/profiles.md
+docs/repository-update.md
+docs/roadmap.md
+docs/safety.md
+docs/v0.2.md
+docs/validation.md
+examples/learn/checked_input.kr
+native/checker.c
+native/codegen.c
+native/diagnostics.c
+native/learn.c
+native/main.c
+runtime/kremen_rt.h
+selfhost/toolchain.kr
+tests/native/sanitize.sh
+```
+
+Regenerate and replace `SHA256SUMS` after all source edits. No source files are removed. Keep the native frontend, runtime, examples, and tests from the same release. No new compiler translation unit or link flag is needed.
+
+Work remains the default. Learn now rejects ignored result-bearing match payloads, parameters, and value receivers that slipped through 0.4.5. Compiler output failures gain `E015`; a program's delayed stdout failure now produces a nonzero exit after cleanup. The corrected input example interprets integer-input codes separately from OS errors. See [0.4.6 notes](v0.4.6.md) and [checking profiles](profiles.md) for details.
+
+The installer, packaging script, and CI workflow retain their 0.4.5 contents and automatically pick up the matching sources, examples, and guides. The bootstrap compiler and verified C seed are unchanged; the subset driver's version changes in `selfhost/toolchain.kr`. Preserve the repository license and keep generated release archives outside the source tree.
 
 ## From 0.4.4 to 0.4.5
 

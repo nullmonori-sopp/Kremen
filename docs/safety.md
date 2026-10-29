@@ -1,6 +1,6 @@
 # Safety and memory in Kremen
 
-Kremen checks many mistakes before a program runs and checks others while it runs. These checks are useful, but they do not make every possible program correct. This page explains the actual boundaries of the full language in 0.4.5. The self-hosted subset has a different, smaller set of checks.
+Kremen checks many mistakes before a program runs and checks others while it runs. These checks are useful, but they do not make every possible program correct. This page explains the actual boundaries of the full language in 0.4.6. The self-hosted subset has a different, smaller set of checks.
 
 If you are new to memory, begin with [tutorial lesson 9](tutorial.md#9-understand-ownership-before-using-dynamic-memory). A variable owns a value. A reference borrows access to that value. A slice describes storage owned by a runtime allocation. Copying a slice does not copy its elements or extend the lifetime of that storage.
 
@@ -58,11 +58,17 @@ Input and file strings, and directory-name strings, remain managed until their o
 
 NUL bytes are rejected in filesystem paths before calling the C API. File data may contain NUL. Filesystem operations follow host permissions and symlinks. The import-root restriction applies to source loading; it does not restrict the executing program's filesystem access. Writes may partially succeed and do not promise durable storage through `fsync`.
 
+Generated programs check the final stdout flush and the stream's error state after joining outstanding workers and finishing registered resource cleanup. A failed final flush reports a runtime error and forces an unsuccessful exit. The report cannot identify one earlier print call because buffering delayed the failure. This is not recovery from host signals such as default `SIGPIPE`, or a guarantee about external C termination handlers.
+
 Source loading checks the canonical path of every implementation, automatic header, directory-module entry, and entry module against the selected root. Internal symlinks remain usable; a symlink to a source outside that boundary requires an explicitly wider `--root`. This source-resolution boundary is not an OS sandbox and does not defend against hostile concurrent filesystem replacement.
 
 The compiler bounds its own source sizes, token counts, nesting, and arena usage. Bounded diagnostic excerpts avoid reading outside source storage on long or malformed lines. Compiler limits do not impose the same limits on a compiled program's own data.
 
 Checked method-call receiver pointers alias existing syntax. Backend and learning walks visit that syntax once, avoiding the exponential repeated work fixed in 0.4.5. Learning's result-shape analysis caches shared type graphs as well.
+
+The shared checker also caches whether a type contains a result in its zero-initialized state. An enum's zero state depends on its first variant's payload; this query differs from learn's conservative check of every result-bearing variant. Caching does not relax either rule or the other initialization checks.
+
+Fixed-array length lowering keeps evaluation and checks while avoiding unnecessary copies of the selected array. This removes a reproduced stack-exhaustion case caused by repeated `len` queries at `-O0`; it does not impose a total stack quota on arbitrary programs.
 
 Frontend diagnostic paths and messages escape terminal controls and direction-changing Unicode; unsafe excerpt scalars become visible cells. Text messages use the same bounded buffer as JSON. Saved runtime paths are escaped without allocation. Program-owned output and external C/OS output have their own formats.
 

@@ -1,6 +1,6 @@
 # Work and learn profiles
 
-Kremen 0.4.5 introduces two checking profiles for the full language. `work` is the default. `learn` adds five explicit requirements after the ordinary checker has accepted the program. Both use the same syntax, types, borrowing rules, C backend, runtime checks, and optimization settings.
+Kremen has two checking profiles for the full language, introduced in 0.4.5 and strengthened in 0.4.6. `work` is the default. `learn` adds five explicit requirements after the ordinary checker has accepted the program. Both use the same syntax, types, borrowing rules, C backend, runtime checks, and optimization settings.
 
 A learning error asks you to make a decision visible in source. It does not mean the work profile permits invalid memory access. For source accepted in both profiles, the emitted C is byte-identical when the other options and inputs are the same.
 
@@ -32,7 +32,9 @@ Profiles currently belong to the full compiler. The self-hosted subset does not 
 
 Local type inference remains available. The profile does not require repetitive annotations for every local variable. Unused ordinary values can still be acknowledged with an underscore under the shared language rules.
 
-`L002` covers explicit `_ = value`, unread underscore-prefixed bindings, and ignored tuple bindings. It checks results held by value inside arrays, tuples, structs, and every enum payload shape. This check is conservative: an enum type with a result-bearing variant participates even when a particular expression constructs another variant. It stops at slice descriptors and addresses rather than examining separately reachable storage. Shared type graphs are cached during this analysis.
+`L002` covers explicit `_ = value`, unread underscore-prefixed bindings and function parameters, unread by-value method receivers, ignored tuple bindings, and ignored or unread result-bearing payloads in enum and result patterns. For example, matching a variant as `Answer(_)` does not handle a `!i64` hidden in that payload. With `!!i64`, `ok(_)` also discards an inner result. Bind the payload and inspect, handle, or propagate it. Parameter and receiver checks apply to functions with checked bodies; external declarations are not inspected as though they had bodies.
+
+The rule checks results held by value inside arrays, tuples, structs, and every enum payload shape. This check is conservative: an enum type with a result-bearing variant participates even when a particular expression constructs another variant. It stops at slice descriptors and addresses rather than examining separately reachable storage. Shared type graphs are cached during this analysis. Ordinary unused values remain subject to the common language rules.
 
 `L003` requires the bound code to be read. A spelling such as `_code` is allowed when the code is actually used; the underscore does not excuse ignoring it. `?` can propagate a failure unchanged without a local code binding.
 
@@ -73,15 +75,25 @@ func main() {
         fail(code) => {
             if code == 1001 {
                 println("Count must be greater than zero.")
+            } else if code == 1 {
+                println("Cannot read count: end of input.")
+            } else if code == 2 {
+                println("Cannot read count: expected an integer.")
+            } else if code == 3 {
+                println("Cannot read count: integer is outside the i64 range.")
+            } else if code == 4 {
+                println("Cannot read count: input stream failed.")
             } else {
-                println("Cannot read count:", errorMessage(code))
+                println("Cannot read count: unknown input error", code)
             }
         }
     }
 }
 ```
 
-Enter `4` to get `25`. Zero and negative input produce the application message. Invalid integer input and EOF produce a separate input-error message. `1001` is this example's application error, so it is handled before passing OS error codes to `errorMessage`.
+Enter `4` to get `25`. Zero and negative input produce the application message. Invalid integer input, EOF, an out-of-range number, and a failed input stream each produce their own message.
+
+These numbers belong to two explicit error conventions. `readIntResult` uses `1` for EOF, `2` for an invalid integer, `3` for a value outside `i64`, and `4` for a stream error. The helper reserves `1001` for its own positive-count requirement. Do not pass the input codes to `errorMessage`: that function describes OS `errno` values used by filesystem and thread operations. Equal integers from different error conventions can have unrelated meanings.
 
 The helper propagates input errors with `?`, validates the application's positive-count requirement, and returns a result. `main` lists both result cases and uses the failure code. All five learning requirements are satisfied.
 

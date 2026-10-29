@@ -1,4 +1,4 @@
-# Kremen 0.4.5
+# Kremen 0.4.6
 
 Kremen is a small compiled language for learning and experimenting with systems programming. Its syntax is inspired by Go. It has explicit integer types, structs and methods, checked references, raw pointers, arrays, slices, results, scoped resource cleanup, and native worker threads.
 
@@ -73,9 +73,9 @@ The default C flags for full-language programs are `-std=c11 -Wall -Wextra -Wped
 
 ## What changed
 
-Version 0.4.5 adds `--mode=work|learn`. Work is the default; learn adds five explicit checking requirements without changing accepted programs' runtime behavior. It also fixes exponential method-tree traversal, closes source-resolution symlink bypasses, and safely renders source-controlled diagnostic text. Read the [0.4.5 notes](docs/v0.4.5.md) for compatibility and validation.
+Version 0.4.6 fixes unnecessary fixed-array copies in `len`, strengthens result-discard checks in `learn`, and caches repeated zero-initialization checks. Failed artifact writes now use `E015` with a destination and an offline explanation; final stdout failures also produce unsuccessful exits. The checked-input example explains input errors using their own codes. Read the [0.4.6 notes](docs/v0.4.6.md) for behavior, limits, and validation.
 
-[0.4.4](docs/v0.4.4.md) introduced offline explanations; the catalog now covers 44 diagnostic categories, including `L001` through `L005`. [0.4.3](docs/v0.4.3.md) introduced independent POSIX workers and JSON diagnostics; the [thread guide](docs/threads.md) explains their boundaries. [Repository update instructions](docs/repository-update.md) explain which files belong in a source update.
+[0.4.5](docs/v0.4.5.md) introduced `--mode=work|learn` and source-resolution and diagnostic hardening. Work remains the default; learn adds five requirements while retaining shared safety rules. [0.4.4](docs/v0.4.4.md) introduced offline explanations; the catalog now covers 45 diagnostic categories, including `L001` through `L005`. [0.4.3](docs/v0.4.3.md) introduced independent POSIX workers and JSON diagnostics; the [thread guide](docs/threads.md) explains their boundaries. [Repository update instructions](docs/repository-update.md) explain which files belong in a source update.
 
 The [profile guide](docs/profiles.md) explains the first work/learn interface and its limits. The [roadmap to 0.5](docs/roadmap.md) describes subsequent learning tools. Project profile files, a lesson runner, and browser execution are not implemented yet.
 

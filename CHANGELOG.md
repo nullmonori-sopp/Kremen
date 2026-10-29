@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.6 — 2026-10-29
+
+- Lower fixed-array length queries without unnecessary array-value copies while preserving evaluation, bounds, result, and lifetime checks. Begin with a focused typed place/discard helper rather than a whole compiler IR replacement.
+- Remove unused serialization of builtin call arguments after their values have already been evaluated.
+- Extend learn's `L002` rule to result-bearing enum/result payload patterns and unread function parameters, including by-value aggregates. Keep work acceptance unchanged.
+- Cache zero-initialization type-shape checks so repeated locals and allocations do not repeatedly walk the same shared type graph.
+- Add `E015` for toolchain output failures, with destination-aware text/JSON diagnostics, staged-output cleanup, and an offline explanation.
+- Check final stdout flush failures in ordinary native commands and generated full-language programs. Finish worker joining and resource cleanup before the runtime reports a delayed output failure.
+- Correct the checked-input example: `readIntResult` codes identify input conditions, not OS `errno` values.
+- Extend regression, sanitizer, installation, and release documentation. See [release notes](docs/v0.4.6.md).
+
 ## 0.4.5 — 2026-10-28
 
 - Add full-language `--mode=work|learn`, with compatible work defaults and five learning requirements checked after shared semantics. Keep accepted source's C output identical between profiles.

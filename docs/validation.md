@@ -1,8 +1,8 @@
-# Validation record for 0.4.5
+# Validation record for 0.4.6
 
 Release environment: Linux x86-64, GCC 14.2.0, POSIX shell. Clang is not installed in this environment. Compiler and generated C use `-std=c11 -Wall -Wextra -Wpedantic -Werror`; full-language generated programs additionally use `-pthread`. Defaults are `-O3`, with `-O2` for the initial bootstrap stages.
 
-The current suites cover 741 checks: the 419 checks from 0.4.4, 41 profile cases, 25 security cases, and 256 deterministic mutation/profile combinations. Negative cases must return the intended diagnostic, not terminate through a signal. Installer checks, bootstrap fixed points, and sanitizer runs are additional validation described below.
+The current suites cover 836 checks on the release environment: the 741 checks from 0.4.5, plus 23 checker, 34 codegen, 16 input, 14 native-output, and 8 runtime-output cases. Negative cases must return the intended diagnostic, not terminate through a signal. Installer checks, bootstrap fixed points, and sanitizer runs are additional validation described below. Full-device tests use Linux `/dev/full` and explicitly skip those cases when it is unavailable, so other hosts can report a smaller count.
 
 ## Commands to reproduce
 
@@ -31,6 +31,11 @@ A clean subset build verifies the committed seed against stages 1, 2, and 3, run
 | `tests/native/profiles_045.sh` | 41 | All five learning rules, aggregate result discards, common borrowing/runtime checks, profile precedence, byte-identical C, error handling, and output preservation |
 | `tests/native/security_045.sh` | 25 | Long method/defer chains, canonical source/header/entry boundaries, symlinks, control-safe paths/messages/excerpts, bounded text, and runtime cleanup |
 | `tests/native/malformed_045.sh` | 256 | Fixed-seed mutated sources in both profiles; bounded termination with valid JSON errors or strict-C-valid output |
+| `tests/native/checker_046.sh` | 23 | Result-bearing patterns, parameters, receivers, imported bodies, preserved zero-state rules, and bounded shared-type checking |
+| `tests/native/codegen_046.sh` | 34 | Fixed-array length without extra copies; 8 MiB stack, both optimization levels and profiles, staged calls/defer, preserved bounds/lifetime/result/conversion failures |
+| `tests/native/input_046.sh` | 16 | Learning example in both profiles: positive/nonpositive input, EOF, format, positive/negative range errors, and closed stdin |
+| `tests/native/output_046.sh` | 14 | Destination-aware text/JSON failures, blocked paths, forced staged-write failures, output/source preservation, cleanup, permissions, and compiler stdout errors |
+| `tests/native/output_runtime_046.sh` | 8 | Normal/full stdout for main/worker output and panic, failure exit status, worker joining, and deferred marker-file cleanup |
 | `tests/native/threads_043.sh` | 19 | Spawn/join results, deferred joins, worker panic, automatic child cleanup, strict worker types, and forbidden handle escape |
 | `tests/native/threads_runtime.sh` | 16 | Actual worker overlap, nested jobs, handle ownership, limits, repeated joins, thread-local resources, panic cleanup, and synchronized input/output |
 | `tests/native/tutorial.sh` | 11 | Ten lesson programs, successful/invalid integer input, expected output, and file contents |
@@ -45,9 +50,11 @@ The tutorial's file-writing program runs inside a temporary directory. Formatter
 
 The mutation generator uses seed `0x4b524d45`, eight small source templates, and byte insertions, replacements, deletions, or truncations to create 128 inputs. Original seeds and mutations run in work and learn. Accepted cases must pass strict C syntax checking; rejected cases must emit valid JSON carrying the active mode. A ten-second per-command deadline catches runaway work. Generated mutants are syntax-checked rather than executed. The corpus is reproducible and targeted; it does not replace coverage-guided fuzzing or establish exhaustive input coverage.
 
+The new codegen suite compiles fixtures at `-O0` and `-O3`. Its repeated large-array length case runs with an 8 MiB stack; the checker-only shared-type case uses 6,000 locals under a deadline and is never executed. Output tests use a file-size limit to fail staged writes without relying on the user's permission level. They verify that the previous artifact or source remains, that temporary paths are removed, and that errors remain valid JSON when requested. Runtime-output cases use deferred file writes to prove cleanup completed even when stdout is a full device.
+
 ## AddressSanitizer and UndefinedBehaviorSanitizer
 
-`make test-sanitize` instruments the native compiler and the subset compiler, driver, runtime, and OS layer. It reruns semantic, frontend, diagnostic, runtime, toolchain, and input checks under ASan/UBSan, including the profile, security, mutation, stabilization, checker/codegen, and threading regressions. Diagnostic and formatting helpers, the learning example, long chains, and imported/method fixtures are instrumented too. Generated C is also instrumented for selected v0.3, borrowing, bootstrap arithmetic, and seven slice-assignment lifetime scenarios. Mutated accepted programs receive strict C syntax checks; the generator itself is ordinary native C.
+`make test-sanitize` instruments the native compiler and the subset compiler, driver, runtime, and OS layer. It reruns semantic, frontend, diagnostic, runtime, toolchain, and input checks under ASan/UBSan, including the profile, security, mutation, stabilization, checker/codegen, native-output, runtime-output, and threading regressions. Diagnostic and formatting helpers, the learning example, fixed-array length fixtures, long chains, and imported/method fixtures are instrumented too. Generated C is also instrumented for selected v0.3, borrowing, bootstrap arithmetic, and seven slice-assignment lifetime scenarios. Mutated accepted programs receive strict C syntax checks; the generator itself is ordinary native C.
 
 `make test-thread-sanitize` runs the 16 C thread-runtime scenarios with ThreadSanitizer. The overlap test uses synchronization to require two workers to be active; success cannot be reproduced by simply executing workers sequentially. Ownership and cleanup tests exercise nested workers, worker-local allocations, and shared standard-stream locking. TSan is an additional host/toolchain check; support for every POSIX system is not implied.
 
@@ -77,7 +84,7 @@ The platform suite forces `KM_NO_PROC_SELF_EXE=1` and tests argv/PATH fallback o
 
 ```sh
 make dist
-unzip ../kremen-v0.4.5.zip -d /tmp/kremen-release-check
+unzip ../kremen-v0.4.6.zip -d /tmp/kremen-release-check
 cd /tmp/kremen-release-check/kremen
 sha256sum -c SHA256SUMS
 make all selfhost

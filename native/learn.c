@@ -34,6 +34,12 @@ static void learn_error(Context *ctx, Token token, const char *code, const char 
     km_error(ctx, token, code, "%s", message);
 }
 
+static void result_binding(Inspector *inspector, Node *binding, const char *message) {
+    if (!named_code(binding->symbol) && contains_result(inspector, binding->type))
+        learn_error(inspector->ctx, binding->tok, "L002", message,
+                    "Bind the !T value or its containing aggregate to a name and inspect, handle, or propagate it. '_' and an unread underscore-prefixed binding both discard it.");
+}
+
 static void inspect(Inspector *inspector, Node *node) {
     if (!node) return;
     Context *ctx = inspector->ctx;
@@ -73,6 +79,8 @@ static void inspect(Inspector *inspector, Node *node) {
             if (node->type->kind == TY_RESULT && arm->integer == 1 && !named_code(arm->params.data[0]->symbol))
                 learn_error(ctx, arm->tok, "L003", "learn mode requires the fail pattern to bind and use its error code",
                             "Write fail(code) and use code in the failure arm. A _ binding intentionally ignores a code in work mode only.");
+            for (size_t j = 0; j < arm->params.len; j++)
+                result_binding(inspector, arm->params.data[j], "learn mode does not allow discarding a pattern's result-bearing payload");
         }
         break;
     case N_CALL:
@@ -94,5 +102,14 @@ static void inspect(Inspector *inspector, Node *node) {
 
 void km_check_learn(Context *ctx) {
     Inspector inspector = {.ctx = ctx, .result_cache = km_alloc(ctx, (size_t)ctx->next_type + 1)};
-    for (size_t i = 0; i < ctx->functions.len; i++) inspect(&inspector, ctx->functions.data[i]->body);
+    for (size_t i = 0; i < ctx->functions.len; i++) {
+        Node *function = ctx->functions.data[i];
+        /* External declarations have no checked body or local symbols. */
+        if (!function->body) continue;
+        if (function->receiver)
+            result_binding(&inspector, function->receiver, "learn mode does not allow an unread result-bearing receiver");
+        for (size_t j = 0; j < function->params.len; j++)
+            result_binding(&inspector, function->params.data[j], "learn mode does not allow an unread result-bearing parameter");
+        inspect(&inspector, function->body);
+    }
 }

@@ -2,7 +2,7 @@
 
 An error message is a report about a specific operation, not a judgment about your ability to program. Read the first line, find the marked code, and make one small change. Then run `check` again.
 
-This page describes 0.4.5. Examples shorten directory names for readability; the full compiler normally prints the resolved source path, with unsafe terminal characters escaped.
+This page describes 0.4.6. Examples shorten directory names for readability; the full compiler normally prints the resolved source path, with unsafe terminal characters escaped.
 
 ## Read the location first
 
@@ -49,7 +49,7 @@ kremen explain --list
 
 `explain` prints why that category occurs, what to check, and a small example. The catalog is built into the full compiler and works without a project, runtime header, C compiler, network, or account. Running `kremen explain` without a code lists the catalog too. Some examples are code fragments intended to be placed inside a function.
 
-The original error message identifies the particular check. For example, `E110` covers both syntax and type disagreements, so its general explanation does not replace the marked source and message. The command supports 44 categories: the preceding 39 native categories, including fatal `W001`, and learning requirements `L001` through `L005`. The self-hosted subset has its own diagnostic scheme.
+The original error message identifies the particular check. For example, `E110` covers several type disagreements, so its general explanation does not replace the marked source and message. The command supports 45 categories: the 44 from 0.4.5 and `E015` for output failures. These include fatal `W001` and learning requirements `L001` through `L005`. The self-hosted subset has its own diagnostic scheme.
 
 An unknown code is a command-line error, not a guessed explanation. Select `--mode=learn` on a semantic command to enable the first five additional requirements. [Work and learn profiles](profiles.md) describes their scope. A lesson runner and persistent project-profile configuration remain planned work in the [roadmap](roadmap.md).
 
@@ -60,13 +60,14 @@ An unknown code is a command-line error, not a guessed explanation. Select `--mo
 | `unknown variable` / `unknown function` | Spelling, whether the declaration exists in this scope, and the import qualifier |
 | `type mismatch` | The declared type and the supplied value; integer conversions must be explicit |
 | `Expected ...` | A missing delimiter or an incomplete expression, including the preceding line |
-| `unused variable or parameter` | Whether you forgot to use it; prefix an intentionally unused name with `_` |
+| `unused variable or parameter` | Whether you forgot to use it; prefix an intentionally unused ordinary value with `_`. Learn still requires observing result-bearing values |
 | `shadows an existing or reserved name` | Rename the new binding, or use `=` if you meant to update an existing one |
 | `requires an unsafe block` | Whether you intended a manual memory operation; keep it in a small `unsafe` block |
 | `while it is borrowed` | A reference or deferred call still holds a loan on the variable |
 | A non-exhaustive `match` | Add the missing variants, or a final `_` arm when a fallback is appropriate |
 | `ok/fail requires a contextual result type` | Supply a result annotation, for example `var answer !i64 = ok(42)` |
-| A discarded result | Handle it with `match`, `catch`, or `?`; `_ = call()` explicitly discards it when intended |
+| A discarded result | Handle it with `match`, `catch`, or `?`; work allows intentional `_ = call()`, while learn rejects ignored result-bearing values |
+| `E015` | The output destination, its directory permissions, available space, file kind, or failed standard output |
 
 A column points at the token associated with the failed check. For a compound operation it may mark the operator or the start of the indexed value. It is a useful starting point, not a claim that changing only that token is always the right fix.
 
@@ -164,7 +165,15 @@ Editor integrations should use the file/range fields to select source. The displ
 
 JSON also escapes direction-changing characters. Invalid UTF-8 bytes are reported as byte-valued Unicode escapes; a decoded JSON string alone cannot generally round-trip an invalid-UTF-8 filesystem name. Valid UTF-8 names retain their decoded path. The byte offsets and lengths describe the input file, including when its content is malformed.
 
-This option covers Kremen frontend diagnostics and command validation, including unknown commands, missing or extra sources, invalid formatter modes, invalid formatter input, and protected output paths. It does not convert external C-compiler output, program stdout, runtime errors, every late OS failure, or formatting-drift reports into JSON. The separate self-hosted subset also keeps its own text diagnostics. A tool invoking `build` or `run` must distinguish the frontend from later stages rather than assuming every stderr line is a JSON object. Successful `explain` output is ordinary text on stdout even when this diagnostic option is selected.
+This option covers Kremen frontend diagnostics and command validation, including unknown commands, missing or extra sources, invalid formatter modes, invalid formatter input, protected output paths, and native output-staging failures. It also covers the final standard-output flush of ordinary native commands. It does not convert external C-compiler output, program stdout, runtime errors, every late OS failure, or formatting-drift reports into JSON. The separate self-hosted subset also keeps its own text diagnostics. A tool invoking `build` or `run` must distinguish the frontend from later stages rather than assuming every stderr line is a JSON object. Successful `explain` output is ordinary text on stdout even when this diagnostic option is selected.
+
+## When output cannot be saved
+
+`E015` identifies an output failure rather than blaming your source program. For file operations, the location names the requested destination; there is no source excerpt to underline. The message says which operation failed, such as creating a staged file or replacing an executable. `kremen explain E015` describes the checks to make.
+
+The native compiler stages file output before replacing its destination. These file-operation failures remove staging artifacts and preserve the previous destination. Formatting with `-w` preserves the original source and its permissions until the replacement is ready. Successful staging does not promise durable disk storage after a power loss, and concurrent hostile filesystem changes are outside this guarantee.
+
+The final stdout flush can also fail, for example when redirected to a full device. Ordinary native commands then report `E015` and exit unsuccessfully. Bytes already sent to stdout cannot be taken back. A successful file publication is not undone if its later success message fails to flush. This includes `check`, `build`, `run`, `emit-c`, `fmt`, and `explain`; the early `--help` and `--version` paths keep their existing behavior. External C-tool errors retain their own format and exit behavior.
 
 ## Which component produced the error?
 

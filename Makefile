@@ -43,6 +43,11 @@ test: build/kremen
 	sh tests/native/profiles_045.sh ./build/kremen
 	sh tests/native/security_045.sh ./build/kremen
 	sh tests/native/malformed_045.sh ./build/kremen
+	sh tests/native/checker_046.sh ./build/kremen
+	sh tests/native/codegen_046.sh ./build/kremen
+	sh tests/native/input_046.sh ./build/kremen
+	sh tests/native/output_046.sh ./build/kremen
+	sh tests/native/output_runtime_046.sh ./build/kremen
 	sh tests/native/threads_043.sh ./build/kremen
 	sh tests/native/threads_runtime.sh
 	sh tests/native/tutorial.sh ./build/kremen

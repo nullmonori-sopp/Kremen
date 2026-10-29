@@ -23,6 +23,6 @@ For the first additional learning requirements, read [Work and learn profiles](p
 
 ## Releases and repository updates
 
-The current release is [0.4.5](v0.4.5.md). Earlier notes cover [0.4.4](v0.4.4.md), [0.4.3](v0.4.3.md), [0.4.2](v0.4.2.md), [0.4.1](v0.4.1.md), [0.4.0](v0.4.md), [0.3.0](v0.3.md), and [migration from 0.2](v0.2.md). The [roadmap](roadmap.md) separates the planned learning tools from features available today.
+The current release is [0.4.6](v0.4.6.md). Earlier notes cover [0.4.5](v0.4.5.md), [0.4.4](v0.4.4.md), [0.4.3](v0.4.3.md), [0.4.2](v0.4.2.md), [0.4.1](v0.4.1.md), [0.4.0](v0.4.md), [0.3.0](v0.3.md), and [migration from 0.2](v0.2.md). The [roadmap](roadmap.md) separates the planned learning tools from features available today.
 
 [Repository update instructions](repository-update.md) distinguish newly added files from replacements, and explain which generated files belong in version control. [CHANGELOG.md](../CHANGELOG.md) gives the short history.

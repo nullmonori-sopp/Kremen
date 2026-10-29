@@ -15,8 +15,16 @@ func main() {
 		fail(code) => {
 			if code == 1001 {
 				println("Count must be greater than zero.")
+			} else if code == 1 {
+				println("Cannot read count: end of input.")
+			} else if code == 2 {
+				println("Cannot read count: expected an integer.")
+			} else if code == 3 {
+				println("Cannot read count: integer is outside the i64 range.")
+			} else if code == 4 {
+				println("Cannot read count: input stream failed.")
 			} else {
-				println("Cannot read count:", errorMessage(code))
+				println("Cannot read count: unknown input error", code)
 			}
 		}
 	}

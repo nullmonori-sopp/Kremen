@@ -79,3 +79,11 @@ Per-process wall means for 0.4.3 were 0.1274, 0.1587, and 0.1272 seconds. For 0.
 0.4.5 removes duplicate traversal of aliased method receivers from two backend walks. The regression suite emits, compiles, and runs 90-call chains with and without deferred methods, in both profiles, under a command deadline. This fixes exponential compiler work on that source shape. It does not establish an application throughput improvement.
 
 The saved 0.4.4 report remains historical. The 0.4.5 runtime has additional diagnostic-path rendering code, so the strict byte-identity comparison with a 0.4.4 compiler will correctly report a difference. Use the emitter script when comparing compatible emitters; use the checking runner for frontend-only measurements. Profile equality tests separately require work and learn to emit identical C for accepted input on the same compiler.
+
+## Shared type queries and array lengths in 0.4.6
+
+The checker caches the result-bearing shape of a type's zero state. Previously, many locals with the same nested by-value type repeated the same traversal. A focused check-only probe uses many locals sharing a legal, roughly 1 MiB type; the regression imposes a deadline without executing a program with those large stack values. This removes repeated compiler work for that shape of source. It does not measure application throughput.
+
+Fixed-array `len` queries no longer materialize unnecessary selected-array copies. The regression starts from a reproduced `-O0` stack overflow with a `[100000]i64` local and repeated length queries, and checks behavior under an explicit stack limit. Calls, indexing, and runtime failures inside the queried expression still matter. Eliminating a copy is valid only when those effects and checks are retained.
+
+Builtin lowering also stops serializing a call-argument string that it never uses. These are specific compiler and generated-code changes. Earlier saved benchmark reports have not been relabeled as 0.4.6 results, and no universal speedup percentage is implied.
