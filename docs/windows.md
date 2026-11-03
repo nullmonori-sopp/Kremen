@@ -77,7 +77,11 @@ The frontend resolves existing paths through Windows file handles. It follows sy
 
 The first implementation uses narrow Windows and C-runtime path APIs. Use ASCII paths for a predictable result. Complete arbitrary-Unicode paths, extended long paths, and every Windows filesystem configuration are not established by this profile.
 
+The native executable accepts Windows paths, including `C:/project/main.kr`. MSYS2 normally converts its own paths before launching native tools, but its heuristics can leave unusual arguments unchanged. When passing an absolute MSYS2 path containing apostrophes or shell characters, convert it explicitly with `cygpath -m` and keep the result quoted. A native process cannot resolve MSYS2's private `/tmp` mount by itself.
+
 Filesystem streams use binary modes. The bytes `\r`, `\n`, NUL, and `0x1a` remain file data rather than being changed by Windows text translation. This concerns Kremen's filesystem operations; standard input, standard output, standard error, and the terminal's encoding retain their host conventions.
+
+On Windows, `fmt -w` refuses to rewrite a read-only source. Its staged file remains removable on that failure. Formatter mode preservation covers the C runtime's read/write flags; it does not copy arbitrary NTFS access-control lists.
 
 File sizes use 64-bit metadata. `fsRename` supports replacing a destination file and preserves it when the move fails; directory replacement can still fail under Windows rules. A rename between names for the same file identity succeeds without deleting the file. Filesystem errors remain result codes that can be interpreted with `errorMessage`.
 

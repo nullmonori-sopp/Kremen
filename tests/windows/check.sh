@@ -50,8 +50,9 @@ done
 expect 'default build creates a runnable a.exe' 7
 mkdir "$WORK/path with ' quote & ampersand"
 cp "$WORK/main.kr" "$WORK/path with ' quote & ampersand/source.kr"
-"$KREMEN" build "$WORK/path with ' quote & ampersand/source.kr" -o "$WORK/path with ' quote & ampersand/result.exe" > "$WORK/output" 2> "$WORK/error" || fail 'quoted paths build'
-"$WORK/path with ' quote & ampersand/result.exe" > "$WORK/output" 2> "$WORK/error" || fail 'quoted paths executable'
+QUOTED_PATH=$(cygpath -m "$WORK/path with ' quote & ampersand")
+"$KREMEN" build "$QUOTED_PATH/source.kr" -o "$QUOTED_PATH/result.exe" > "$WORK/output" 2> "$WORK/error" || fail 'quoted paths build'
+"$QUOTED_PATH/result.exe" > "$WORK/output" 2> "$WORK/error" || fail 'quoted paths executable'
 expect 'source and output paths preserve spaces apostrophes and shell characters' 7
 mkdir "$WORK/run temp"
 TEMP=$(cygpath -m "$WORK/run temp") TMP=$(cygpath -m "$WORK/run temp") "$KREMEN" run "$WORK/main.kr" > "$WORK/output" 2> "$WORK/error" || fail 'temporary path execution'
@@ -64,6 +65,27 @@ expect 'CRLF sources retain normal semantics' 7
 "$KREMEN" fmt -w "$WORK/crlf.kr" > "$WORK/output" 2> "$WORK/error" || fail 'formatter replacement'
 "$KREMEN" fmt --check "$WORK/crlf.kr" > "$WORK/output" 2> "$WORK/error" || fail 'formatter canonical source'
 pass 'formatter replaces an existing source and remains idempotent'
+cat > "$WORK/mode.c" <<'C'
+#include <io.h>
+#include <sys/stat.h>
+int main(int argc, char **argv) {
+    if (argc != 3) return 2;
+    return _chmod(argv[1], _S_IREAD | (argv[2][0] == 'w' ? _S_IWRITE : 0)) ? 1 : 0;
+}
+C
+"${CC:-gcc}" -std=c11 -Wall -Wextra -Wpedantic -Werror "$WORK/mode.c" -o "$WORK/mode.exe" > "$WORK/output" 2> "$WORK/error" || fail 'file-mode helper build'
+cp "$WORK/main.kr" "$WORK/readonly.kr"
+cp "$WORK/readonly.kr" "$WORK/readonly-original.kr"
+"$WORK/mode.exe" "$WORK/readonly.kr" read > "$WORK/output" 2> "$WORK/error" || fail 'read-only source setup'
+status=0
+"$KREMEN" fmt -w "$WORK/readonly.kr" --diagnostic-format=json > "$WORK/output" 2> "$WORK/error" || status=$?
+"$WORK/mode.exe" "$WORK/readonly.kr" write || fail 'restore read-only source permissions'
+[ "$status" -eq 1 ] || fail 'read-only formatter status'
+"$WORK/json.exe" "$WORK/error" || fail 'read-only formatter JSON'
+grep -F '"code":"E015"' "$WORK/error" > /dev/null || fail 'read-only formatter diagnostic'
+cmp -s "$WORK/readonly.kr" "$WORK/readonly-original.kr" || fail 'read-only source changed'
+[ -z "$(find "$WORK" -name '*.kremen-*' -print)" ] || fail 'read-only formatter left staged output'
+pass 'read-only formatter failure preserves source and removes staged output'
 "$KREMEN" run "$ROOT/tests/native/modules/main.kr" > "$WORK/output" 2> "$WORK/error" || fail 'modules and headers'
 expect 'directory imports and paired headers compile natively' '7 15'
 WINROOT=$(cygpath -m "$WORK" | tr '[:lower:]' '[:upper:]')

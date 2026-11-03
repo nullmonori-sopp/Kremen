@@ -82,7 +82,13 @@ static inline bool km_host_same_file(const char *a, const char *b) {
     CloseHandle(left); return same;
 }
 static inline int km_host_mkdir(const char *path) { return _mkdir(path); }
-static inline int km_host_chmod(int fd, const char *path, int mode) { (void)fd; return _chmod(path, mode & (_S_IREAD | _S_IWRITE)); }
+static inline int km_host_chmod(int fd, const char *path, int mode) {
+    (void)fd;
+    /* Windows cannot replace a read-only destination. Refuse before making
+     * the staged file read-only too, so failure cleanup can always remove it. */
+    if (!(mode & _S_IWRITE)) { errno = EACCES; return -1; }
+    return _chmod(path, mode & (_S_IREAD | _S_IWRITE));
+}
 static inline int km_host_replace(const char *from, const char *to) {
     if (MoveFileExA(from, to, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) return 0;
     km_host_error(GetLastError()); return -1;
