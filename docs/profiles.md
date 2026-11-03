@@ -16,9 +16,11 @@ kremen emit-c main.kr --mode=learn -o build/main.c
 
 Omitting `--mode` selects `work`. The option has the exact form `--mode=work` or `--mode=learn`. If supplied more than once, the last occurrence wins. Put all compiler options before `--` when using the end-of-options delimiter.
 
-The selected profile applies to every implementation loaded for the program, including local imports. A helper function in another file cannot silently opt out. Headers still undergo the shared signature checks. `fmt` and `explain` do not run a semantic profile and reject `--mode`; `kremen explain L003` works by itself.
+The selected profile applies to every implementation loaded for the program, including local imports. A helper function in another file cannot silently opt out. Headers still undergo the shared signature checks. `fmt`, `explain`, and `doctor` do not run a semantic profile and reject `--mode`; `kremen explain L003` works by itself.
 
 Profiles currently belong to the full compiler. The self-hosted subset does not implement them. There is no persistent project-profile configuration, lesson runner, or browser execution in this release.
+
+The experimental [Windows profile](windows.md) uses the same work/learn interface and shared checks. Choose a working native backend with `kremen doctor` before trying to compile programs there. The command diagnoses setup; it does not select a semantic mode or check a lesson.
 
 ## The five learning requirements
 

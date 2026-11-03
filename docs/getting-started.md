@@ -2,7 +2,7 @@
 
 A program is a set of instructions for a computer. You write those instructions in a text file. The Kremen compiler checks the file and turns it into a program your computer can run.
 
-This guide starts with an unpacked Kremen source archive on Linux. You do not need to know another language. If you have not unpacked or installed Kremen yet, [Installation](install.md) covers the required tools and archive commands.
+This guide starts with an unpacked Kremen source archive on Linux. You do not need to know another language. If you have not unpacked or installed Kremen yet, [Installation](install.md) covers the required tools and archive commands. For the experimental Windows profile, complete [Windows setup](windows.md) first and use `build/kremen.exe` where this guide says `build/kremen`.
 
 ## 1. Open a terminal in the project directory
 

@@ -78,6 +78,7 @@ unsigned km_name_distance(const char *, const char *);
 bool km_has_explanation(const char *);
 bool km_explain(const char *, FILE *);
 void km_explain_list(FILE *);
+int km_doctor(Context *);
 void km_init(Context *);
 void km_destroy(Context *);
 Node *km_node(Context *, NodeKind, Token);

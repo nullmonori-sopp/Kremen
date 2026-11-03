@@ -1,8 +1,8 @@
-# Validation record for 0.4.6
+# Validation record for 0.4.7
 
 Release environment: Linux x86-64, GCC 14.2.0, POSIX shell. Clang is not installed in this environment. Compiler and generated C use `-std=c11 -Wall -Wextra -Wpedantic -Werror`; full-language generated programs additionally use `-pthread`. Defaults are `-O3`, with `-O2` for the initial bootstrap stages.
 
-The current suites cover 836 checks on the release environment: the 741 checks from 0.4.5, plus 23 checker, 34 codegen, 16 input, 14 native-output, and 8 runtime-output cases. Negative cases must return the intended diagnostic, not terminate through a signal. Installer checks, bootstrap fixed points, and sanitizer runs are additional validation described below. Full-device tests use Linux `/dev/full` and explicitly skip those cases when it is unavailable, so other hosts can report a smaller count.
+The Linux suites contain 900 checks: the 836 from 0.4.6, plus 38 semantic/codegen, 12 runtime, and 14 doctor cases. Negative cases must return the intended diagnostic, not terminate through a signal. Installer checks, bootstrap fixed points, and sanitizer runs are additional validation described below. Full-device tests use Linux `/dev/full` and explicitly skip those cases when it is unavailable, so other hosts can report a smaller count. Windows uses a separate native UCRT64 target; its coverage is not the Linux count.
 
 ## Commands to reproduce
 
@@ -36,6 +36,9 @@ A clean subset build verifies the committed seed against stages 1, 2, and 3, run
 | `tests/native/input_046.sh` | 16 | Learning example in both profiles: positive/nonpositive input, EOF, format, positive/negative range errors, and closed stdin |
 | `tests/native/output_046.sh` | 14 | Destination-aware text/JSON failures, blocked paths, forced staged-write failures, output/source preservation, cleanup, permissions, and compiler stdout errors |
 | `tests/native/output_runtime_046.sh` | 8 | Normal/full stdout for main/worker output and panic, failure exit status, worker joining, and deferred marker-file cleanup |
+| `tests/native/semantic_047.sh` | 38 | Large aggregate discards and entirely ignored tuple patterns, 8 MiB stack, both optimization levels and profiles, effects, partial bindings, preserved runtime failures and learn rules |
+| `tests/native/runtime_047.sh` | 12 | Binary file data and modes, file replacement and same-identity rename, filesystem errors, metadata, and sticky stream-error handling |
+| `tests/native/doctor_047.sh` | 14 | Actual strict-C/pthread worker probe, backend selection and failures, literal process arguments, CLI validation, offline explanation, and relocated runtime lookup |
 | `tests/native/threads_043.sh` | 19 | Spawn/join results, deferred joins, worker panic, automatic child cleanup, strict worker types, and forbidden handle escape |
 | `tests/native/threads_runtime.sh` | 16 | Actual worker overlap, nested jobs, handle ownership, limits, repeated joins, thread-local resources, panic cleanup, and synchronized input/output |
 | `tests/native/tutorial.sh` | 11 | Ten lesson programs, successful/invalid integer input, expected output, and file contents |
@@ -52,9 +55,11 @@ The mutation generator uses seed `0x4b524d45`, eight small source templates, and
 
 The new codegen suite compiles fixtures at `-O0` and `-O3`. Its repeated large-array length case runs with an 8 MiB stack; the checker-only shared-type case uses 6,000 locals under a deadline and is never executed. Output tests use a file-size limit to fail staged writes without relying on the user's permission level. They verify that the previous artifact or source remains, that temporary paths are removed, and that errors remain valid JSON when requested. Runtime-output cases use deferred file writes to prove cleanup completed even when stdout is a full device.
 
+0.4.7 extends the stack regressions to explicit aggregate discards and entirely ignored tuple patterns. It also checks partially used tuple patterns, work/learn acceptance, source calls and indexing order, and retained lifetime, bounds, result, and integer-conversion failures. Runtime fixtures retain CRLF, NUL, and `0x1a` bytes and cover a sticky file-stream error followed by an empty write. Doctor tests perform a real compile/run setup probe; that probe is intentionally smaller than the regression suites.
+
 ## AddressSanitizer and UndefinedBehaviorSanitizer
 
-`make test-sanitize` instruments the native compiler and the subset compiler, driver, runtime, and OS layer. It reruns semantic, frontend, diagnostic, runtime, toolchain, and input checks under ASan/UBSan, including the profile, security, mutation, stabilization, checker/codegen, native-output, runtime-output, and threading regressions. Diagnostic and formatting helpers, the learning example, fixed-array length fixtures, long chains, and imported/method fixtures are instrumented too. Generated C is also instrumented for selected v0.3, borrowing, bootstrap arithmetic, and seven slice-assignment lifetime scenarios. Mutated accepted programs receive strict C syntax checks; the generator itself is ordinary native C.
+`make test-sanitize` instruments the native compiler and the subset compiler, driver, runtime, and OS layer. It reruns semantic, frontend, diagnostic, runtime, toolchain, and input checks under ASan/UBSan, including the profile, security, mutation, stabilization, checker/codegen, native-output, runtime-output, doctor, and threading regressions. The 0.4.7 semantic and runtime regressions participate too. Diagnostic and formatting helpers, the learning example, fixed-array length/discard fixtures, long chains, and imported/method fixtures are instrumented too. Generated C is also instrumented for selected v0.3, borrowing, bootstrap arithmetic, and seven slice-assignment lifetime scenarios. Mutated accepted programs receive strict C syntax checks; the generator itself is ordinary native C. Doctor's native compiler is instrumented in this run; the setup probe itself uses its ordinary strict backend flags.
 
 `make test-thread-sanitize` runs the 16 C thread-runtime scenarios with ThreadSanitizer. The overlap test uses synchronization to require two workers to be active; success cannot be reproduced by simply executing workers sequentially. Ownership and cleanup tests exercise nested workers, worker-local allocations, and shared standard-stream locking. TSan is an additional host/toolchain check; support for every POSIX system is not implied.
 
@@ -78,13 +83,26 @@ Native diagnostic fixtures explicitly include both `-O0` and `-O3` builds.
 
 `make test-install` builds and installs both compilers into a temporary prefix containing spaces. It checks versions, offline native/learning explanations, the installed learn-profile example before and after relocation, installed tutorial output and reports, the license and thread guide, runtime lookup, prefix relocation, the installed worker example, subset program execution, upgrade, invalid-manifest refusal, unrelated-file preservation, collision refusal, and uninstall.
 
-The platform suite forces `KM_NO_PROC_SELF_EXE=1` and tests argv/PATH fallback on Linux, including an empty PATH element and executable symlink. A fresh compiler copy is built without assembly from a checkout path containing an apostrophe, using a compiler path with similarly difficult characters. This validates those fallback paths on Linux; it is not evidence of release testing on macOS, Windows, or ARM.
+The platform suite forces `KM_NO_PROC_SELF_EXE=1` and tests argv/PATH fallback on Linux, including an empty PATH element and executable symlink. A fresh compiler copy is built without assembly from a checkout path containing an apostrophe, using a compiler path with similarly difficult characters. This validates those fallback paths on Linux; it is not evidence of release testing on macOS or ARM.
+
+## Native Windows profile
+
+The separate Windows target is x86-64 MSYS2 UCRT64 GCC with winpthreads. From that environment:
+
+```sh
+make CC=gcc USE_ASM=0
+make CC=gcc USE_ASM=0 test-windows
+```
+
+The compiler and generated programs are Windows executables. `tests/windows/check.sh` contains 25 integration checks and also runs the 12 direct runtime cases. It covers both profiles, doctor, `.exe` defaults, quoted paths, temporary-directory cleanup, CRLF sources, formatting, imports, path-case and hard-link protection, filesystem bytes, worker execution, installation, relocation, and uninstall. The `windows` GitHub Actions job builds and runs this target on `windows-latest` with MSYS2 UCRT64. The broader POSIX subset, Linux file-limit tests, and Linux sanitizer scenarios remain separate. The [Windows guide](windows.md) explains the setup, installer, C-backend DLL dependencies, and initial system-code-page path limit.
+
+Cross-compilation can catch missing declarations and linker incompatibilities, but it does not prove native execution. Likewise, the setup probe only proves that its small runtime program compiled and ran. Treat native Windows execution, Linux regressions, and compiler/sanitizer checks as separate evidence. The first profile does not establish MSVC, arbitrary Unicode/long paths, every Windows version, or ARM Windows support.
 
 ## Source archive checks
 
 ```sh
 make dist
-unzip ../kremen-v0.4.6.zip -d /tmp/kremen-release-check
+unzip ../kremen-v0.4.7.zip -d /tmp/kremen-release-check
 cd /tmp/kremen-release-check/kremen
 sha256sum -c SHA256SUMS
 make all selfhost

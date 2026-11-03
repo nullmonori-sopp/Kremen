@@ -1,6 +1,6 @@
 # Working with threads
 
-A thread is an independent path of execution inside a process. Each successful Kremen spawn creates one native POSIX thread. Two worker threads can run at the same time on different CPU cores. This helps when a program has independent work to do; starting a thread and joining it immediately does not by itself make a calculation faster.
+A thread is an independent path of execution inside a process. Each successful Kremen spawn creates one native pthread-backed thread, using POSIX threads on Linux or winpthreads in the experimental Windows profile. Two worker threads can run at the same time on different CPU cores. This helps when a program has independent work to do; starting a thread and joining it immediately does not by itself make a calculation faster.
 
 Kremen 0.4.3 introduces a deliberately small threading interface. A worker receives one `i64` value and returns one `i64` value. It cannot capture a caller's local variables, borrow the caller's memory, or receive a slice or file handle. This gives the checker a clear boundary before more general shared-memory features are added.
 
@@ -101,4 +101,4 @@ cc -std=c11 -Wall -Wextra -Wpedantic -Werror -O3 -pthread workers.c -o workers
 ./workers
 ```
 
-The release targets hosted POSIX systems. Threads do not add a freestanding kernel target or remove the C toolchain and libc dependencies. See [Safety and memory](safety.md) for the wider boundary.
+Linux is the established hosted target; the experimental [Windows profile](windows.md) uses MSYS2 UCRT64 GCC and winpthreads. Threads do not add a freestanding kernel target or remove the C toolchain, runtime-library, and host-OS dependencies. See [Safety and memory](safety.md) for the wider boundary.

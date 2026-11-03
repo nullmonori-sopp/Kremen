@@ -1,6 +1,6 @@
 # Safety and memory in Kremen
 
-Kremen checks many mistakes before a program runs and checks others while it runs. These checks are useful, but they do not make every possible program correct. This page explains the actual boundaries of the full language in 0.4.6. The self-hosted subset has a different, smaller set of checks.
+Kremen checks many mistakes before a program runs and checks others while it runs. These checks are useful, but they do not make every possible program correct. This page explains the actual boundaries of the full language in 0.4.7. The self-hosted subset has a different, smaller set of checks.
 
 If you are new to memory, begin with [tutorial lesson 9](tutorial.md#9-understand-ownership-before-using-dynamic-memory). A variable owns a value. A reference borrows access to that value. A slice describes storage owned by a runtime allocation. Copying a slice does not copy its elements or extend the lifetime of that storage.
 
@@ -44,7 +44,7 @@ Raw memory does not acquire a complete validity proof. A non-null pointer may st
 
 ## The threading boundary
 
-The full runtime supports native POSIX workers through `threadSpawn`, `threadJoin`, and `threadClose`. A worker is a named Kremen function taking and returning an `i64`; it has no captures. This interface does not transfer references, pointers, slices, strings, file handles, arena handles, or thread handles between threads. The full language also has no mutable global variables.
+The full runtime supports native pthread-backed workers through `threadSpawn`, `threadJoin`, and `threadClose`, using POSIX threads on Linux and winpthreads in the experimental Windows profile. A worker is a named Kremen function taking and returning an `i64`; it has no captures. This interface does not transfer references, pointers, slices, strings, file handles, arena handles, or thread handles between threads. The full language also has no mutable global variables.
 
 Thread handles remain with their creator. They cannot be returned, borrowed, or put inside ordinary containers. Copies refer to one join state: explicit repeated join returns an error, while `threadClose` is idempotent. A thread-local registry keeps its handle records until the creator exits. Outstanding children are joined before the creator's resources are reclaimed.
 
@@ -56,7 +56,7 @@ This is an independent-job model, not a general shared-memory type system. Mutex
 
 Input and file strings, and directory-name strings, remain managed until their owning thread exits. There is no garbage collector, total memory quota, stack-exhaustion guarantee, or execution-time limit. File reads have a 64 MiB per-call limit; directory listing has a million-entry limit. Thread creation is limited to 256 unjoined children and 65,536 retained handles per creator. These are specific safeguards, not a general resource sandbox.
 
-NUL bytes are rejected in filesystem paths before calling the C API. File data may contain NUL. Filesystem operations follow host permissions and symlinks. The import-root restriction applies to source loading; it does not restrict the executing program's filesystem access. Writes may partially succeed and do not promise durable storage through `fsync`.
+NUL bytes are rejected in filesystem paths before calling the C API. File data may contain NUL. Filesystem streams use binary modes, preserving bytes across Windows newline and end-of-file conventions. A sticky stream error remains a failed write even when a later write has empty data. Filesystem operations follow host permissions and symlinks. The import-root restriction applies to source loading; it does not restrict the executing program's filesystem access. Writes may partially succeed and do not promise durable storage through `fsync`.
 
 Generated programs check the final stdout flush and the stream's error state after joining outstanding workers and finishing registered resource cleanup. A failed final flush reports a runtime error and forces an unsuccessful exit. The report cannot identify one earlier print call because buffering delayed the failure. This is not recovery from host signals such as default `SIGPIPE`, or a guarantee about external C termination handlers.
 
@@ -68,13 +68,15 @@ Checked method-call receiver pointers alias existing syntax. Backend and learnin
 
 The shared checker also caches whether a type contains a result in its zero-initialized state. An enum's zero state depends on its first variant's payload; this query differs from learn's conservative check of every result-bearing variant. Caching does not relax either rule or the other initialization checks.
 
-Fixed-array length lowering keeps evaluation and checks while avoiding unnecessary copies of the selected array. This removes a reproduced stack-exhaustion case caused by repeated `len` queries at `-O0`; it does not impose a total stack quota on arbitrary programs.
+Fixed-array length lowering keeps evaluation and checks while avoiding unnecessary copies of the selected array. Explicit discards of aggregate places and entirely ignored tuple destructuring use the same checked-discard approach. These paths remove reproduced stack-exhaustion cases caused by unnecessary value copies at `-O0`; they do not impose a total stack quota or general copy-elision guarantee on arbitrary programs.
 
 Frontend diagnostic paths and messages escape terminal controls and direction-changing Unicode; unsafe excerpt scalars become visible cells. Text messages use the same bounded buffer as JSON. Saved runtime paths are escaped without allocation. Program-owned output and external C/OS output have their own formats.
 
 ## Toolchain and platform boundary
 
-The full compiler and runtime currently target a hosted POSIX process with libc and POSIX threads. Generated full-language C is compiled and linked with `-pthread`. Strict C flags help detect generator defects; they do not prove that the compiler is free of defects. [Validation](validation.md) describes the regression and sanitizer coverage.
+The established full-language target is a hosted Linux process with libc and POSIX threads. 0.4.7 adds an experimental Windows x86-64 profile using MSYS2 UCRT64 GCC and winpthreads. Generated full-language C is compiled and linked with `-pthread` in both profiles. The native Windows boundary uses existing file handles for canonical source paths and file identity; initial narrow path APIs do not establish arbitrary Unicode or long-path support. [Windows setup](windows.md) describes the concrete environment and deployment limits.
+
+`kremen doctor` compiles and executes a native runtime probe. It helps find setup problems but does not sandbox code or replace regression testing. Strict C flags help detect generator defects; they do not prove that the compiler is free of defects. [Validation](validation.md) describes the actual regression and sanitizer coverage.
 
 The self-hosted subset checks types, calls, scopes, returns, and function-body arithmetic. It sequences operands and arguments, but it does not implement the full language's borrowing or memory checks. Do not transfer the full compiler's guarantees to it. See the [bootstrap reference](../selfhost/README.md).
 

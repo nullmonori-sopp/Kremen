@@ -1,10 +1,12 @@
 # Installing Kremen
 
-The release archive contains source code and an installer. The installer builds the compiler on your computer, then copies both toolchains, their support files, documentation, and examples into a directory you choose.
+The release archive contains source code and an installer. On the established Linux profile, the installer builds the compiler on your computer, then copies both toolchains, their support files, documentation, and examples into a directory you choose. On Windows UCRT64 it installs the native full-language compiler and omits the POSIX bootstrap. Start with [Windows setup](windows.md) for that experimental environment.
 
 ## Requirements
 
 The tested release platform is Linux x86-64 with GCC, libc, and POSIX threads. Install a C11 compiler, POSIX thread headers and linking support, `make`, a POSIX shell, and ordinary tools including `install`, `mktemp`, `find`, `sort`, `cp`, and `mv`. These normally come with the system C development tools. Use your operating system's package manager if one is missing. Python and network access are not required to build Kremen.
+
+The first native Windows profile uses MSYS2 UCRT64 GCC and winpthreads, with portable C copying instead of the Linux assembly path. It does not add an MSVC build or Windows support for the self-hosted subset. The [Windows guide](windows.md) gives the package names and environment checks.
 
 A C compiler remains necessary for `kremen build`, `kremen run`, and bootstrap rebuilds. The full compiler's `check`, `fmt`, and `emit-c` operations do not invoke it. The self-hosted subset's `check` also checks the generated C, so that command does need it.
 
@@ -17,23 +19,23 @@ The Makefile selects assembly only on Linux x86-64. `make USE_ASM=0` forces the 
 Place the release files in one directory:
 
 ```text
-kremen-v0.4.6.zip
-kremen-v0.4.6.tar.gz
-kremen-v0.4.6.sha256
+kremen-v0.4.7.zip
+kremen-v0.4.7.tar.gz
+kremen-v0.4.7.sha256
 ```
 
 If you downloaded both archives, verify them and unpack either one:
 
 ```sh
-sha256sum -c kremen-v0.4.6.sha256
-unzip kremen-v0.4.6.zip
+sha256sum -c kremen-v0.4.7.sha256
+unzip kremen-v0.4.7.zip
 cd kremen
 sha256sum -c SHA256SUMS
 ```
 
-For the tar archive, use `tar -xzf kremen-v0.4.6.tar.gz` instead of `unzip`. The external checksum file lists both archives; a missing archive is reported as missing. If you downloaded only one, compare its `sha256sum` output with its line in the checksum file. Checksums detect changed bytes; they are not a publisher signature.
+For the tar archive, use `tar -xzf kremen-v0.4.7.tar.gz` instead of `unzip`. The external checksum file lists both archives; a missing archive is reported as missing. If you downloaded only one, compare its `sha256sum` output with its line in the checksum file. Checksums detect changed bytes; they are not a publisher signature.
 
-`kremen.zip` is a copy of the current ZIP release. Its contents match `kremen-v0.4.6.zip`.
+`kremen.zip` is a copy of the current ZIP release. Its contents match `kremen-v0.4.7.zip`.
 
 ## Choose local use or installation
 
@@ -78,6 +80,8 @@ CC=/absolute/path/to/gcc sh install.sh --prefix /absolute/path/to/kremen
 | `share/doc/kremen/` | License, English Markdown documentation, examples, and saved benchmark reports |
 
 Installation compiles both toolchains before changing the destination. Repeating the command upgrades an installation owned by this installer. It refuses to overwrite an unrelated compiler or occupied data directory without a valid ownership marker.
+
+The table and two-toolchain commands above describe Linux. Windows installation names the full compiler `bin/kremen.exe` and omits `kremen-selfhost` and its `share/kremen/selfhost/` rebuild resources. It retains the runtime, documentation, examples, ownership checks, relocation layout, and manifest-based removal. Run the installer inside MSYS2 UCRT64 and keep the selected C toolchain and its DLLs available.
 
 You can move the whole prefix. The tools find resources relative to their executable. Moving just one compiler binary without its data is not a complete installation. Programs you build embed the full runtime and can run independently of the source tree, on a compatible host platform.
 

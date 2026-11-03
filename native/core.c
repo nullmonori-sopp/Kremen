@@ -1,4 +1,5 @@
 #include "kremen.h"
+#include "platform.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -459,7 +460,7 @@ void km_validate_source(Context *ctx, Source *src) {
 Source *km_read_source(Context *ctx, const char *path, bool header) {
     Source missing = {.path = (char *)path};
     Token tok = {.src = &missing, .line = 1, .col = 1};
-    int fd = open(path, O_RDONLY | O_NONBLOCK);
+    int fd = km_host_source_open(path);
     if (fd < 0) km_error(ctx, tok, "E010", "cannot open %s: %s", path, strerror(errno));
     struct stat state;
     if (fstat(fd, &state) || !S_ISREG(state.st_mode)) {

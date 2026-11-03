@@ -1,6 +1,6 @@
 # Kremen language reference
 
-This page describes the full language accepted by `kremen` in 0.4.6. It is a reference for rules and built-ins. If the terms are unfamiliar, start with [the tutorial](tutorial.md). The compiler under `selfhost/` accepts a smaller language; its [reference](../selfhost/README.md) is separate.
+This page describes the full language accepted by `kremen` in 0.4.7. It is a reference for rules and built-ins. If the terms are unfamiliar, start with [the tutorial](tutorial.md). The compiler under `selfhost/` accepts a smaller language; its [reference](../selfhost/README.md) is separate.
 
 Examples that show only a declaration or block are fragments to put inside a program. Complete programs include `func main()`.
 
@@ -219,7 +219,7 @@ This is explicit cleanup; there are no implicit user-defined destructors. There 
 
 ## Threads
 
-The full runtime uses native POSIX threads. A worker is a named, non-receiver function with exactly one `i64` parameter and an `i64` result. Starting a worker copies its integer argument; joining retrieves its integer result.
+The full runtime uses native pthread-backed threads: POSIX threads on Linux and winpthreads in the experimental Windows UCRT64 profile. A worker is a named, non-receiver function with exactly one `i64` parameter and an `i64` result. Starting a worker copies its integer argument; joining retrieves its integer result.
 
 | Call | Result and purpose |
 | --- | --- |
@@ -336,6 +336,10 @@ No import is needed for the current file API. Filesystem failures use positive O
 
 Handle copies refer to the same resource. Closing invalidates all copies; later operations return an error. `fileClose` ignores an already closed handle, but an actual close failure panics. Closure is final even if `fsClose` reports an OS error. Writes may partially modify a file before failure and do not promise `fsync` durability.
 
+All supported `fsOpen` modes are byte-preserving: `r`, `w`, and `a` are aliases of `rb`, `wb`, and `ab`. Windows text-mode newline translation and `0x1a` end-of-input handling do not apply to those file streams. A sticky stream error remains a failed `fsWriteAll` even when the supplied string is empty. Standard input and output use the host's conventions separately.
+
+`fsRename` follows host filesystem rules. The Windows profile supports replacing a destination file and treats matching file identities as a successful no-op; failed replacement preserves the old target. Directory replacement and permissions can differ by host. [Windows setup](windows.md) documents the initial path-encoding limits.
+
 A read is limited to 64 MiB; directory listing is limited to 1,000,000 entries. Free a successful listing's slice explicitly in `unsafe`; its name strings stay managed until process exit. Input/file strings also stay managed until exit. The filesystem API is not confined to the import root.
 
 ## Tools and diagnostics
@@ -348,10 +352,14 @@ kremen emit-c source.kr -o program.c
 kremen fmt -w source.kr api.krh
 kremen fmt --check source.kr api.krh
 kremen check source.kr --diagnostic-format=json
+kremen explain E131
+kremen doctor --cc gcc
 ```
 
 `-O0` through `-O3` select optimization, with `-O3` as default. `--cc /path/to/cc` selects one compiler executable; `CC` provides the default. `--` ends option parsing, for example `kremen check -- -source.kr`. `-o` is accepted by `build` and `emit-c`, not by `check` or `run`. Full-language `emit-c` writes stdout if `-o` is omitted. The separate self-hosted command requires an output file for `emit-c`.
 
 `fmt` reads stdin or one file and writes stdout. `-w` rewrites files; `--check` reports layout differences without writing. Multiple files require `-w` or `--check`.
+
+`doctor` accepts no source file. It compiles and runs a small native probe with the matching runtime and a worker spawn/join, using strict C11 flags and the selected `--cc` or `CC` executable. It accepts the diagnostic-format option but no semantic mode, project root, optimization, or output option. A failed setup check reports `E016`; external C-tool output retains its own format. See [Understanding errors](diagnostics.md) and [Windows setup](windows.md).
 
 Compile errors include path, line, byte column, code, source context, token underline, and relevant earlier locations. `--diagnostic-format=json` selects structured frontend diagnostics; `--diagnostic-format=text` selects the default human-readable output. Runtime errors include source location and an embedded bounded excerpt; they are not stack traces. The JSON option does not convert C-backend or runtime messages. See [Understanding errors](diagnostics.md). The compiler limits a source file to 4 MiB, its arena to 512 MiB, tokens per file to 1,000,000, source files to 512, modules to 128, and parse/AST depth to 256. Safety boundaries are explained in [Safety and memory](safety.md).

@@ -760,6 +760,11 @@ static void statement(Generator *g, Node *node)
         block(g,node->body,false);close_cleanup(g);g->indent--;line(g,"}");break;
     }
     case N_DESTRUCT: {
+        bool binds_value = false;
+        for(size_t i=0;i<node->params.len;i++) if(node->params.data[i]->symbol) binds_value=true;
+        /* An entirely ignored tuple needs its effects and place checks, not
+         * a second stack-sized snapshot of its by-value members. */
+        if(!binds_value) { discard_value(g,node->value); break; }
         char *tuple=expression(g,node->value);
         line(g,"(void)%s;",tuple);
         for(size_t i=0;i<node->params.len;i++){Node *b=node->params.data[i];if(b->symbol){line(g,"%s %s = %s.kr_%zu;",ctype(g,b->type),b->symbol->cname,tuple,i);line(g,"(void)%s;",b->symbol->cname);}}
@@ -794,6 +799,11 @@ static void statement(Generator *g, Node *node)
         Node *target = node->left;
         Node *source = node->value ? node->value : node->right;
         if (target->kind == N_NAME && !strcmp(target->name, "_")) {
+            TypeKind kind=source->type->kind;
+            if(kind==TY_ARRAY||kind==TY_STRUCT||kind==TY_TUPLE||kind==TY_ENUM||kind==TY_RESULT) {
+                discard_value(g,source);
+                break;
+            }
             char *value = expression(g, source);
             if (*value) line(g, "(void)%s;", value);
             break;
