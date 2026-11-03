@@ -15,6 +15,8 @@ You can stop before the memory lesson and still write useful small programs. Raw
 
 Read [Installation](install.md), then use the [language reference](language.md). Pay particular attention to lexical borrowing, value copies, block-scoped `defer`, and `!T` error results. Similar-looking syntax in another language may have different behavior.
 
+On Windows, follow [Windows setup](windows.md) before the ordinary examples. It explains the MSYS2 UCRT64 environment, `.exe` paths, C-backend dependencies, and the limits of this first native profile.
+
 For compiler work, read [Self-hosting and systems work](selfhosting.md), the [bootstrap reference](../selfhost/README.md), and [Validation](validation.md). The compiler for the full language and the self-hosted subset have different capabilities.
 
 For concurrent work, read [Working with threads](threads.md). The first threading API runs named integer-to-integer worker functions. It deliberately excludes shared references and closures; the guide explains why and shows how to collect errors safely.
@@ -23,6 +25,6 @@ For the first additional learning requirements, read [Work and learn profiles](p
 
 ## Releases and repository updates
 
-The current release is [0.4.6](v0.4.6.md). Earlier notes cover [0.4.5](v0.4.5.md), [0.4.4](v0.4.4.md), [0.4.3](v0.4.3.md), [0.4.2](v0.4.2.md), [0.4.1](v0.4.1.md), [0.4.0](v0.4.md), [0.3.0](v0.3.md), and [migration from 0.2](v0.2.md). The [roadmap](roadmap.md) separates the planned learning tools from features available today.
+The current release is [0.4.7](v0.4.7.md). Earlier notes cover [0.4.6](v0.4.6.md), [0.4.5](v0.4.5.md), [0.4.4](v0.4.4.md), [0.4.3](v0.4.3.md), [0.4.2](v0.4.2.md), [0.4.1](v0.4.1.md), [0.4.0](v0.4.md), [0.3.0](v0.3.md), and [migration from 0.2](v0.2.md). The [roadmap](roadmap.md) separates the planned learning tools from features available today.
 
 [Repository update instructions](repository-update.md) distinguish newly added files from replacements, and explain which generated files belong in version control. [CHANGELOG.md](../CHANGELOG.md) gives the short history.

@@ -1,4 +1,5 @@
 #include "kremen.h"
+#include "platform.h"
 #include <dirent.h>
 #include <errno.h>
 #include <limits.h>
@@ -12,20 +13,19 @@ static char *parent(Context *ctx, const char *path) { const char *last = strrchr
 
 static void require_project_path(Context *ctx, const char *resolved, Token tok, const char *kind, const char *requested) {
     if (!ctx->project_root) return;
-    size_t n = strlen(ctx->project_root);
-    if (strncmp(resolved, ctx->project_root, n) || (resolved[n] && resolved[n] != '/' && !(n == 1 && ctx->project_root[0] == '/')))
+    if (!km_host_inside(resolved, ctx->project_root))
         km_error(ctx, tok, "E013", "%s escapes project root: %s (use --root to select a wider project)", kind, requested);
 }
 
 char *km_resolve(Context *ctx, const char *from, const char *requested) {
     Token tok = ctx->import_token;
-    if (!requested[0] || requested[0] == '/') km_error(ctx, tok, "E013", "imports require a relative local path: %s", requested);
+    if (km_host_absolute_import(requested)) km_error(ctx, tok, "E013", "imports require a relative local path: %s", requested);
     char *dir = is_dir(from) ? km_strdup(ctx, from) : parent(ctx, from);
     char *candidate = km_sprintf(ctx, "%s/%s", dir, requested);
     if (suffix(candidate, ".krh")) km_error(ctx, tok, "E013", "import the implementation .kr, its .krh is loaded automatically");
     if (!exists(candidate) && !suffix(candidate, ".kr")) candidate = km_sprintf(ctx, "%s.kr", candidate);
     char resolved[PATH_MAX];
-    if (!realpath(candidate, resolved)) km_error(ctx, tok, "E013", "cannot resolve import '%s' relative to %s: %s", requested, from, strerror(errno));
+    if (!km_host_realpath(candidate, resolved)) km_error(ctx, tok, "E013", "cannot resolve import '%s' relative to %s: %s", requested, from, strerror(errno));
     require_project_path(ctx, resolved, tok, "import", requested);
     return km_strdup(ctx, resolved);
 }
@@ -34,7 +34,7 @@ static void load_source(Context *ctx, Module *module, const char *path, bool hea
     char resolved[PATH_MAX];
     Source missing = {.path = (char *)path};
     Token tok = ctx->import_token.src ? ctx->import_token : (Token){.src = &missing, .line = 1, .col = 1};
-    if (!realpath(path, resolved)) km_error(ctx, tok, "E010", "cannot resolve source %s: %s", path, strerror(errno));
+    if (!km_host_realpath(path, resolved)) km_error(ctx, tok, "E010", "cannot resolve source %s: %s", path, strerror(errno));
     /* Directory entries and automatically paired headers need the same
      * canonical boundary check as the import expression itself. */
     require_project_path(ctx, resolved, tok, "source", path);
@@ -81,10 +81,10 @@ Module *km_load(Context *ctx, const char *path) {
     Source missing = {.path = (char *)path};
     if (!tok.src) tok = (Token){.src = &missing, .line = 1, .col = 1};
     char resolved[PATH_MAX];
-    if (!realpath(path, resolved)) km_error(ctx, tok, "E010", "cannot resolve %s: %s", path, strerror(errno));
+    if (!km_host_realpath(path, resolved)) km_error(ctx, tok, "E010", "cannot resolve %s: %s", path, strerror(errno));
     for (size_t i = 0; i < ctx->modules.len; i++) {
         Module *m = ctx->modules.data[i];
-        if (!strcmp(m->path, resolved)) {
+        if (!km_host_path_compare(m->path, resolved)) {
             if (m->loading) km_error(ctx, tok, "E014", "import cycle involving %s", resolved);
             return m;
         }

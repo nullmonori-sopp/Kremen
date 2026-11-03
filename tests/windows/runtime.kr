@@ -1,0 +1,54 @@
+package main
+func square(value i64) i64 {
+	return value * value
+}
+func exercise()!i64 {
+	var made = fsMkdir("runtime directory")?
+	assert(made)
+	var first = fsWrite("runtime directory/from.bin", "first\r\nsecond\n\0last")?
+	assert(first)
+	var previous = fsWrite("runtime directory/to.bin", "old")?
+	assert(previous)
+	var renamed = fsRename("runtime directory/from.bin", "runtime directory/to.bin")?
+	assert(renamed)
+	var bytes = fsRead("runtime directory/to.bin")?
+	assert(bytes == "first\r\nsecond\n\0last")
+	var handle = fsOpen("runtime directory/modes.bin", "w")?
+	var count = fsWriteAll(handle, "a\r\nb\0c")?
+	assert(count == 6)
+	var closed = fsClose(handle)?
+	assert(closed)
+	var reopened = fsOpen("runtime directory/modes.bin", "r")?
+	var read = fsReadAll(reopened)?
+	assert(read == "a\r\nb\0c")
+	closed = fsClose(reopened)?
+	assert(closed)
+	var listed = fsList("runtime directory")?
+	unsafe {
+		defer free(listed)
+		assert(len(listed) == 2)
+		assert(listed[0] == "modes.bin")
+		assert(listed[1] == "to.bin")
+	}
+	var removed = fsRemove("runtime directory/modes.bin")?
+	assert(removed)
+	removed = fsRemove("runtime directory/to.bin")?
+	assert(removed)
+	removed = fsRemove("runtime directory")?
+	assert(removed)
+	var job = threadSpawn(square, 9)?
+	defer threadClose(job)
+	return threadJoin(job)
+}
+func main() {
+	match exercise() {
+		ok(value) => {
+			assert(value == 81)
+			println("windows runtime ok")
+		}
+		fail(code) => {
+			println("runtime failed:", code)
+			assert(false)
+		}
+	}
+}

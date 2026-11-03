@@ -2,7 +2,7 @@
 
 An error message is a report about a specific operation, not a judgment about your ability to program. Read the first line, find the marked code, and make one small change. Then run `check` again.
 
-This page describes 0.4.6. Examples shorten directory names for readability; the full compiler normally prints the resolved source path, with unsafe terminal characters escaped.
+This page describes 0.4.7. Examples shorten directory names for readability; the full compiler normally prints the resolved source path, with unsafe terminal characters escaped.
 
 ## Read the location first
 
@@ -49,7 +49,7 @@ kremen explain --list
 
 `explain` prints why that category occurs, what to check, and a small example. The catalog is built into the full compiler and works without a project, runtime header, C compiler, network, or account. Running `kremen explain` without a code lists the catalog too. Some examples are code fragments intended to be placed inside a function.
 
-The original error message identifies the particular check. For example, `E110` covers several type disagreements, so its general explanation does not replace the marked source and message. The command supports 45 categories: the 44 from 0.4.5 and `E015` for output failures. These include fatal `W001` and learning requirements `L001` through `L005`. The self-hosted subset has its own diagnostic scheme.
+The original error message identifies the particular check. For example, `E110` covers several type disagreements, so its general explanation does not replace the marked source and message. The command supports 46 categories: the 45 from 0.4.6 and `E016` for a failed toolchain self-check. These include fatal `W001` and learning requirements `L001` through `L005`. The self-hosted subset has its own diagnostic scheme.
 
 An unknown code is a command-line error, not a guessed explanation. Select `--mode=learn` on a semantic command to enable the first five additional requirements. [Work and learn profiles](profiles.md) describes their scope. A lesson runner and persistent project-profile configuration remain planned work in the [roadmap](roadmap.md).
 
@@ -68,6 +68,7 @@ An unknown code is a command-line error, not a guessed explanation. Select `--mo
 | `ok/fail requires a contextual result type` | Supply a result annotation, for example `var answer !i64 = ok(42)` |
 | A discarded result | Handle it with `match`, `catch`, or `?`; work allows intentional `_ = call()`, while learn rejects ignored result-bearing values |
 | `E015` | The output destination, its directory permissions, available space, file kind, or failed standard output |
+| `E016` | The selected C backend, temporary-directory access, and ability to run the compiled runtime probe |
 
 A column points at the token associated with the failed check. For a compound operation it may mark the operator or the start of the indexed value. It is a useful starting point, not a claim that changing only that token is always the right fix.
 
@@ -174,6 +175,17 @@ This option covers Kremen frontend diagnostics and command validation, including
 The native compiler stages file output before replacing its destination. These file-operation failures remove staging artifacts and preserve the previous destination. Formatting with `-w` preserves the original source and its permissions until the replacement is ready. Successful staging does not promise durable disk storage after a power loss, and concurrent hostile filesystem changes are outside this guarantee.
 
 The final stdout flush can also fail, for example when redirected to a full device. Ordinary native commands then report `E015` and exit unsuccessfully. Bytes already sent to stdout cannot be taken back. A successful file publication is not undone if its later success message fails to flush. This includes `check`, `build`, `run`, `emit-c`, `fmt`, and `explain`; the early `--help` and `--version` paths keep their existing behavior. External C-tool errors retain their own format and exit behavior.
+
+## Check the toolchain before debugging your source
+
+```sh
+kremen doctor
+kremen doctor --cc gcc
+```
+
+`doctor` compiles and runs a small probe with the actual runtime, strict C11 flags, and pthread support. It also checks a worker spawn/join result. `E016` means this setup probe could not be created, compiled, or executed successfully. Read the operation and status in the error; the probe has no user-source line to underline. An unreadable runtime remains `E010`.
+
+The command accepts `--cc` and the diagnostic-format option, with no source path or semantic mode. The successful report is ordinary text. JSON selects Kremen's error renderer; it does not convert external compiler or probe diagnostics into JSON. A native probe must run on the current host, so cross-compilers are outside this command's contract. See [Windows setup](windows.md) for the supported UCRT64 dependencies.
 
 ## Which component produced the error?
 

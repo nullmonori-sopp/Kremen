@@ -6,9 +6,13 @@ SOURCE_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PREFIX=
 if [ -n "${HOME:-}" ]; then PREFIX="$HOME/.local"; fi
 ACTION=install
+EXE_SUFFIX=
+WITH_SELFHOST=true
+case "$(uname -s)" in MINGW*|MSYS*) EXE_SUFFIX=.exe; WITH_SELFHOST=false ;; esac
 usage() {
     printf '%s\n' 'Usage: sh install.sh [--prefix /absolute/path] [--uninstall]'
     printf '%s\n' 'Default prefix: $HOME/.local. Requires make, a C11 compiler and POSIX tools.'
+    printf '%s\n' 'Windows: run from MSYS2 UCRT64; installs the full native compiler only.'
 }
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -42,7 +46,7 @@ validate_manifest() {
             *'/../'*|../*|*/..|/*|*'/./'*|*'//'*|'') return 1 ;;
         esac
         case "$relative" in
-            bin/kremen|bin/kremen-selfhost|share/kremen/selfhost/*|share/kremen/runtime/kremen_rt.h|share/kremen/install.marker|share/kremen/install.manifest|share/doc/kremen/*) ;;
+            bin/kremen|bin/kremen.exe|bin/kremen-selfhost|share/kremen/selfhost/*|share/kremen/runtime/kremen_rt.h|share/kremen/install.marker|share/kremen/install.manifest|share/doc/kremen/*) ;;
             *) return 1 ;;
         esac
     done < "$MANIFEST"
@@ -67,7 +71,7 @@ for command in make cc install mktemp find sort; do
     command -v "$command" > /dev/null 2>&1 || { printf 'Missing build tool: %s\n' "$command" >&2; exit 1; }
 done
 if [ "$OWNED" != true ]; then
-    for reserved in bin/kremen bin/kremen-selfhost share/kremen share/doc/kremen; do
+    for reserved in bin/kremen bin/kremen.exe bin/kremen-selfhost share/kremen share/doc/kremen; do
         if [ -e "$PREFIX/$reserved" ] || [ -L "$PREFIX/$reserved" ]; then
             printf 'Refusing to overwrite an unowned path: %s\n' "$PREFIX/$reserved" >&2
             exit 1
@@ -76,16 +80,18 @@ if [ "$OWNED" != true ]; then
 fi
 
 # Finish compilation before modifying the destination.
-make -C "$SOURCE_ROOT" all selfhost
+if [ "$WITH_SELFHOST" = true ]; then make -C "$SOURCE_ROOT" all selfhost; else make -C "$SOURCE_ROOT" all; fi
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/kremen-install.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 mkdir -p "$WORK/bin" "$WORK/share/kremen/runtime" "$WORK/share/doc/kremen"
-install -m 755 "$SOURCE_ROOT/build/kremen" "$WORK/bin/kremen"
-install -m 755 "$SOURCE_ROOT/selfhost/build/kremen-selfhost" "$WORK/bin/kremen-selfhost"
-mkdir -p "$WORK/share/kremen/selfhost"
-for support in bootstrap.kr toolchain.kr stage0.c runtime.c runtime.h driver.c host.c host.h platform.h; do
-    install -m 644 "$SOURCE_ROOT/selfhost/$support" "$WORK/share/kremen/selfhost/$support"
-done
+install -m 755 "$SOURCE_ROOT/build/kremen$EXE_SUFFIX" "$WORK/bin/kremen$EXE_SUFFIX"
+if [ "$WITH_SELFHOST" = true ]; then
+    install -m 755 "$SOURCE_ROOT/selfhost/build/kremen-selfhost" "$WORK/bin/kremen-selfhost"
+    mkdir -p "$WORK/share/kremen/selfhost"
+    for support in bootstrap.kr toolchain.kr stage0.c runtime.c runtime.h driver.c host.c host.h platform.h; do
+        install -m 644 "$SOURCE_ROOT/selfhost/$support" "$WORK/share/kremen/selfhost/$support"
+    done
+fi
 install -m 644 "$SOURCE_ROOT/runtime/kremen_rt.h" "$WORK/share/kremen/runtime/kremen_rt.h"
 if [ -f "$SOURCE_ROOT/LICENSE" ]; then
     install -m 644 "$SOURCE_ROOT/LICENSE" "$WORK/share/doc/kremen/LICENSE"
@@ -110,9 +116,9 @@ mv "$WORK/manifest" "$WORK/share/kremen/install.manifest"
 while IFS= read -r relative; do
     mkdir -p -- "$PREFIX/$(dirname -- "$relative")"
     mode=644
-    case "$relative" in bin/kremen|bin/kremen-selfhost) mode=755 ;; esac
+    case "$relative" in bin/kremen|bin/kremen.exe|bin/kremen-selfhost) mode=755 ;; esac
     install -m "$mode" "$WORK/$relative" "$PREFIX/$relative"
 done < "$WORK/share/kremen/install.manifest"
 printf 'Installed Kremen %s in %s\n' "$(cat "$SOURCE_ROOT/VERSION")" "$PREFIX"
-printf 'Compiler: %s/bin/kremen\n' "$PREFIX"
+printf 'Compiler: %s/bin/kremen%s\n' "$PREFIX" "$EXE_SUFFIX"
 printf 'Add this directory to your shell PATH if needed: %s/bin\n' "$PREFIX"

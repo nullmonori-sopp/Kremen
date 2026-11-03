@@ -15,7 +15,7 @@ export ASAN_OPTIONS UBSAN_OPTIONS
 "$COMPILER" -std=c11 -pthread -Wall -Wextra -Wpedantic -Werror -O1 -g \
     -fsanitize=address,undefined -fno-sanitize-recover=all \
     -DKM_RUNTIME_PATH="\"$ROOT/runtime/kremen_rt.h\"" \
-    native/core.c native/diagnostics.c native/lexer.c native/parser.c native/modules.c \
+    native/core.c native/diagnostics.c native/doctor.c native/lexer.c native/parser.c native/modules.c \
     native/checker.c native/learn.c native/codegen.c native/format.c native/main.c \
     native/fast_copy.c -o "$BUILD/kremen"
 sh tests/native/run.sh "$BUILD/kremen"
@@ -33,6 +33,9 @@ SANITIZE_GENERATED=1 sh tests/native/codegen_046.sh "$BUILD/kremen"
 SANITIZE_GENERATED=1 sh tests/native/input_046.sh "$BUILD/kremen"
 sh tests/native/output_046.sh "$BUILD/kremen"
 SANITIZE_GENERATED=1 sh tests/native/output_runtime_046.sh "$BUILD/kremen"
+SANITIZE_GENERATED=1 sh tests/native/semantic_047.sh "$BUILD/kremen"
+SANITIZE=1 sh tests/native/runtime_047.sh
+sh tests/native/doctor_047.sh "$BUILD/kremen"
 SANITIZE_GENERATED=1 sh tests/native/threads_043.sh "$BUILD/kremen"
 SANITIZE=1 sh tests/native/threads_runtime.sh
 SANITIZE_GENERATED=1 sh tests/native/semantic_stability.sh "$BUILD/kremen"

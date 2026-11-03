@@ -12,6 +12,16 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <pthread.h>
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <direct.h>
+#endif
 
 typedef struct kr_defer_node {
     struct kr_defer_node *previous;
@@ -754,6 +764,39 @@ _Noreturn void kr_user_panic(kr_string message, int line) {
 
 /* Filesystem errors are ordinary errno values in result.code, never unwinds. */
 static int64_t kr_io_code(void) { return errno > 0 ? (int64_t)errno : (int64_t)EIO; }
+#if defined(_WIN32)
+/* Win32 error numbers and CRT errno are separate domains. Keep filesystem
+ * results in the documented errno domain, including MoveFileEx failures. */
+static int kr_windows_errno(DWORD error) {
+    switch (error) {
+    case ERROR_SUCCESS: return 0;
+    case ERROR_FILE_NOT_FOUND: case ERROR_PATH_NOT_FOUND: case ERROR_INVALID_DRIVE: return ENOENT;
+    case ERROR_ACCESS_DENIED: case ERROR_SHARING_VIOLATION: case ERROR_LOCK_VIOLATION: return EACCES;
+    case ERROR_FILE_EXISTS: case ERROR_ALREADY_EXISTS: return EEXIST;
+    case ERROR_DIRECTORY: return ENOTDIR;
+    case ERROR_DIR_NOT_EMPTY: return ENOTEMPTY;
+    case ERROR_NOT_SAME_DEVICE: return EXDEV;
+    case ERROR_DISK_FULL: case ERROR_HANDLE_DISK_FULL: return ENOSPC;
+    case ERROR_TOO_MANY_OPEN_FILES: return EMFILE;
+    case ERROR_NOT_ENOUGH_MEMORY: case ERROR_OUTOFMEMORY: return ENOMEM;
+    case ERROR_FILENAME_EXCED_RANGE: return ENAMETOOLONG;
+    case ERROR_INVALID_NAME: case ERROR_INVALID_PARAMETER: return EINVAL;
+    default: return EIO;
+    }
+}
+static bool kr_windows_same_file(const char *left, const char *right) {
+    DWORD sharing = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+    HANDLE a = CreateFileA(left, FILE_READ_ATTRIBUTES, sharing, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if (a == INVALID_HANDLE_VALUE) return false;
+    HANDLE b = CreateFileA(right, FILE_READ_ATTRIBUTES, sharing, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    BY_HANDLE_FILE_INFORMATION x, y;
+    bool same = b != INVALID_HANDLE_VALUE && GetFileInformationByHandle(a, &x) && GetFileInformationByHandle(b, &y) &&
+        x.dwVolumeSerialNumber == y.dwVolumeSerialNumber && x.nFileIndexHigh == y.nFileIndexHigh && x.nFileIndexLow == y.nFileIndexLow;
+    if (b != INVALID_HANDLE_VALUE) (void)CloseHandle(b);
+    (void)CloseHandle(a);
+    return same;
+}
+#endif
 static char *kr_fs_path(kr_string value, int64_t *code) {
     if (value.len == SIZE_MAX || (value.len && memchr(value.data, 0, value.len))) { *code = EINVAL; return NULL; }
     char *path = malloc(value.len + 1);
@@ -813,7 +856,11 @@ bool kr_fs_write(kr_string path, kr_string value, bool append, int64_t *code) {
 }
 bool kr_fs_stat(kr_string path, int operation, int64_t *value, int64_t *code) {
     *code = 0; char *name = kr_fs_path(path, code); if (name == NULL) return false;
+#if defined(_WIN32)
+    struct _stat64 info; int result = _stat64(name, &info); int64_t error = result ? kr_io_code() : 0; free(name);
+#else
     struct stat info; int result = stat(name, &info); int64_t error = result ? kr_io_code() : 0; free(name);
+#endif
     if (result) {
         if (operation == 0 && (error == ENOENT || error == ENOTDIR)) { *value = 0; return true; }
         *code = error; return false;
@@ -825,13 +872,26 @@ bool kr_fs_stat(kr_string path, int operation, int64_t *value, int64_t *code) {
 }
 bool kr_fs_modify(kr_string path, int operation, int64_t *code) {
     *code = 0; char *name = kr_fs_path(path, code); if (name == NULL) return false;
+#if defined(_WIN32)
+    struct _stat64 info;
+    int result = operation == 0 ? _mkdir(name) :
+        (_stat64(name, &info) == 0 && S_ISDIR(info.st_mode) ? _rmdir(name) : remove(name));
+#else
     int result = operation == 0 ? mkdir(name, 0777) : remove(name);
+#endif
     int64_t error = result ? kr_io_code() : 0; free(name); *code = error; return result == 0;
 }
 bool kr_fs_rename(kr_string from, kr_string to, int64_t *code) {
     *code = 0; char *a = kr_fs_path(from, code); if (a == NULL) return false;
     char *b = kr_fs_path(to, code); if (b == NULL) { free(a); return false; }
+#if defined(_WIN32)
+    /* CRT rename refuses an existing destination on Windows. Replace files
+     * through Win32 without a delete-first gap or loss on a failed move. */
+    int result = kr_windows_same_file(a, b) || MoveFileExA(a, b, MOVEFILE_REPLACE_EXISTING) ? 0 : -1;
+    int64_t error = result ? kr_windows_errno(GetLastError()) : 0;
+#else
     int result = rename(a, b); int64_t error = result ? kr_io_code() : 0;
+#endif
     free(a); free(b); *code = error; return result == 0;
 }
 bool kr_fs_cwd(kr_string *out, int64_t *code) {
@@ -882,7 +942,10 @@ bool kr_fs_open(kr_string path, kr_string mode, kr_file **out, int64_t *code) {
     if (strcmp(m,"r") && strcmp(m,"w") && strcmp(m,"a") && strcmp(m,"rb") && strcmp(m,"wb") && strcmp(m,"ab")) {
         free(name); free(m); *code = EINVAL; return false;
     }
-    FILE *stream = fopen(name, m); int64_t error = stream == NULL ? kr_io_code() : 0; free(name); free(m);
+    /* Kremen file strings and byte counts retain their bytes on every host.
+     * The short modes are aliases, not CRT text-translation requests. */
+    const char *binary_mode = m[0] == 'r' ? "rb" : m[0] == 'w' ? "wb" : "ab";
+    FILE *stream = fopen(name, binary_mode); int64_t error = stream == NULL ? kr_io_code() : 0; free(name); free(m);
     if (stream == NULL) { *code = error; return false; }
     kr_file *file = malloc(sizeof *file);
     if (file == NULL) { (void)fclose(stream); *code = ENOMEM; return false; }
@@ -906,7 +969,7 @@ bool kr_fs_write_all(kr_file *file, kr_string data, int64_t *out, int64_t *code)
     *code = 0;
     if (file == NULL || !file->live) { *code = EBADF; return false; }
     if ((uintmax_t)data.len > INT64_MAX) { *code = EFBIG; return false; }
-    if ((data.len && fwrite(data.data, 1, data.len, file->stream) != data.len) || fflush(file->stream)) { *code = kr_io_code(); return false; }
+    if ((data.len && fwrite(data.data, 1, data.len, file->stream) != data.len) || fflush(file->stream) || ferror(file->stream)) { *code = kr_io_code(); return false; }
     *out = (int64_t)data.len; return true;
 }
 kr_string kr_error_message(int64_t code) {

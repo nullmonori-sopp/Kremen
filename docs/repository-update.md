@@ -1,8 +1,67 @@
 # Updating an existing repository
 
-Use the complete 0.4.6 source tree when updating an older project. It includes the preceding stabilization and documentation work. Copying only the new files is not enough: keep compiler sources, build rules, tests, installed resources, and documentation from the same release.
+Use the complete 0.4.7 source tree when updating an older project. It includes the preceding stabilization and documentation work. Copying only the new files is not enough: keep compiler sources, build rules, tests, installed resources, and documentation from the same release.
 
 The lists below compare released checksum manifests. Paths are relative to the `kremen` project root. They describe release contents, not any additional local edits in your own repository. Merge those edits before replacing files.
+
+## From 0.4.6 to 0.4.7
+
+Add these files:
+
+```text
+docs/v0.4.7.md
+docs/windows.md
+native/doctor.c
+native/platform.h
+tests/native/doctor_047.sh
+tests/native/runtime_047.c
+tests/native/runtime_047.sh
+tests/native/semantic_047.sh
+tests/windows/check.sh
+tests/windows/runtime.kr
+```
+
+Replace these existing files:
+
+```text
+.github/workflows/ci.yml
+CHANGELOG.md
+Makefile
+README.md
+VERSION
+bench/README.md
+docs/README.md
+docs/diagnostics.md
+docs/getting-started.md
+docs/install.md
+docs/language.md
+docs/profiles.md
+docs/repository-update.md
+docs/roadmap.md
+docs/safety.md
+docs/selfhosting.md
+docs/threads.md
+docs/v0.2.md
+docs/validation.md
+install.sh
+native/codegen.c
+native/core.c
+native/diagnostics.c
+native/kremen.h
+native/main.c
+native/modules.c
+runtime/kremen_rt.h
+selfhost/toolchain.kr
+tests/native/sanitize.sh
+```
+
+Regenerate and replace `SHA256SUMS` after all source edits. No source files are removed. Add `native/doctor.c` to custom native-compiler link commands and keep `native/platform.h` alongside the other native sources. The Makefile and sanitizer runner include them.
+
+This release begins a native Windows x86-64 profile with MSYS2 UCRT64 GCC and winpthreads. Read [Windows setup](windows.md) before building or installing. The source installer selects the full frontend on Windows and omits the POSIX self-hosted subset. Linux installation still includes both compilers. The CI workflow adds a native Windows integration job; preserve it with the matching tests.
+
+The checker semantics and profile flags remain compatible. Code generation avoids unnecessary aggregate copies during discards, filesystem streams preserve bytes, sticky write errors stay visible, and `kremen doctor` adds a host compile-and-run probe with `E016`. See [0.4.7 notes](v0.4.7.md) for details and boundaries.
+
+The bootstrap compiler and verified C seed are unchanged; the subset driver's version changes in `selfhost/toolchain.kr`. Keep the license and publish generated archives separately from the source tree.
 
 ## From 0.4.5 to 0.4.6
 

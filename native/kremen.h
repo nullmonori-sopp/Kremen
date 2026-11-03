@@ -2,6 +2,9 @@
 #define KREMEN_H
 #define _POSIX_C_SOURCE 200809L
 #define _XOPEN_SOURCE 700
+#if defined(_WIN32) && !defined(_CRT_RAND_S)
+#define _CRT_RAND_S
+#endif
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -78,6 +81,7 @@ unsigned km_name_distance(const char *, const char *);
 bool km_has_explanation(const char *);
 bool km_explain(const char *, FILE *);
 void km_explain_list(FILE *);
+int km_doctor(Context *);
 void km_init(Context *);
 void km_destroy(Context *);
 Node *km_node(Context *, NodeKind, Token);

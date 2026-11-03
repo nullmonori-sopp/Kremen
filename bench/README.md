@@ -87,3 +87,9 @@ The checker caches the result-bearing shape of a type's zero state. Previously, 
 Fixed-array `len` queries no longer materialize unnecessary selected-array copies. The regression starts from a reproduced `-O0` stack overflow with a `[100000]i64` local and repeated length queries, and checks behavior under an explicit stack limit. Calls, indexing, and runtime failures inside the queried expression still matter. Eliminating a copy is valid only when those effects and checks are retained.
 
 Builtin lowering also stops serializing a call-argument string that it never uses. These are specific compiler and generated-code changes. Earlier saved benchmark reports have not been relabeled as 0.4.6 results, and no universal speedup percentage is implied.
+
+## Discarded values in 0.4.7
+
+Explicit aggregate-place discards and entirely ignored tuple patterns now avoid unnecessary by-value C temporaries. The regression suite runs repeated large-array and tuple discards with an 8 MiB stack at `-O0` and `-O3`, and separately checks evaluation order, runtime failures, cleanup, partial bindings, and learn's result rules. This extends the checked-discard approach from fixed-array lengths to those specific source forms.
+
+The change fixes reproduced stack-frame growth caused by unused copies. It does not establish general copy elision, a total stack quota, or a broad application speedup. Earlier saved reports retain their original compiler and platform context; the Windows profile has no application performance baseline in this release.

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.7 — 2026-11-03
+
+- Begin an experimental native Windows x86-64 profile with MSYS2 UCRT64 GCC and winpthreads, while retaining the Linux path and strict C flags.
+- Introduce a native platform boundary for executable discovery, canonical existing paths, source identity, child processes, temporary paths, and output replacement.
+- Add `kremen doctor` to compile and run a small strict-C/runtime setup probe with the selected backend.
+- Avoid unnecessary large-value copies in explicit aggregate discards and entirely ignored tuple patterns while preserving source effects, checked selection, and cleanup.
+- Use binary filesystem streams and Windows-compatible directory creation and destination replacement in the full runtime.
+- Keep sticky file-stream failures visible when a later write contains an empty string.
+- Document the supported Windows environment, path and deployment limits, and the separate POSIX bootstrap scope. See [release notes](docs/v0.4.7.md).
+
 ## 0.4.6 — 2026-10-29
 
 - Lower fixed-array length queries without unnecessary array-value copies while preserving evaluation, bounds, result, and lifetime checks. Begin with a focused typed place/discard helper rather than a whole compiler IR replacement.

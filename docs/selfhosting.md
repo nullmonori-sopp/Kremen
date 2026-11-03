@@ -4,6 +4,8 @@ A compiler is **self-hosted** when it can compile the language implementation wr
 
 The bootstrap frontend and its build policy live in `.kr` files. C supplies strings, memory, filesystem access, process primitives, and an entry point. A C11 toolchain, libc, and a hosted OS are still required. Self-hosting has not removed those dependencies.
 
+The subset remains a POSIX toolchain. The experimental Windows support in 0.4.7 belongs to the full native compiler; `kremen selfhost` reports that the subset is unsupported there. Use the Linux instructions below for bootstrap work, and [Windows setup](windows.md) for the full-language Windows profile.
+
 ## Build and use the subset toolchain
 
 From the source root:

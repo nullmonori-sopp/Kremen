@@ -40,3 +40,23 @@ jobs:
       - uses: actions/checkout@v4
       - name: Address and undefined behavior sanitizers
         run: make test-sanitize
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: msys2 {0}
+    env:
+      CC: gcc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make
+            diffutils
+            mingw-w64-ucrt-x86_64-gcc
+      - name: Build and exercise native Windows tools
+        run: make all test-windows
