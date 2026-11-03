@@ -2,6 +2,9 @@
 #define KREMEN_H
 #define _POSIX_C_SOURCE 200809L
 #define _XOPEN_SOURCE 700
+#if defined(_WIN32) && !defined(_CRT_RAND_S)
+#define _CRT_RAND_S
+#endif
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

@@ -1,5 +1,8 @@
 #ifndef KREMEN_NATIVE_PLATFORM_H
 #define KREMEN_NATIVE_PLATFORM_H
+#if defined(_WIN32) && !defined(_CRT_RAND_S)
+#define _CRT_RAND_S
+#endif
 /* Full-frontend host boundary. The Windows profile targets MinGW-w64/UCRT
  * and winpthreads; the bootstrap subset retains its separate POSIX host. */
 #include <errno.h>
