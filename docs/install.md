@@ -1,54 +1,59 @@
 # Installing Kremen
 
-The release archive contains source code and an installer. On the established Linux profile, the installer builds the compiler on your computer, then copies both toolchains, their support files, documentation, and examples into a directory you choose. On Windows UCRT64 it installs the native full-language compiler and omits the POSIX bootstrap. Start with [Windows setup](windows.md) for that experimental environment.
+Choose a portable binary package if you want to write programs now. Choose a source archive if you want to build or modify the compiler. A portable package includes a matching C backend; a source archive needs development tools before it can build executables.
 
-## Requirements
+| Download | Ready-to-run compiler | Included backend | First step |
+| --- | --- | --- | --- |
+| Linux x86-64 portable package | Yes | Zig C/LLVM SDK | Unpack and run `bin/kremen doctor` |
+| Windows x86-64 portable package | Yes | Zig C/LLVM SDK | Unpack and run `bin/kremen.exe doctor` in PowerShell |
+| Source ZIP or tar.gz | No | No | Build with the source instructions below |
 
-The tested release platform is Linux x86-64 with GCC, libc, and POSIX threads. Install a C11 compiler, POSIX thread headers and linking support, `make`, a POSIX shell, and ordinary tools including `install`, `mktemp`, `find`, `sort`, `cp`, and `mv`. These normally come with the system C development tools. Use your operating system's package manager if one is missing. Python and network access are not required to build Kremen.
+[Portable packages](portable.md) explains the ready-to-run layout, offline operation, licenses, and backend selection. [Windows setup](windows.md) covers native PowerShell use, source builds, and path behavior. The Windows portable package does not require MSYS2, WSL, winpthreads, Visual Studio, or a compiler on the system `PATH`.
 
-The first native Windows profile uses MSYS2 UCRT64 GCC and winpthreads, with portable C copying instead of the Linux assembly path. It does not add an MSVC build or Windows support for the self-hosted subset. The [Windows guide](windows.md) gives the package names and environment checks.
+## Verify and unpack source archives
 
-A C compiler remains necessary for `kremen build`, `kremen run`, and bootstrap rebuilds. The full compiler's `check`, `fmt`, and `emit-c` operations do not invoke it. The self-hosted subset's `check` also checks the generated C, so that command does need it.
-
-Full-language `build` and `run` add `-pthread` automatically. Include that flag yourself when compiling output from `emit-c`. The separate bootstrap subset does not implement worker threads and keeps its existing C-backend flags.
-
-The Makefile selects assembly only on Linux x86-64. `make USE_ASM=0` forces the portable C implementation. Other POSIX platforms have code paths but have not been validated as release targets. Packaging additionally needs GNU tar/find/sort, `zip`, `sha256sum`, and `xargs`; the source-input tests use `timeout`.
-
-## Unpack and verify
-
-Place the release files in one directory:
+The source release files are:
 
 ```text
-kremen-v0.4.7.zip
-kremen-v0.4.7.tar.gz
-kremen-v0.4.7.sha256
+kremen-v0.4.8.zip
+kremen-v0.4.8.tar.gz
+kremen-v0.4.8.sha256
 ```
 
 If you downloaded both archives, verify them and unpack either one:
 
 ```sh
-sha256sum -c kremen-v0.4.7.sha256
-unzip kremen-v0.4.7.zip
+sha256sum -c kremen-v0.4.8.sha256
+unzip kremen-v0.4.8.zip
 cd kremen
 sha256sum -c SHA256SUMS
 ```
 
-For the tar archive, use `tar -xzf kremen-v0.4.7.tar.gz` instead of `unzip`. The external checksum file lists both archives; a missing archive is reported as missing. If you downloaded only one, compare its `sha256sum` output with its line in the checksum file. Checksums detect changed bytes; they are not a publisher signature.
+For the tar archive, use `tar -xzf kremen-v0.4.8.tar.gz`. The external checksum file lists both source archives; a missing one is reported as missing. If you downloaded only one, compare its checksum with its line in the external file. A checksum detects changed bytes; it is not a publisher signature.
 
-`kremen.zip` is a copy of the current ZIP release. Its contents match `kremen-v0.4.7.zip`.
+`kremen.zip` is an alias of the current source ZIP. Source archives contain build scripts, documentation, examples, tests, and the verified C seed. They exclude generated executables, build directories, SDK downloads, caches, and Python files. Portable packages are separate platform-specific artifacts.
 
-## Choose local use or installation
+## Build from source on Linux
 
-For local use from the source directory:
+Install a C11 compiler, system POSIX-thread development support, `make`, a POSIX shell, and ordinary tools such as `install`, `mktemp`, `find`, `sort`, `cp`, and `mv`. These normally come with the system development tools. Python and a network connection are not required once the source and build tools are present.
+
+From the source directory:
 
 ```sh
-make
+make all selfhost
+./build/kremen doctor
 ./build/kremen run examples/tutorial/01_hello.kr
 ```
 
-No installation is required. [Your first program](getting-started.md) uses this workflow.
+The full compiler is `build/kremen`; the bootstrap-subset driver is `selfhost/build/kremen-selfhost`. The full-language frontend's `check`, `fmt`, `explain`, and `emit-c` do not invoke a C backend. `build`, `run`, and bootstrap rebuilds do. The subset's `check` also syntax-checks generated C, so it needs a backend.
 
-For an installation in your home directory:
+Generated full-language C uses strict warnings as errors. POSIX builds add `-pthread` for system threading. The Windows adapter uses native thread primitives and does not link a pthread-emulation library. If invoking an external C compiler yourself, use the flags for that host; the built-in commands select them automatically.
+
+The Makefile chooses assembly only on Linux x86-64. `make USE_ASM=0` forces the portable C copy routine. Other CPU architectures and hosts need their own validation; a common C implementation alone does not establish a tested release target.
+
+## Install Linux source builds into a prefix
+
+For installation in your home directory:
 
 ```sh
 sh install.sh
@@ -57,57 +62,87 @@ kremen --version
 kremen selfhost --version
 ```
 
-The default prefix is `$HOME/.local`. The prefix is the directory under which `bin/` and `share/` are created. Adding its `bin/` to `PATH` lets the shell find `kremen` by name. The `export` command affects the current shell; the installer does not modify startup files.
+The default prefix is `$HOME/.local`. It is the directory under which `bin/` and `share/` are created. Adding `bin/` to `PATH` lets your shell find Kremen by name. The installer does not edit startup files, run `sudo`, or download a compiler backend.
 
-To use a different prefix or C compiler:
+To select another prefix or compiler:
 
 ```sh
 CC=/absolute/path/to/gcc sh install.sh --prefix /absolute/path/to/kremen
-/absolute/path/to/kremen/bin/kremen --version
+/absolute/path/to/kremen/bin/kremen doctor
 ```
 
-`CC` names one executable, not a shell command containing extra flags. The prefix must be absolute, writable, and different from `/`. Spaces are supported. If `HOME` is unset, supply `--prefix`. The installer does not run `sudo` or download dependencies.
-
-## What gets installed
+`CC` names one executable, not a shell command containing extra flags. The prefix must be absolute, writable, and different from `/`. Spaces are supported. Supply `--prefix` when `HOME` is unset.
 
 | Path inside the prefix | Contents |
 | --- | --- |
-| `bin/kremen` | Full-language native compiler and formatter |
+| `bin/kremen` | Full-language compiler and formatter |
 | `bin/kremen-selfhost` | Kremen-written compiler and CLI for the bootstrap subset |
 | `share/kremen/runtime/kremen_rt.h` | Runtime embedded in generated full-language C |
-| `share/kremen/selfhost/` | Bootstrap sources, seed, runtime, host primitives, and platform header |
+| `share/kremen/selfhost/` | Bootstrap sources, seed, runtime, and host primitives |
+| `share/kremen/native/` | Native platform support needed by installed bootstrap resources |
 | `share/kremen/install.marker`, `install.manifest` | Ownership marker and installed-file list |
-| `share/doc/kremen/` | License, English Markdown documentation, examples, and saved benchmark reports |
+| `share/doc/kremen/` | Project license, English guides, examples, and saved benchmark reports |
 
-Installation compiles both toolchains before changing the destination. Repeating the command upgrades an installation owned by this installer. It refuses to overwrite an unrelated compiler or occupied data directory without a valid ownership marker.
+The source installer compiles both toolchains before changing the destination. Repeating it upgrades an installation owned by its marker and manifest. It refuses an unrelated compiler or occupied data directory without valid ownership information.
 
-The table and two-toolchain commands above describe Linux. Windows installation names the full compiler `bin/kremen.exe` and omits `kremen-selfhost` and its `share/kremen/selfhost/` rebuild resources. It retains the runtime, documentation, examples, ownership checks, relocation layout, and manifest-based removal. Run the installer inside MSYS2 UCRT64 and keep the selected C toolchain and its DLLs available.
+A source installation normally uses your selected system backend. A portable package additionally contains `backend/` and chooses its matching bundled launcher unless `CC` or `--cc` overrides it. Keep this distinction when comparing prerequisites.
 
-You can move the whole prefix. The tools find resources relative to their executable. Moving just one compiler binary without its data is not a complete installation. Programs you build embed the full runtime and can run independently of the source tree, on a compatible host platform.
+## Windows source builds and installation
 
-A separately rebuilt bootstrap binary can use an explicit absolute `KREMEN_SELFHOST_ROOT`. That directory must contain `bootstrap.kr`, `toolchain.kr`, `stage0.c`, `runtime.c`, `runtime.h`, `host.c`, `host.h`, `platform.h`, and `driver.c`. See [Self-hosting](selfhosting.md).
+Use the native `build.ps1` and `selfhost/bootstrap.ps1` workflows described in [Windows setup](windows.md) and [Self-hosting](selfhosting.md). They use native Clang and the Windows SDK rather than a Unix compatibility shell. Those development tools are needed to rebuild Kremen itself, not to use a complete portable package.
 
-## Remove an installation
+The Windows portable package contains `bin/kremen.exe`, the native subset driver, their matching resources, and the bundled backend. It can be kept in any suitable directory and moved as a whole. Add its `bin` directory to your own `PATH` if desired; explicit paths work without changing system settings.
 
-Keep a copy of `install.sh` from the source distribution:
+To copy a portable package into a user-owned prefix, run its installer from PowerShell:
+
+```powershell
+.\install.ps1 -Prefix "$env:LOCALAPPDATA\Programs\Kremen"
+& "$env:LOCALAPPDATA\Programs\Kremen\bin\kremen.exe" doctor
+```
+
+`install.ps1` defaults to that prefix and to the directory containing the script as its source. `-SourceRoot` selects another prepared package or source directory. It does not require administrator privileges or edit `PATH`. It validates its ownership marker and manifest before upgrading or removing an existing installation, and refuses unrelated occupied paths.
+
+For a source installation, build first in a Developer PowerShell with native Clang and the Windows SDK:
+
+```powershell
+.\build.ps1 -Compiler clang -Selfhost
+.\install.ps1 -Prefix "$env:LOCALAPPDATA\Programs\Kremen"
+```
+
+The source installer can invoke the build when no executable exists yet. This source-build path does not add a bundled backend automatically. Use the complete portable archive when the destination computer has no development tools.
+
+## Relocation and removal
+
+Move an installed prefix or portable directory as a whole. The compilers discover resources and the bundled backend relative to their actual executable. A lone compiler binary is not a complete installation. Generated programs embed the Kremen runtime, so they do not need the source tree alongside them; they still target a particular OS, architecture, and system ABI.
+
+A separately rebuilt bootstrap binary can use an explicit absolute `KREMEN_SELFHOST_ROOT`. See [Self-hosting](selfhosting.md) for its resource requirements.
+
+For an installation made by `install.sh`, keep that source installer and use the selected prefix's current location:
 
 ```sh
 sh install.sh --prefix /absolute/path/to/kremen --uninstall
 ```
 
-Use the same prefix you installed into, or its current path if you moved it. Removal validates the manifest, removes owned files, and removes only empty Kremen directories. Other files in the prefix are preserved.
+Removal validates the manifest before changing anything, removes owned files, and removes only empty Kremen directories. Other files in the prefix remain. To remove a portable extraction, keep any projects or progress you placed inside it, then remove that extraction using your operating system's file manager or shell.
 
-## Check or rebuild a release
+For a Windows installation made by `install.ps1`, use the current prefix location:
 
-From the source directory:
+```powershell
+.\install.ps1 -Prefix "$env:LOCALAPPDATA\Programs\Kremen" -Uninstall
+```
+
+The PowerShell installer removes only the validated owned files. It can leave empty directories behind. Keep your own projects outside the installation or save them before removing an unpacked portable directory.
+
+## Create packages from a checkout
+
+The source archive command is:
 
 ```sh
-make test
-make test-sanitize
-make test-install
 make dist
 ```
 
-`make dist` creates versioned ZIP/tar.gz archives and external checksums next to the source directory, and refreshes `SHA256SUMS` inside it. Use `sh tools/package.sh /absolute/output` for another output directory. Build directories, Python files, caches, and existing archives are excluded. Packaging does not run the tests for you.
+It creates versioned ZIP/tar.gz archives and external checksums next to the source directory and refreshes `SHA256SUMS`. `sh tools/package.sh /absolute/output` selects another destination. Packaging does not run tests automatically.
 
-The [validation record](validation.md) lists what was exercised. [Repository update instructions](repository-update.md) explain which source and generated seed files to commit.
+Portable packages are created by `tools/package-portable.sh` or `tools/package-portable.ps1`. They take a built compiler/launcher and a complete matching SDK. The SDK can be provided from an already verified local directory for offline packaging; an explicit download option fetches the selected SDK release and verifies its archive before extraction. The [portable guide](portable.md) explains the resulting layout and license material.
+
+[Validation](validation.md) records release checks. [Repository update instructions](repository-update.md) lists source changes; binary archives belong in release assets rather than the source tree.

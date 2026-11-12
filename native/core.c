@@ -4,7 +4,6 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <sys/stat.h>
-#include <unistd.h>
 
 struct ArenaBlock { ArenaBlock *next; size_t used, capacity; max_align_t alignment; unsigned char data[]; };
 
@@ -462,12 +461,11 @@ Source *km_read_source(Context *ctx, const char *path, bool header) {
     Token tok = {.src = &missing, .line = 1, .col = 1};
     int fd = km_host_source_open(path);
     if (fd < 0) km_error(ctx, tok, "E010", "cannot open %s: %s", path, strerror(errno));
-    struct stat state;
-    if (fstat(fd, &state) || !S_ISREG(state.st_mode)) {
-        close(fd); km_error(ctx, tok, "E010", "source must be a regular file: %s", path);
+    if (!km_host_fd_regular(fd)) {
+        km_host_close(fd); km_error(ctx, tok, "E010", "source must be a regular file: %s", path);
     }
-    FILE *f = fdopen(fd, "rb");
-    if (!f) { close(fd); km_error(ctx, tok, "E010", "cannot open stream %s: %s", path, strerror(errno)); }
+    FILE *f = km_host_fdopen(fd, "rb");
+    if (!f) { km_host_close(fd); km_error(ctx, tok, "E010", "cannot open stream %s: %s", path, strerror(errno)); }
     if (fseek(f, 0, SEEK_END)) { fclose(f); km_error(ctx, tok, "E010", "cannot seek %s", path); }
     long n = ftell(f);
     if (n < 0 || n > 4 * 1024 * 1024) { fclose(f); km_error(ctx, tok, "E010", "source exceeds 4 MiB: %s", path); }

@@ -2,7 +2,7 @@
 
 A program is a set of instructions for a computer. You write those instructions in a text file. The Kremen compiler checks the file and turns it into a program your computer can run.
 
-This guide starts with an unpacked Kremen source archive on Linux. You do not need to know another language. If you have not unpacked or installed Kremen yet, [Installation](install.md) covers the required tools and archive commands. For the experimental Windows profile, complete [Windows setup](windows.md) first and use `build/kremen.exe` where this guide says `build/kremen`.
+This guide starts with an unpacked Kremen source archive on Linux. You do not need to know another language. If you have not unpacked or installed Kremen yet, [Installation](install.md) covers the required tools and archive commands. A [portable package](portable.md) is already built: use its `bin/kremen` instead of `build/kremen` and skip the source-build step. On Windows, follow [Windows setup](windows.md) and use `bin/kremen.exe` from a portable package or the compiler produced by `build.ps1`.
 
 ## 1. Open a terminal in the project directory
 
@@ -16,7 +16,7 @@ Type this and press Enter:
 make
 ```
 
-This builds the compiler itself. After it finishes, the executable is `build/kremen`. You only need to repeat this when its source or build settings change. If the terminal says a tool is missing, follow [the requirements](install.md#requirements).
+This builds the compiler itself. After it finishes, the executable is `build/kremen`. You only need to repeat this when its source or build settings change. If the terminal says a tool is missing, follow [the source-build requirements](install.md#build-from-source-on-linux).
 
 Now run the supplied first example:
 

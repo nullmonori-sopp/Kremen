@@ -9,7 +9,23 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#if defined(_WIN32)
+#include "platform.h"
+#define rt_input_open km_host_source_open
+#define rt_file_stream km_host_fdopen
+#define rt_descriptor_close km_host_close
+#define rt_unlink km_host_unlink
+#define rt_mkstemp km_host_mkstemp
+#define rt_replace km_host_replace
+#else
 #include <unistd.h>
+#define rt_input_open(path) open(path, O_RDONLY | O_NONBLOCK)
+#define rt_file_stream fdopen
+#define rt_descriptor_close close
+#define rt_unlink unlink
+#define rt_mkstemp mkstemp
+#define rt_replace rename
+#endif
 
 typedef struct Allocation {
     struct Allocation *next;
@@ -23,10 +39,17 @@ static Allocation *small_allocation;
 static size_t allocated;
 static int argument_count;
 static char **argument_values;
-typedef struct SourceIdentity {
-    struct SourceIdentity *next;
+typedef struct FileIdentity {
+#if defined(_WIN32)
+    DWORD volume, high, low;
+#else
     dev_t device;
     ino_t inode;
+#endif
+} FileIdentity;
+typedef struct SourceIdentity {
+    struct SourceIdentity *next;
+    FileIdentity file;
 } SourceIdentity;
 static SourceIdentity *source_identities;
 /* The current input stays in the string arena until cleanup. Do not reopen a
@@ -44,6 +67,13 @@ static const char *last_string;
 static size_t last_string_length;
 
 void rt_init(int argc, char **argv) {
+#if defined(_WIN32)
+    km_host_streams();
+    if (!km_host_arguments(&argc, &argv)) {
+        fputs("kremen selfhost: cannot decode process arguments\n", stderr);
+        exit(1);
+    }
+#endif
     argument_count = argc;
     argument_values = argv;
 }
@@ -287,20 +317,40 @@ const char *rt_arg(int64_t index) {
     return argument_values[index];
 }
 
+static bool same_identity(FileIdentity left, FileIdentity right) {
+#if defined(_WIN32)
+    return left.volume == right.volume && left.high == right.high && left.low == right.low;
+#else
+    return left.device == right.device && left.inode == right.inode;
+#endif
+}
+static bool descriptor_identity(int fd, FileIdentity *out) {
+#if defined(_WIN32)
+    BY_HANDLE_FILE_INFORMATION info;
+    if (!km_host_fd_regular(fd) || !GetFileInformationByHandle((HANDLE)_get_osfhandle(fd), &info)) return false;
+    *out = (FileIdentity){info.dwVolumeSerialNumber, info.nFileIndexHigh, info.nFileIndexLow};
+#else
+    struct stat state;
+    if (fstat(fd, &state) || !S_ISREG(state.st_mode)) return false;
+    *out = (FileIdentity){state.st_dev, state.st_ino};
+#endif
+    return true;
+}
+
 const char *rt_read(const char *path) {
     diagnostic_path = NULL; diagnostic_source = NULL; diagnostic_length = 0;
     /* Opening a FIFO for reading can block before fstat gets to reject it. */
-    int fd = open(path, O_RDONLY | O_NONBLOCK);
+    int fd = rt_input_open(path);
     if (fd < 0) {
         (void)rt_error(path, 1, 1, strerror(errno));
     }
-    struct stat state;
-    if (fstat(fd, &state) != 0 || !S_ISREG(state.st_mode)) {
-        (void)close(fd);
+    FileIdentity state = {0};
+    if (!descriptor_identity(fd, &state)) {
+        (void)rt_descriptor_close(fd);
         (void)rt_error(path, 1, 1, "input must be a regular file of at most 8 MiB");
     }
-    FILE *file = fdopen(fd, "rb");
-    if (file == NULL) { (void)close(fd); (void)rt_error(path, 1, 1, "cannot open input stream"); }
+    FILE *file = rt_file_stream(fd, "rb");
+    if (file == NULL) { (void)rt_descriptor_close(fd); (void)rt_error(path, 1, 1, "cannot open input stream"); }
     if (fseek(file, 0, SEEK_END) != 0) {
         (void)fclose(file);
         (void)rt_error(path, 1, 1, "cannot seek input file");
@@ -324,21 +374,44 @@ const char *rt_read(const char *path) {
     remember_length(result, (size_t)size);
     diagnostic_path = path; diagnostic_source = result; diagnostic_length = (size_t)size;
     for (SourceIdentity *input = source_identities; input != NULL; input = input->next) {
-        if (input->device == state.st_dev && input->inode == state.st_ino) return result;
+        if (same_identity(input->file, state)) return result;
     }
     SourceIdentity *identity = malloc(sizeof *identity);
     if (identity == NULL) (void)rt_error(path, 1, 1, "out of memory");
-    identity->device = state.st_dev; identity->inode = state.st_ino;
+    identity->file = state;
     identity->next = source_identities; source_identities = identity;
     return result;
 }
 
 int64_t rt_write(const char *path, const char *value) {
+#if defined(_WIN32)
+    int mode = 0;
+    bool exists = km_host_path_mode(path, &mode);
+    FileIdentity state = {0};
+    bool identified = false;
+    if (exists) {
+        HANDLE original = km_host_path_handle(path);
+        BY_HANDLE_FILE_INFORMATION info;
+        identified = original != INVALID_HANDLE_VALUE && GetFileInformationByHandle(original, &info);
+        if (original != INVALID_HANDLE_VALUE) CloseHandle(original);
+        if (!identified) return rt_error(path, 1, 1, "cannot identify existing output file");
+        state = (FileIdentity){info.dwVolumeSerialNumber, info.nFileIndexHigh, info.nFileIndexLow};
+    }
+#else
     struct stat state;
     bool exists = stat(path, &state) == 0;
-    if (exists) {
+    int mode = exists ? state.st_mode & 0777 : 0;
+    FileIdentity previous = {0};
+    if (exists) previous = (FileIdentity){state.st_dev, state.st_ino};
+    bool identified = exists;
+#endif
+    if (identified) {
         for (SourceIdentity *input = source_identities; input != NULL; input = input->next) {
-            if (input->device == state.st_dev && input->inode == state.st_ino)
+#if defined(_WIN32)
+            if (same_identity(input->file, state))
+#else
+            if (same_identity(input->file, previous))
+#endif
                 return rt_error(path, 1, 1, "output would overwrite a source file");
         }
     }
@@ -346,24 +419,28 @@ int64_t rt_write(const char *path, const char *value) {
     if (n > SIZE_MAX - 32) return rt_error(path, 1, 1, "output path too long");
     char *temporary = allocate(n + 32);
     snprintf(temporary, n + 32, "%s.kremen-XXXXXX", path);
-    int fd = mkstemp(temporary);
+    int fd = rt_mkstemp(temporary);
     if (fd < 0) return rt_error(path, 1, 1, strerror(errno));
-    if (exists && fchmod(fd, state.st_mode & 0777) != 0) {
-        close(fd); unlink(temporary); return rt_error(path, 1, 1, "cannot preserve output permissions");
+#if defined(_WIN32)
+    if (exists && km_host_chmod(fd, temporary, mode) != 0) {
+#else
+    if (exists && fchmod(fd, mode) != 0) {
+#endif
+        rt_descriptor_close(fd); rt_unlink(temporary); return rt_error(path, 1, 1, "cannot preserve output permissions");
     }
-    FILE *file = fdopen(fd, "wb");
-    if (file == NULL) { close(fd); unlink(temporary); return rt_error(path, 1, 1, "cannot open temporary output"); }
+    FILE *file = rt_file_stream(fd, "wb");
+    if (file == NULL) { rt_descriptor_close(fd); rt_unlink(temporary); return rt_error(path, 1, 1, "cannot open temporary output"); }
     size_t length = string_length(value);
     bool failed = fwrite(value, 1, length, file) != length;
     if (fclose(file) != 0) {
         failed = true;
     }
     if (failed) {
-        unlink(temporary);
+        rt_unlink(temporary);
         return rt_error(path, 1, 1, "cannot write output file");
     }
-    if (rename(temporary, path) != 0) {
-        int code = errno; unlink(temporary); return rt_error(path, 1, 1, strerror(code));
+    if (rt_replace(temporary, path) != 0) {
+        int code = errno; rt_unlink(temporary); return rt_error(path, 1, 1, strerror(code));
     }
     return 0;
 }

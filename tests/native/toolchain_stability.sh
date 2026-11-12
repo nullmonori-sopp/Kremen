@@ -74,7 +74,7 @@ cmp "$WORK/compiler.original" "$WORK/prefix/bin/kremen"
 cmp "$WORK/runtime.original" "$WORK/prefix/share/kremen/runtime/kremen_rt.h"
 # A clean C-only build checks Makefile quoting and complete operation without /proc.
 mkdir "$WORK/source path's quote"
-tar -C "$ROOT" -cf "$WORK/source.tar" Makefile VERSION native runtime selfhost/platform.h
+tar -C "$ROOT" -cf "$WORK/source.tar" Makefile VERSION native runtime selfhost/platform.h tools/backend_launcher.c
 tar -C "$WORK/source path's quote" -xf "$WORK/source.tar"
 KREMEN_TEST_REAL_CC=$(command -v "$COMPILER")
 export KREMEN_TEST_REAL_CC

@@ -4,7 +4,7 @@ A compiler is **self-hosted** when it can compile the language implementation wr
 
 The bootstrap frontend and its build policy live in `.kr` files. C supplies strings, memory, filesystem access, process primitives, and an entry point. A C11 toolchain, libc, and a hosted OS are still required. Self-hosting has not removed those dependencies.
 
-The subset remains a POSIX toolchain. The experimental Windows support in 0.4.7 belongs to the full native compiler; `kremen selfhost` reports that the subset is unsupported there. Use the Linux instructions below for bootstrap work, and [Windows setup](windows.md) for the full-language Windows profile.
+The subset runs natively on Linux and Windows in 0.4.8. It has the same smaller language on both hosts. Windows uses the native process and UTF-16 filesystem boundary; it does not need a POSIX compatibility shell. A complete [portable package](portable.md) carries the subset driver, its rebuild resources, and a matching C backend.
 
 ## Build and use the subset toolchain
 
@@ -23,17 +23,29 @@ cat /tmp/kremen-example.txt
 
 The example writes `720|18|ok` to the output path passed as its argument. The separate executable `selfhost/build/kremen-selfhost` accepts the same commands without the `selfhost` prefix. After installation, use `kremen selfhost ...` or `kremen-selfhost ...`.
 
+For a native Windows source build, open a PowerShell 7 developer terminal with Clang and the Windows SDK configured:
+
+```powershell
+.\build.ps1 -Compiler clang -Selfhost
+.\build\kremen.exe selfhost --help
+.\build\kremen.exe selfhost check .\selfhost\example.kr --cc clang
+.\build\kremen.exe selfhost run .\selfhost\example.kr --cc clang -- "$env:TEMP\kremen-example.txt"
+Get-Content -LiteralPath "$env:TEMP\kremen-example.txt"
+```
+
+To run the subset bootstrap by itself, use `selfhost/bootstrap.ps1 -Compiler clang`. `-BuildDirectory` selects its output directory. The resulting driver is `selfhost/build/kremen-selfhost.exe`. A portable package has that driver in `bin/`; its relative resource and backend discovery works after moving the package as a whole. Source-building prerequisites do not apply to ordinary use of a complete portable download.
+
 | Command | Work performed |
 | --- | --- |
 | `check SOURCE.kr` | Subset parsing and type checking, followed by strict C syntax checking |
 | `emit-c SOURCE.kr -o FILE` | Generate C into a required explicit output file |
-| `build SOURCE.kr [-o FILE]` | Build an executable, default `a.out` |
+| `build SOURCE.kr [-o FILE]` | Build an executable, default `a.out` on Linux or `a.exe` on Windows |
 | `run SOURCE.kr [-- ARG ...]` | Build temporarily and run with the supplied arguments |
-| `bootstrap [-o FILE]` | Rebuild the subset compiler and CLI, then verify the next stage; default `kremen-selfhost` |
+| `bootstrap [-o FILE]` | Rebuild the subset compiler and CLI, then verify the next stage; default `kremen-selfhost` with the host's executable suffix |
 
-`--cc EXE` and `-O0` through `-O3` select the C compiler and optimization. The default is `CC` or `cc`, with `-O3`, plus `-std=c11 -Wall -Wextra -Wpedantic -Werror`. The compiler setting names an executable, not a shell expression.
+`--cc EXE` and `-O0` through `-O3` select the C compiler and optimization. An explicit compiler or `CC` overrides the default. Otherwise the driver looks for the package's bundled backend, then falls back to `clang` on Windows or `cc` on POSIX. The default optimization is `-O3`; strict C11 warnings remain errors. The compiler setting names one executable, not a shell expression.
 
-Arguments after `--` go literally to the program, including spaces and shell metacharacters. The driver uses separate `argv` entries and no shell. It preserves the program's exit status, using `128 + signal` when a child is terminated by a signal. The full-language `run` command does not yet expose the same program-argument interface.
+Arguments after `--` go literally to the program, including spaces and shell metacharacters. The driver uses separate `argv` entries and no shell. On POSIX it reports `128 + signal` when a child is terminated by a signal. Windows has its own process-status conventions; the CLI still returns an unsuccessful status for a failed native child. The full-language `run` command does not yet expose the same program-argument interface.
 
 ## What a fixed point proves
 

@@ -30,6 +30,13 @@ jobs:
           cd "release check/kremen"
           sha256sum -c SHA256SUMS
           make all selfhost check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kremen-source
+          path: |
+            ../kremen-v*.zip
+            ../kremen-v*.tar.gz
+            ../kremen-v*.sha256
   sanitizers:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -42,21 +49,95 @@ jobs:
         run: make test-sanitize
   windows:
     runs-on: windows-latest
-    timeout-minutes: 20
-    defaults:
-      run:
-        shell: msys2 {0}
-    env:
-      CC: gcc
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-      - uses: msys2/setup-msys2@v2
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Native PowerShell build and bootstrap
+        shell: pwsh
+        run: ./build.ps1 -Compiler clang -Selfhost
+      - name: Verify CMake build
+        shell: pwsh
+        run: |
+          cmake -S . -B build/cmake -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/cmake
+      - name: Native Windows frontend and runtime
+        shell: pwsh
+        run: ./tests/windows/native.ps1 -Kremen ./build/kremen.exe -Compiler clang
+      - name: Native Windows subset driver
+        shell: pwsh
+        run: ./tests/windows/selfhost.ps1 -Toolchain ./selfhost/build/kremen-selfhost.exe -Compiler clang
+      - name: Build and verify portable Windows package
+        shell: pwsh
+        run: |
+          ./tools/package-portable.ps1 -DownloadBackend -BuildDir ./build -OutputDir ./build/artifacts
+          $archive = Get-ChildItem ./build/artifacts/*-portable.zip | Select-Object -First 1
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath './build/portable unpack'
+          $package = (Get-ChildItem './build/portable unpack' -Directory | Select-Object -First 1).FullName
+          ./tests/portable/check.ps1 -PackageRoot $package
+      - uses: actions/upload-artifact@v4
         with:
-          msystem: UCRT64
-          update: true
-          install: >-
-            make
-            diffutils
-            mingw-w64-ucrt-x86_64-gcc
-      - name: Build and exercise native Windows tools
-        run: make all test-windows
+          name: kremen-portable-windows
+          path: build/artifacts/*-portable*
+  portable-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch and verify pinned portable backend
+        run: |
+          mkdir -p build/sdk
+          curl --fail --location --retry 3 https://ziglang.org/download/index.json -o build/sdk/index.json
+          node <<'JS'
+          const fs = require('fs');
+          const e = JSON.parse(fs.readFileSync('build/sdk/index.json'))['0.15.2']['x86_64-linux'];
+          if(e.tarball !== 'https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz' || !/^[a-f0-9]{64}$/.test(e.shasum)) throw Error('Unexpected backend catalog');
+          fs.writeFileSync('build/sdk/archive.sha256', e.shasum + '  zig.tar.xz\n');
+          JS
+          curl --fail --location --retry 3 https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz -o build/sdk/zig.tar.xz
+          (cd build/sdk && sha256sum -c archive.sha256 && tar -xf zig.tar.xz)
+      - name: Build static native executables with bundled musl
+        run: |
+          mkdir -p build/portable-native
+          cat > build/portable-cc <<'SH'
+          #!/bin/sh
+          exec "$(dirname "$0")/sdk/zig-x86_64-linux-0.15.2/zig" cc -target x86_64-linux-musl -static "$@"
+          SH
+          chmod +x build/portable-cc
+          make CC="$PWD/build/portable-cc" USE_ASM=0 all selfhost
+          cp build/kremen build/kremen-backend build/portable-native/
+      - name: Assemble and verify portable Linux package
+        run: |
+          sh tools/package-portable.sh --backend-root "$PWD/build/sdk/zig-x86_64-linux-0.15.2" --build-dir "$PWD/build/portable-native" --output "$PWD/build/artifacts"
+          mkdir -p 'build/portable unpack'
+          tar -xf build/artifacts/*-portable.tar.gz -C 'build/portable unpack'
+          package=$(find 'build/portable unpack' -mindepth 1 -maxdepth 1 -type d)
+          sh tests/portable/check.sh "$package"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kremen-portable-linux
+          path: build/artifacts/*-portable*
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [regression, sanitizers, windows, portable-linux]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-files
+      - name: Publish tested release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(cat VERSION)
+          tag="v$version"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            printf 'Release %s already exists; leaving its assets unchanged.\n' "$tag"
+            exit 0
+          fi
+          mapfile -d '' assets < <(find release-files -type f -print0)
+          gh release create "$tag" "${assets[@]}" --target "$GITHUB_SHA" --title "Kremen $version" --notes-file "docs/v$version.md" --draft
+          gh release edit "$tag" --draft=false

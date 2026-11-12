@@ -36,6 +36,8 @@ SANITIZE_GENERATED=1 sh tests/native/output_runtime_046.sh "$BUILD/kremen"
 SANITIZE_GENERATED=1 sh tests/native/semantic_047.sh "$BUILD/kremen"
 SANITIZE=1 sh tests/native/runtime_047.sh
 sh tests/native/doctor_047.sh "$BUILD/kremen"
+SANITIZE=1 sh tests/native/runtime_048.sh
+SANITIZE=1 sh tests/native/backend_048.sh
 SANITIZE_GENERATED=1 sh tests/native/threads_043.sh "$BUILD/kremen"
 SANITIZE=1 sh tests/native/threads_runtime.sh
 SANITIZE_GENERATED=1 sh tests/native/semantic_stability.sh "$BUILD/kremen"

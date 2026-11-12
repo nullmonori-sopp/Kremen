@@ -1,96 +1,89 @@
 # Kremen on Windows
 
-Kremen 0.4.7 begins native Windows support with one defined build environment: Windows x86-64, MSYS2 UCRT64, MinGW-w64 GCC, and winpthreads. The result is a Windows `.exe`; WSL is not involved. MSYS2 supplies the shell, build tools, C compiler, and pthread implementation used by this first profile.
+Kremen 0.4.8 runs as native Windows programs. The full compiler and bootstrap-subset driver use Windows process and filesystem operations directly. Full-language workers use Windows thread primitives through the C runtime; a pthread compatibility DLL, MSYS2, and WSL are no longer needed.
 
-Start with this environment even if another C compiler is already installed. The initial profile does not include MSVC, ARM Windows, the self-hosted subset, or a standalone graphical installer. [Validation](validation.md) distinguishes Linux regressions from the Windows checks.
+Use the Windows x86-64 portable package when you want to write Kremen programs. Build from source when you want to change the compiler. These workflows have different prerequisites.
 
-## Set up the tools
+## Use the portable package
 
-Install MSYS2 from its official distribution and complete its normal package updates. Open the terminal named **MSYS2 UCRT64**, then install the development tools:
+Unpack the entire Windows package into a directory you choose. Open PowerShell in that directory:
 
-```sh
-pacman -S --needed base-devel mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-winpthreads
+```powershell
+.\bin\kremen.exe --version
+.\bin\kremen.exe doctor
+.\bin\kremen.exe run .\share\doc\kremen\examples\hello.kr
 ```
 
-Package installation needs a network connection. Once these tools and the Kremen source archive are present, building and using Kremen does not need one.
+The final command prints `Hello, Kremen!`. The matching backend and runtime are already inside the package. Keep `bin`, `share`, and `backend` together when moving it. [Portable packages](portable.md) explains the layout, backend selection, licenses, offline use, and cache requirements.
 
-Check the selected environment:
+You can create your own source file outside the package and pass its path to `check`, `build`, or `run`. Quote paths containing spaces:
 
-```sh
-printf '%s\n' "$MSYSTEM"
-command -v gcc
-gcc -dumpmachine
+```powershell
+.\bin\kremen.exe check 'C:\My projects\main.kr' --mode=learn
+.\bin\kremen.exe build 'C:\My projects\main.kr' -o 'C:\My projects\app.exe'
+& 'C:\My projects\app.exe'
 ```
 
-The first command should print `UCRT64`. GCC should come from `/ucrt64/bin`, and its target should be `x86_64-w64-mingw32`. Keep that UCRT64 terminal open for the commands below. A plain MSYS terminal selects a different environment.
+The `&` is PowerShell's invocation operator for the quoted executable name. It is not part of Kremen syntax. Work remains the default profile; learn adds the requirements in [Work and learn profiles](profiles.md).
 
-## Build and run your first program
+Without `-o`, `build` chooses `a.exe`. An explicit output name is used as written, so include `.exe` for an ordinary Windows executable name. `run` builds in a private temporary directory and removes its executable afterward. Compiler options belong before the end-of-options marker `--`.
 
-Unpack the source archive into a path using ASCII characters. Spaces are supported. Open that directory in the UCRT64 terminal and run:
+## Diagnose the selected backend
 
-```sh
-make CC=gcc USE_ASM=0
-./build/kremen.exe --version
-./build/kremen.exe doctor --cc gcc
-./build/kremen.exe run examples/tutorial/01_hello.kr --cc gcc
+`doctor` compiles and runs a small program with the actual Kremen runtime and strict C11 warnings. Its probe starts and joins a worker and checks the returned value:
+
+```powershell
+.\bin\kremen.exe doctor
+.\bin\kremen.exe explain E016
 ```
 
-The last command should print `Hello, Kremen!`. `doctor` first checks that the selected compiler can compile and execute a small program with strict C flags and the matching Kremen runtime. Its probe also starts and joins one integer worker. If it fails, read the reported operation and run `kremen explain E016`; a missing runtime is a separate `E010` error.
+A self-check failure uses `E016`; an unreadable runtime is a separate `E010`. Read the selected compiler and runtime in a successful report. An explicit `--cc` or inherited `CC` can override the bundled backend. Remove an unintended override before diagnosing a portable package.
 
-`doctor` executes the result, so it is a native setup check rather than a cross-compilation test. It does not run the entire language test suite. External C-tool messages retain their own format, including when Kremen's JSON error format is selected.
+The probe runs the result, so `doctor` checks the current host, not a cross-compilation target. It does not replace language regressions. External compiler messages retain their own format, including when JSON is selected for Kremen errors.
 
-## Everyday commands
+## Build Kremen from source
 
-```sh
-./build/kremen.exe check examples/learn/checked_input.kr --mode=learn
-./build/kremen.exe build examples/hello.kr --cc gcc -o build/hello.exe
-./build/hello.exe
-./build/kremen.exe emit-c examples/hello.kr -o build/hello.c
-gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -pthread build/hello.c -o build/hello.exe
-./build/kremen.exe fmt --check examples/learn/checked_input.kr
-./build/kremen.exe explain E131
+A source archive has no prebuilt compiler or SDK. A native source build needs LLVM/Clang, the Windows SDK, and the C build tools that provide system headers and libraries. Open a Developer PowerShell configured for those tools. Use PowerShell 7 for the build and bootstrap scripts:
+
+```powershell
+.\build.ps1 -Compiler clang -Selfhost
+.\build\kremen.exe --version
+.\build\kremen.exe doctor --cc clang
+.\build\kremen.exe run .\examples\hello.kr --cc clang
 ```
 
-Without `-o`, `build` chooses `a.exe` on Windows. An explicit output name is used as written, so include `.exe` when you want an ordinary Windows executable name. `run` chooses its own temporary executable and removes it afterward. Compiler options, including `--cc`, belong before the end-of-options marker `--`.
+`-BuildDir` selects another full-compiler output directory. `-Selfhost` also runs the subset's native bootstrap workflow. Without it, the script builds the full compiler and backend launcher. This development setup is unnecessary for a complete portable package.
 
-Both work and learn use the same Windows backend and runtime checks. The additional learning rules are described in [Work and learn profiles](profiles.md). The separate `kremen selfhost` command reports that its POSIX subset is unsupported on Windows in this release.
+The source build uses the portable C implementation of byte copying. The Linux assembly implementation is not used on Windows. The build scripts preserve strict warnings as errors; platform support is not enabled by disabling checks.
 
-## Install into a prefix
+The bootstrap subset has its own `selfhost/bootstrap.ps1` workflow. It verifies the committed seed against successive generated C stages before publishing the driver. See [Self-hosting](selfhosting.md) for its commands and language limits. Compiling the subset on Windows does not mean the full language's frontend has become self-hosted.
 
-From the UCRT64 terminal:
+To install a complete portable package into your user profile, run its `install.ps1`. The same installer can copy an already built source tree. [Installation](install.md#windows-source-builds-and-installation) explains `-Prefix`, `-SourceRoot`, upgrades, and removal; the package can also be used directly without installation.
 
-```sh
-CC=gcc sh install.sh --prefix "$HOME/.local"
-export PATH="$HOME/.local/bin:$PATH"
-kremen.exe doctor --cc gcc
-```
+## Paths and Unicode
 
-On Windows the source installer installs the full-language `kremen.exe`, its runtime, documentation, and examples. It omits the POSIX subset compiler and rebuild resources. The installer uses the same ownership manifest and `--uninstall` interface as the Linux installation; see [Installation](install.md).
+Compiler arguments and language filesystem paths are UTF-8 internally. The Windows boundary converts them to UTF-16 for the native APIs. It reads the original wide command line, handles quoted arguments without invoking a command shell, and uses wide operations for source files, temporary directories, executable discovery, and filesystem built-ins.
 
-Keep the UCRT64 compiler and DLL directories available. Generated threaded programs depend on the matching winpthreads runtime, commonly `libwinpthread-1.dll`, and may need other DLLs supplied by the selected C toolchain. Moving an executable alone does not bundle those dependencies. This release supplies source and a source installer rather than an independent Windows binary distribution.
+Normal Unicode paths, spaces, and shell metacharacters can therefore be used without switching the system ANSI code page. Filesystem directory names returned to Kremen are encoded as UTF-8. Embedded NUL and invalid path encodings are rejected rather than passed through a lossy conversion.
 
-The `.exe` is a native Windows program. Launching it from PowerShell or another terminal still requires the selected backend and its dependencies on that terminal's `PATH`. The UCRT64 workflow above is the supported starting point.
+Existing source paths are resolved through Windows file handles. Symlinks and junctions are followed before checking the selected project root. File identities protect source and toolchain resources from output aliases, including hard links and case aliases. A root ancestor's identity is checked as well, so case-sensitive directories do not become interchangeable merely because their spellings differ only by case.
 
-## Paths, files, and limits
+Imports remain local and relative. Drive-qualified paths and UNC paths do not become valid import expressions; use an explicit wider `--root` for a deliberately shared source directory. Ordinary source/output command-line paths are separate from import syntax.
 
-The frontend resolves existing paths through Windows file handles. It follows symlinks and junctions for the project-root check, compares canonical module paths without case sensitivity, and uses file identity to protect sources and toolchain files from output aliases. Import paths remain local and relative: drive-qualified and UNC imports are rejected. Select a deliberate wider `--root` when a shared source directory belongs to the project.
+UTF-8 path support does not promise that every Windows namespace or extended path length is accepted. Host path limits, access permissions, device names, and filesystem behavior still apply. Do not use unpaired UTF-16 surrogates as portable filenames.
 
-The first implementation uses narrow Windows and C-runtime path APIs. Use ASCII paths for a predictable result. Complete arbitrary-Unicode paths, extended long paths, and every Windows filesystem configuration are not established by this profile.
+## Files and threads
 
-The native executable accepts Windows paths, including `C:/project/main.kr`. MSYS2 normally converts its own paths before launching native tools, but its heuristics can leave unusual arguments unchanged. When passing an absolute MSYS2 path containing apostrophes or shell characters, convert it explicitly with `cygpath -m` and keep the result quoted. A native process cannot resolve MSYS2's private `/tmp` mount by itself.
+Filesystem streams use binary modes. `r`, `w`, and `a` are aliases of `rb`, `wb`, and `ab`; CR, LF, NUL, and `0x1a` remain file data. File sizes use 64-bit metadata. `fsRename` can replace an existing file without a delete-first gap, and a failed replacement leaves the old target in place. Directory replacement and locked-file behavior follow Windows rules.
 
-Filesystem streams use binary modes. The bytes `\r`, `\n`, NUL, and `0x1a` remain file data rather than being changed by Windows text translation. This concerns Kremen's filesystem operations; standard input, standard output, standard error, and the terminal's encoding retain their host conventions.
+`fmt -w` refuses to rewrite a read-only source and keeps its temporary file removable on failure. Its mode preservation covers the C runtime's read/write flags, not arbitrary NTFS access-control lists.
 
-On Windows, `fmt -w` refuses to rewrite a read-only source. Its staged file remains removable on that failure. Formatter mode preservation covers the C runtime's read/write flags; it does not copy arbitrary NTFS access-control lists.
+Workers use the existing integer-job API. The implementation starts CRT-aware Windows threads and uses native synchronization for the shared runtime streams and diagnostics. The same creator ownership, worker-local resources, deferred cleanup, and join rules apply on Linux. General shared-memory concurrency, timed joins, and forced worker cancellation are still absent.
 
-File sizes use 64-bit metadata. `fsRename` supports replacing a destination file and preserves it when the move fails; directory replacement can still fail under Windows rules. A rename between names for the same file identity succeeds without deleting the file. Filesystem errors remain result codes that can be interpreted with `errorMessage`.
+A generated program includes its Kremen runtime. It does not load `libwinpthread-1.dll` or an MSYS compatibility runtime. Other code linked through an explicitly selected external backend can have its own deployment requirements; the portable package's tested backend is the default path.
 
-The full runtime uses winpthreads for the existing integer-worker API. It does not add shared mutable references, closures, or new thread-transfer rules. Freestanding targets and an independent machine-code backend remain separate work.
+## Validate the Windows build
 
-## Run the Windows checks
+The Windows CI uses native PowerShell and Clang, then exercises generated programs, the bootstrap workflow, Unicode paths, and a portable package with development compilers removed from `PATH`. The portable check also clears `CC`, so an inherited override cannot silently select the CI machine's compiler.
 
-```sh
-make CC=gcc USE_ASM=0 test-windows
-```
-
-The Windows checks exercise the selected native profile. The broader Linux suite includes POSIX bootstrap, signal, file-limit, and full-device scenarios that are not interchangeable with a Windows test result. Keep the distinction when reporting a build. The [validation record](validation.md) describes the actual coverage and remaining platform limits.
+Read [Validation](validation.md) for the actual suite results and supported host baseline. Linux signal, FIFO, file-size-limit, and sanitizer cases remain distinct from a Windows result. A successful native test does not establish every Windows release, ARM Windows, a kernel target, or arbitrary foreign C-library compatibility.

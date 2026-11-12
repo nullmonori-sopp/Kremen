@@ -3,6 +3,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 int64_t host_argc(void);
+bool host_windows(void);
+const char *host_exe_suffix(void);
+const char *host_default_cc(void);
 const char *host_env(const char *name);
 int64_t host_setenv(const char *name, const char *value);
 const char *host_executable(void);

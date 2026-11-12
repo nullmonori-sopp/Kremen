@@ -21,7 +21,7 @@ endif
 SOURCES = native/core.c native/diagnostics.c native/doctor.c native/lexer.c native/parser.c native/modules.c native/checker.c native/learn.c native/codegen.c native/format.c native/main.c
 
 .PHONY: all test test-sanitize test-thread-sanitize test-install test-selfhost check examples bootstrap selfhost bench dist clean FORCE
-all: build/kremen$(EXEEXT)
+all: build/kremen$(EXEEXT) build/kremen-backend$(EXEEXT)
 
 build/config: FORCE
 	mkdir -p build
@@ -32,6 +32,10 @@ build/config: FORCE
 build/kremen$(EXEEXT): $(SOURCES) $(COPY) native/kremen.h native/platform.h selfhost/platform.h runtime/kremen_rt.h build/config
 	mkdir -p build
 	$(CC_COMMAND) $(STRICT) $(CFLAGS) $(SOURCES) $(COPY) -o $@
+
+build/kremen-backend$(EXEEXT): tools/backend_launcher.c native/platform.h native/kremen.h selfhost/platform.h build/config
+	mkdir -p build
+	$(CC_COMMAND) $(STRICT) $(CFLAGS) tools/backend_launcher.c -o $@
 
 .PHONY: test-windows
 test-windows: all
@@ -59,6 +63,8 @@ test: build/kremen$(EXEEXT)
 	sh tests/native/semantic_047.sh ./build/kremen$(EXEEXT)
 	sh tests/native/runtime_047.sh
 	sh tests/native/doctor_047.sh ./build/kremen$(EXEEXT)
+	sh tests/native/runtime_048.sh
+	sh tests/native/backend_048.sh
 	sh tests/native/threads_043.sh ./build/kremen$(EXEEXT)
 	sh tests/native/threads_runtime.sh
 	sh tests/native/tutorial.sh ./build/kremen$(EXEEXT)
@@ -97,17 +103,18 @@ examples: build/kremen$(EXEEXT)
 bootstrap:
 	sh selfhost/bootstrap.sh
 
-selfhost: selfhost/build/kremen$(EXEEXT)-selfhost
+selfhost: selfhost/build/kremen-selfhost$(EXEEXT)
 
-selfhost/build/kremen$(EXEEXT)-selfhost: selfhost/bootstrap.kr selfhost/toolchain.kr selfhost/stage0.c selfhost/runtime.c selfhost/runtime.h selfhost/driver.c selfhost/host.c selfhost/host.h selfhost/platform.h selfhost/bootstrap.sh
+selfhost/build/kremen-selfhost$(EXEEXT): selfhost/bootstrap.kr selfhost/toolchain.kr selfhost/stage0.c selfhost/runtime.c selfhost/runtime.h selfhost/driver.c selfhost/host.c selfhost/host.h selfhost/platform.h selfhost/bootstrap.sh native/platform.h
 	sh selfhost/bootstrap.sh
 
-test-selfhost: selfhost/build/kremen$(EXEEXT)-selfhost
+test-selfhost: selfhost/build/kremen-selfhost$(EXEEXT)
 	sh tests/selfhost/semantics.sh
 	sh tests/selfhost/toolchain.sh
 	sh tests/selfhost/frontend_stability.sh
 	sh tests/selfhost/runtime_stability.sh
 	sh tests/selfhost/diagnostics.sh
+	sh tests/selfhost/output_048.sh
 
 bench: build/kremen$(EXEEXT)
 	$(CC_COMMAND) $(STRICT) $(CFLAGS) bench/copy.c $(COPY) -o build/bench-copy
