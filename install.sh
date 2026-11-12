@@ -46,7 +46,7 @@ validate_manifest() {
             *'/../'*|../*|*/..|/*|*'/./'*|*'//'*|'') return 1 ;;
         esac
         case "$relative" in
-            bin/kremen|bin/kremen.exe|bin/kremen-selfhost|share/kremen/selfhost/*|share/kremen/runtime/kremen_rt.h|share/kremen/install.marker|share/kremen/install.manifest|share/doc/kremen/*) ;;
+            bin/kremen|bin/kremen.exe|bin/kremen-selfhost|share/kremen/selfhost/*|share/kremen/native/platform.h|share/kremen/runtime/kremen_rt.h|share/kremen/install.marker|share/kremen/install.manifest|share/doc/kremen/*) ;;
             *) return 1 ;;
         esac
     done < "$MANIFEST"
@@ -83,7 +83,8 @@ fi
 if [ "$WITH_SELFHOST" = true ]; then make -C "$SOURCE_ROOT" all selfhost; else make -C "$SOURCE_ROOT" all; fi
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/kremen-install.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
-mkdir -p "$WORK/bin" "$WORK/share/kremen/runtime" "$WORK/share/doc/kremen"
+mkdir -p "$WORK/bin" "$WORK/share/kremen/runtime" "$WORK/share/kremen/native" "$WORK/share/doc/kremen"
+install -m 644 "$SOURCE_ROOT/native/platform.h" "$WORK/share/kremen/native/platform.h"
 install -m 755 "$SOURCE_ROOT/build/kremen$EXE_SUFFIX" "$WORK/bin/kremen$EXE_SUFFIX"
 if [ "$WITH_SELFHOST" = true ]; then
     install -m 755 "$SOURCE_ROOT/selfhost/build/kremen-selfhost" "$WORK/bin/kremen-selfhost"

@@ -1,8 +1,87 @@
 # Updating an existing repository
 
-Use the complete 0.4.7 source tree when updating an older project. It includes the preceding stabilization and documentation work. Copying only the new files is not enough: keep compiler sources, build rules, tests, installed resources, and documentation from the same release.
+Use the complete 0.4.8 source tree when updating an older project. It includes the preceding stabilization and documentation work. Copying only the new files is not enough: keep compiler sources, build rules, tests, installed resources, and documentation from the same release.
 
 The lists below compare released checksum manifests. Paths are relative to the `kremen` project root. They describe release contents, not any additional local edits in your own repository. Merge those edits before replacing files.
+
+## From 0.4.7 to 0.4.8
+
+Add these files:
+
+```text
+.gitattributes
+CMakeLists.txt
+build.ps1
+docs/portable.md
+docs/v0.4.8.md
+install.ps1
+selfhost/bootstrap.ps1
+tests/native/backend_048.c
+tests/native/backend_048.sh
+tests/native/runtime_048.c
+tests/native/runtime_048.sh
+tests/portable/check.ps1
+tests/portable/check.sh
+tests/selfhost/output_048.c
+tests/selfhost/output_048.sh
+tests/windows/native.ps1
+tests/windows/runtime048.kr
+tests/windows/selfhost.ps1
+tools/backend_launcher.c
+tools/install-portable.sh
+tools/package-portable.ps1
+tools/package-portable.sh
+```
+
+Replace these existing files:
+
+```text
+.github/workflows/ci.yml
+CHANGELOG.md
+Makefile
+README.md
+VERSION
+docs/README.md
+docs/diagnostics.md
+docs/getting-started.md
+docs/install.md
+docs/language.md
+docs/profiles.md
+docs/repository-update.md
+docs/roadmap.md
+docs/safety.md
+docs/selfhosting.md
+docs/threads.md
+docs/v0.2.md
+docs/validation.md
+docs/windows.md
+install.sh
+native/core.c
+native/diagnostics.c
+native/doctor.c
+native/main.c
+native/modules.c
+native/platform.h
+runtime/kremen_rt.h
+selfhost/driver.c
+selfhost/host.c
+selfhost/host.h
+selfhost/platform.h
+selfhost/runtime.c
+selfhost/runtime.h
+selfhost/toolchain.kr
+tests/native/sanitize.sh
+tests/native/toolchain_stability.sh
+tests/selfhost/sanitize.sh
+```
+
+Regenerate and replace `SHA256SUMS` after all source edits. No source files are removed. Keep the native platform boundary, embedded runtime, subset support files, build scripts, installers, and tests from the same release. The Windows runtime no longer uses winpthreads; its native thread and filesystem calls remain behind the common runtime interface.
+
+The native Windows workflow uses PowerShell and Clang rather than MSYS2. The subset now has a native Windows bootstrap and driver as well. Its verified C seed and Kremen compiler source remain unchanged. `selfhost/toolchain.kr` carries the platform-aware driver and version update. Installed subset rebuild resources also need `share/kremen/native/platform.h`.
+
+Portable release archives include the pinned Zig SDK and a small native backend launcher; SDK binaries are release assets, not repository source files. Preserve the SDK's license material. Read [portable packages](portable.md), [Windows setup](windows.md), and [0.4.8 notes](v0.4.8.md) for commands, dependencies, guarantees, and limits.
+
+The CI workflow verifies native Windows execution, Linux regressions and sanitizers, both portable packages, and source archives before publishing release assets from main. Retain the workflow and its new test targets when updating an existing checkout.
 
 ## From 0.4.6 to 0.4.7
 

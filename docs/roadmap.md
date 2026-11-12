@@ -2,7 +2,7 @@
 
 The goal is to make Kremen useful for ordinary systems experiments and for structured learning. The initial `work` and `learn` profiles in 0.4.5 share language semantics, safety rules, module formats, and the C backend. Learning adds explicit requirements and explanations while retaining the shared safety checks.
 
-This is a development plan. Each release must be tested on its own merits, and unfinished work can move to a later milestone. The 0.4.4 through 0.4.7 rows describe implemented work; later rows remain planned. The first profile pilot moved forward to 0.4.5 so its real behavior could be tested before a larger lesson system. The 0.4.7 scope shifted to a first Windows profile and reproduced correctness problems; the earlier resource/effect proposal still needs a separate specification.
+This is a development plan. Each release must be tested on its own merits, and unfinished work can move to a later milestone. The 0.4.4 through 0.4.8 rows describe implemented work; later rows remain planned. The first profile pilot moved forward to 0.4.5 so its real behavior could be tested before a larger lesson system. Versions 0.4.7 and 0.4.8 prioritized a usable Windows host and portable distribution. Resource/effect contracts, project-profile configuration, and richer diagnostic recovery still need separate specifications and validation.
 
 | Version | Focus | Evidence needed before calling it complete |
 | --- | --- | --- |
@@ -10,7 +10,7 @@ This is a development plan. Each release must be tested on its own merits, and u
 | 0.4.5 | Security hardening and the first work/learn pilot | Shared safety, five specified learning rules, equal C output for accepted source, canonical source boundaries, bounded safe diagnostics, and deterministic mutation regressions |
 | 0.4.6 | Begin typed place/discard lowering; stabilize checking and output | Avoid unnecessary fixed-array length copies while preserving effects and checks; close learn result-discard gaps; cache zero-state queries; report failed writes and input conditions correctly |
 | 0.4.7 | First native Windows profile, setup diagnostics, and checked discards | Define the UCRT64 environment and platform boundary; preserve source/effect checks; avoid unnecessary discarded-value copies; validate binary filesystem behavior and report setup failures |
-| 0.4.8 | Extend profile integration and diagnostic tooling | Tested project-configuration precedence if added, useful feedback, stable ranges, and careful recovery for independent errors without misleading cascades |
+| 0.4.8 | Native host adapters and complete portable packages | Native Windows threads and UTF-16 paths without a compatibility runtime; native subset bootstrap; bundled backend discovery; package, relocation, and real-host checks |
 | 0.4.9 | Deterministic lesson runner and a first learning track | Runnable lessons, observable tests, ordered hints, offline operation, and validation by people unfamiliar with the language |
 | 0.4.10 | Stabilize the release candidate | Compatibility review, bounded diagnostics, regression coverage, clean installations, complete English guides, and no placeholder commands |
 | 0.5.0 | Publish the tested profile and learning workflow | A coherent first course and a stable documented interface; remaining experimental features clearly identified |
@@ -19,7 +19,7 @@ The release after 0.4.10 is planned as 0.5.0, rather than 0.4.11. These are vers
 
 ## What exists today
 
-0.4.7 has `--mode=work|learn`, an offline diagnostic catalog with 46 entries, `kremen doctor`, ten tutorial programs, a checked-input learning example, and independent integer workers. The initial [Windows profile](windows.md) uses MSYS2 UCRT64 GCC and winpthreads. [Work and learn profiles](profiles.md) specifies the five learning requirements and their expanded result-payload coverage. Project profile configuration, `kremen learn`, and browser execution do not exist yet.
+0.4.8 has `--mode=work|learn`, an offline diagnostic catalog with 46 entries, `kremen doctor`, ten tutorial programs, a checked-input learning example, and independent integer workers. Native [Windows support](windows.md) now uses Windows threading, process, and filesystem primitives; [portable packages](portable.md) provide the backend for offline use on Linux and Windows. The smaller bootstrap subset can rebuild on both hosts. [Work and learn profiles](profiles.md) specifies the five learning requirements and their expanded result-payload coverage. Project profile configuration, `kremen learn`, and browser execution do not exist yet.
 
 The backend now has a focused typed lowering path for fixed-array lengths, explicit aggregate discards, and entirely ignored tuple patterns without unnecessary selected-value copies. This is an incremental step, not a replacement of the whole frontend/backend boundary with a general-purpose intermediate representation. Broader IR design and function-effect contracts remain separate work; adding an internal helper does not establish those language features.
 

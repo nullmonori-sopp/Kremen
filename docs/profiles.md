@@ -20,7 +20,7 @@ The selected profile applies to every implementation loaded for the program, inc
 
 Profiles currently belong to the full compiler. The self-hosted subset does not implement them. There is no persistent project-profile configuration, lesson runner, or browser execution in this release.
 
-The experimental [Windows profile](windows.md) uses the same work/learn interface and shared checks. Choose a working native backend with `kremen doctor` before trying to compile programs there. The command diagnoses setup; it does not select a semantic mode or check a lesson.
+The native [Windows profile](windows.md) uses the same work/learn interface and shared checks. Run `kremen doctor` after unpacking or moving a [portable package](portable.md), or after choosing a different external backend. The command diagnoses setup; it does not select a semantic mode or check a lesson.
 
 ## The five learning requirements
 

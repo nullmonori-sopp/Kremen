@@ -8,6 +8,9 @@ extern func rt_at(value string, index i64) i64
 extern func rt_cat(left string, right string) string
 extern func rt_equal(left string, right string) bool
 extern func host_argc() i64
+extern func host_windows() bool
+extern func host_exe_suffix() string
+extern func host_default_cc() string
 extern func host_env(name string) string
 extern func host_setenv(name string, value string) i64
 extern func host_resource(name string) string
@@ -54,13 +57,13 @@ func driver_usage_error(message string) i64 {
 
 func driver_help() i64 {
     unsafe {
-        host_print("Kremen selfhost 0.4.7 (bootstrap subset)\n", false)
+        host_print("Kremen selfhost 0.4.8 (bootstrap subset)\n", false)
         host_print("usage: kremen-selfhost check SOURCE.kr [--cc COMPILER] [-O0..-O3]\n", false)
         host_print("       kremen-selfhost emit-c SOURCE.kr -o FILE\n", false)
         host_print("       kremen-selfhost build SOURCE.kr [-o FILE] [--cc COMPILER] [-O0..-O3]\n", false)
         host_print("       kremen-selfhost run SOURCE.kr [--cc COMPILER] [-O0..-O3] [-- ARGS...]\n", false)
         host_print("       kremen-selfhost bootstrap [-o FILE] [--cc COMPILER] [-O0..-O3]\n", false)
-        host_print("defaults: build a.out; bootstrap kremen-selfhost; CC environment or cc; -O3\n", false)
+        host_print("defaults: platform executable names; CC environment or native C compiler; -O3\n", false)
         host_print("C backend: -std=c11 -Wall -Wextra -Wpedantic -Werror\n", false)
         host_print("The bootstrap subset has i64, bool, string, functions, variables and control flow.\n", false)
         host_print("The full native frontend remains a separate compiler. No shell is used for commands.\n", false)
@@ -87,6 +90,7 @@ func driver_parse() i64 {
         if !rt_equal(driver_command, "check") && !rt_equal(driver_command, "emit-c") && !rt_equal(driver_command, "build") && !rt_equal(driver_command, "run") && !rt_equal(driver_command, "bootstrap") {
             return driver_usage_error(rt_cat("unknown command: ", driver_command))
         }
+        driver_cc = host_default_cc()
         var environment_cc string = host_env("CC")
         if !rt_equal(environment_cc, "") {
             driver_cc = environment_cc
@@ -161,10 +165,14 @@ func driver_parse() i64 {
             }
         }
         if rt_equal(driver_command, "build") && !driver_output_set {
-            driver_output = "a.out"
+            if host_windows() {
+                driver_output = "a.exe"
+            } else {
+                driver_output = "a.out"
+            }
         }
         if rt_equal(driver_command, "bootstrap") && !driver_output_set {
-            driver_output = "kremen-selfhost"
+            driver_output = rt_cat("kremen-selfhost", host_exe_suffix())
         }
         return 0
     }
@@ -181,7 +189,7 @@ func driver_is_support_file(filename string) bool {
         if host_same_file(filename, rt_cat(driver_root, "/driver.c")) || host_same_file(filename, rt_cat(driver_root, "/host.c")) || host_same_file(filename, rt_cat(driver_root, "/host.h")) || host_same_file(filename, rt_cat(driver_root, "/platform.h")) {
             return true
         }
-        return host_same_file(filename, host_executable())
+        return host_same_file(filename, rt_cat(driver_root, "/../native/platform.h")) || host_same_file(filename, host_executable())
     }
 }
 
@@ -235,6 +243,10 @@ func driver_c_command() i64 {
         driver_argument("-Wextra")
         driver_argument("-Wpedantic")
         driver_argument("-Werror")
+        if host_windows() {
+            driver_argument("-D_CRT_SECURE_NO_WARNINGS")
+            driver_argument("-D_CRT_NONSTDC_NO_WARNINGS")
+        }
         driver_argument(driver_optimization)
         return 0
     }
@@ -247,6 +259,7 @@ func driver_cleanup() i64 {
         }
         host_remove(rt_cat(driver_work, "/program.c"))
         host_remove(rt_cat(driver_work, "/program"))
+        host_remove(rt_cat(driver_work, "/program.exe"))
         host_remove(rt_cat(driver_work, "/compiler.c"))
         host_remove(rt_cat(driver_work, "/compiler.o"))
         host_remove(rt_cat(driver_work, "/toolchain.c"))
@@ -275,7 +288,7 @@ func driver_prepare() i64 {
 func driver_normal() i64 {
     unsafe {
         var generated string = rt_cat(driver_work, "/program.c")
-        var binary string = rt_cat(driver_work, "/program")
+        var binary string = rt_cat(driver_work, rt_cat("/program", host_exe_suffix()))
         var status i64 = bootstrap_compile(driver_source, generated)
         if status != 0 {
             return status
@@ -336,7 +349,7 @@ func driver_bootstrap() i64 {
         var compiler_c string = rt_cat(driver_work, "/compiler.c")
         var compiler_object string = rt_cat(driver_work, "/compiler.o")
         var toolchain_c string = rt_cat(driver_work, "/toolchain.c")
-        var binary string = rt_cat(driver_work, "/program")
+        var binary string = rt_cat(driver_work, rt_cat("/program", host_exe_suffix()))
         var next_compiler string = rt_cat(driver_work, "/next-compiler.c")
         var next_toolchain string = rt_cat(driver_work, "/next-toolchain.c")
         var status i64 = bootstrap_compile(compiler_source, compiler_c)
@@ -395,7 +408,7 @@ func main() i64 {
             return driver_help()
         }
         if host_argc() == 2 && rt_equal(rt_arg(1), "--version") {
-            host_print("Kremen selfhost 0.4.7 (bootstrap subset)\n", false)
+            host_print("Kremen selfhost 0.4.8 (bootstrap subset)\n", false)
             return 0
         }
         var status i64 = driver_parse()
