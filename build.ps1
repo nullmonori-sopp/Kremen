@@ -19,7 +19,12 @@ $flags = @('-std=c11','-Wall','-Wextra','-Wpedantic','-Werror','-O3',
 $target = & $Compiler '-dumpmachine'
 if ($LASTEXITCODE -ne 0) { throw 'Cannot query the selected compiler target.' }
 if ("$target" -match 'msvc') { $flags += '-fms-runtime-lib=static' }
-& $Compiler @flags @sources (Join-Path $PSScriptRoot 'native/fast_copy.c') '-o' (Join-Path $BuildDir 'kremen.exe')
+$resources = @(
+    ('-DKM_RUNTIME_PATH="' + (Join-Path $PSScriptRoot 'runtime/kremen_rt.h').Replace('\','/') + '"'),
+    ('-DKM_STDLIB_PATH="' + (Join-Path $PSScriptRoot 'stdlib').Replace('\','/') + '"'),
+    ('-DKM_SELFHOST_PATH="' + (Join-Path $PSScriptRoot 'selfhost/build/kremen-selfhost.exe').Replace('\','/') + '"')
+)
+& $Compiler @flags @resources @sources (Join-Path $PSScriptRoot 'native/fast_copy.c') '-o' (Join-Path $BuildDir 'kremen.exe')
 if ($LASTEXITCODE -ne 0) { throw "Native compiler build failed ($LASTEXITCODE). Use a Visual Studio developer terminal with the Windows SDK available." }
 & $Compiler @flags (Join-Path $PSScriptRoot 'tools/backend_launcher.c') '-o' (Join-Path $BuildDir 'kremen-backend.exe')
 if ($LASTEXITCODE -ne 0) { throw "Backend launcher build failed ($LASTEXITCODE)." }

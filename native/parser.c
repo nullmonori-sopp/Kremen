@@ -255,6 +255,9 @@ static Node *declaration(Parser *p) {
         }
         expect(p, ")"); expect(p, "="); n->value = expression(p, 0, true); return n;
     }
+    /* Lexer tokens live in the context arena and are complete before parsing.
+     * Retain the identifier without copying a Token into every AST node. */
+    n->name_token = &p->tokens.data[p->pos];
     n->name = expect(p, "ident").text;
     n->flag = strcmp(start.kind, "const") == 0;
     if (!at(p, "=") && !at(p, ";") && !at(p, "}")) n->annotation = parse_type(p);

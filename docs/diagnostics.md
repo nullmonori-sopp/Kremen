@@ -2,7 +2,7 @@
 
 An error message is a report about a specific operation, not a judgment about your ability to program. Read the first line, find the marked code, and make one small change. Then run `check` again.
 
-This page describes 0.4.8. Examples shorten directory names for readability; the full compiler normally prints the resolved source path, with unsafe terminal characters escaped.
+This page describes 0.4.9. Examples shorten directory names for readability; the full compiler normally prints the resolved source path, with unsafe terminal characters escaped.
 
 ## Read the location first
 
@@ -37,7 +37,9 @@ Read the first line from left to right:
 
 The numbered lines are your source, including nearby context when available. `^` marks the beginning of the token, and `~` continues its underline. Here the variable requires an integer, but `"many"` is a string. If you meant a number, write `var count i64 = 5`. If you meant text, use `var count string = "many"` instead. Choose the type that matches your program's intent.
 
-A code such as `E110` is useful when reporting a problem, but it is not a substitute for reading the message. Several checks share a code. An `error[W001]` is also fatal: Kremen treats its warning checks as errors by default.
+A code such as `E110` is useful when reporting a problem, but it is not a substitute for reading the message. Several checks share a code. An `error[W001]` is also fatal: Kremen treats its warning checks as errors by default. Its text output adds `note: warnings are treated as errors by default`. Fix the unused binding or parameter, or start its name with `_` when leaving an ordinary value unused is intentional. Learn has additional rules for result-bearing values; an underscore does not waive those requirements.
+
+For an unused binding such as `var count = 5`, the underline selects `count`, rather than `var`. Previous-declaration notes likewise select the earlier binding's name. This helps when a line contains several declarations or a declaration keyword is far from the name that needs your attention.
 
 ## Ask for an explanation offline
 
@@ -149,7 +151,9 @@ Use `--diagnostic-format=text` for the default readable output. The option is ac
 
 | Field | Meaning |
 | --- | --- |
-| `kind`, `code`, `message` | Error category, diagnostic code, and readable explanation |
+| `kind`, `code`, `message` | Failure record kind, diagnostic code, and readable explanation; `kind` remains `"error"` for compatibility |
+| `severity` | `"warning"` for a `W` category, otherwise `"error"`; added in 0.4.9 |
+| `fatal` | `true`: this diagnostic makes the command fail, including warnings; added in 0.4.9 |
 | `message_truncated` | Whether a very long message had to be shortened |
 | `file`, `line`, `column` | Source path and one-based byte position |
 | `end_line`, `end_column` | Exclusive end of the marked byte range |
@@ -163,6 +167,8 @@ Use `--diagnostic-format=text` for the default readable output. The option is ac
 | `imports` | Import-origin locations leading to the failing source |
 
 Editor integrations should use the file/range fields to select source. The displayed excerpt can be clipped and should not be used to reconstruct the whole line. JSON strings escape control characters and invalid UTF-8 bytes so malformed input still produces a valid error record. Visual caret width retains the Unicode limits explained above.
+
+Use `severity` to choose an editor icon and `fatal` to describe whether the command can continue successfully. For `W001`, the record contains `"kind":"error"`, `"severity":"warning"`, and `"fatal":true`. A warning icon therefore does not mean the compiler accepted the program. Strict warning checks remain enabled in work and learn.
 
 JSON also escapes direction-changing characters. Invalid UTF-8 bytes are reported as byte-valued Unicode escapes; a decoded JSON string alone cannot generally round-trip an invalid-UTF-8 filesystem name. Valid UTF-8 names retain their decoded path. The byte offsets and lengths describe the input file, including when its content is malformed.
 

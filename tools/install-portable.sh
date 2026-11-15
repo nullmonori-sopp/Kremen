@@ -23,7 +23,7 @@ OWNED=false
 if [ -f "$MARKER" ] && [ -f "$MANIFEST" ] && [ "$(cat "$MARKER")" = kremen-portable-install-v1 ]; then OWNED=true; fi
 valid_path() {
     case "$1" in ''|/*|../*|*/../*|*/..|./*|*/./*|*/.|*//*|*\\*) return 1 ;; esac
-    case "$1" in bin/kremen|bin/kremen-selfhost|backend/*|share/kremen/runtime/kremen_rt.h|share/kremen/native/platform.h|share/kremen/selfhost/*|share/kremen/install-portable.sh|share/kremen/portable-install.marker|share/kremen/portable-install.manifest|share/doc/kremen/*) return 0 ;; *) return 1 ;; esac
+    case "$1" in bin/kremen|bin/kremen-selfhost|backend/*|share/kremen/runtime/kremen_rt.h|share/kremen/native/platform.h|share/kremen/selfhost/*|share/kremen/stdlib/*|share/kremen/install-portable.sh|share/kremen/portable-install.marker|share/kremen/portable-install.manifest|share/doc/kremen/*) return 0 ;; *) return 1 ;; esac
 }
 # A leaf symlink is safe to remove, but no operation may traverse a symlink
 # within the prefix to write or remove a file outside this installation.

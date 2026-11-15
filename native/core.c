@@ -314,6 +314,7 @@ void km_diagnostic_span(Token tok, DiagnosticSpan *span) { diagnostic_span(tok, 
 
 _Noreturn void km_error(Context *ctx, Token tok, const char *code, const char *format, ...) {
     const char *hint = diagnostic_hint(ctx, code, format);
+    bool warning = code[0] == 'W';
     Token imports[128]; size_t import_count = 0;
     Source *origin = tok.src;
     while (origin && origin->import_origin.src && import_count < 128) {
@@ -335,6 +336,9 @@ _Noreturn void km_error(Context *ctx, Token tok, const char *code, const char *f
     va_end(args);
     if (ctx->diagnostic_json) {
         fputs("{\"kind\":\"error\",\"code\":", stderr); diagnostic_json_string(code);
+        /* kind describes the failed operation for existing consumers. Severity
+         * preserves the warning category even though strict checks are fatal. */
+        fprintf(stderr, ",\"severity\":\"%s\",\"fatal\":true", warning ? "warning" : "error");
         fputs(",\"message\":", stderr); diagnostic_json_string(message);
         fprintf(stderr, ",\"message_truncated\":%s,", truncated ? "true" : "false");
         diagnostic_json_location(tok);
@@ -359,6 +363,7 @@ _Noreturn void km_error(Context *ctx, Token tok, const char *code, const char *f
         fprintf(stderr, ":%d:%d: error[%s]: ", tok.line ? tok.line : 1, tok.col ? tok.col : 1, code);
         km_diagnostic_text(stderr, message); fputc('\n', stderr);
         diagnostic_text_location(tok, true);
+        if (warning) fputs(" note: warnings are treated as errors by default\n", stderr);
         if (ctx->related_message && ctx->related_token.src) {
             Token related = ctx->related_token;
             km_diagnostic_text(stderr, related.src->path);

@@ -352,7 +352,7 @@ static Symbol *bind(Checker *c,Node *n,Type *t,bool mutable) {
         km_error(cx(c),n->tok,"E108","declaration '%s' shadows an existing or reserved name",n->name);
     }
     Symbol *s=km_alloc(cx(c),sizeof(*s));
-    s->name=n->name;s->type=t;s->mutable=mutable;s->tok=n->tok;s->depth=c->depth;
+    s->name=n->name;s->type=t;s->mutable=mutable;s->tok=n->name_token?*n->name_token:n->tok;s->depth=c->depth;
     s->cname=km_sprintf(cx(c),"kr_v_%u_%s",++cx(c)->next_symbol,n->name);
     if(c->local_count>=c->local_cap/2)grow_locals(c);
     Binding *b=km_alloc(cx(c),sizeof(*b)); b->sym=s;b->alive=true;b->next=c->bindings;c->bindings=b;

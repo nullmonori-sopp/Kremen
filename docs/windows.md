@@ -1,6 +1,6 @@
 # Kremen on Windows
 
-Kremen 0.4.8 runs as native Windows programs. The full compiler and bootstrap-subset driver use Windows process and filesystem operations directly. Full-language workers use Windows thread primitives through the C runtime; a pthread compatibility DLL, MSYS2, and WSL are no longer needed.
+Kremen 0.4.9 runs as native Windows programs. The full compiler and bootstrap-subset driver use Windows process and filesystem operations directly. Full-language workers use Windows thread primitives through the C runtime; a pthread compatibility DLL, MSYS2, and WSL are no longer needed.
 
 Use the Windows x86-64 portable package when you want to write Kremen programs. Build from source when you want to change the compiler. These workflows have different prerequisites.
 
@@ -58,7 +58,7 @@ The source build uses the portable C implementation of byte copying. The Linux a
 
 The bootstrap subset has its own `selfhost/bootstrap.ps1` workflow. It verifies the committed seed against successive generated C stages before publishing the driver. See [Self-hosting](selfhosting.md) for its commands and language limits. Compiling the subset on Windows does not mean the full language's frontend has become self-hosted.
 
-Use the matching 0.4.8 bootstrap source and regenerated C seed together. The emitter recognizes both path separators so embedded source basenames remain stable between native PowerShell paths and Linux paths.
+Use the matching bootstrap source and regenerated C seed from the same checkout together. The emitter recognizes both path separators so embedded source basenames remain stable between native PowerShell paths and Linux paths.
 
 To install a complete portable package into your user profile, run its `install.ps1`. The same installer can copy an already built source tree. [Installation](install.md#windows-source-builds-and-installation) explains `-Prefix`, `-SourceRoot`, upgrades, and removal; the package can also be used directly without installation.
 
@@ -70,7 +70,7 @@ Normal Unicode paths, spaces, and shell metacharacters can therefore be used wit
 
 Existing source paths are resolved through Windows file handles. Symlinks and junctions are followed before checking the selected project root. File identities protect source and toolchain resources from output aliases, including hard links and case aliases. A root ancestor's identity is checked as well, so case-sensitive directories do not become interchangeable merely because their spellings differ only by case.
 
-Imports remain local and relative. Drive-qualified paths and UNC paths do not become valid import expressions; use an explicit wider `--root` for a deliberately shared source directory. Ordinary source/output command-line paths are separate from import syntax.
+Project imports remain local and relative. Drive-qualified paths and UNC paths do not become valid import expressions; use an explicit wider `--root` for a deliberately shared source directory. The reserved `std/` prefix selects the bundled library, such as `import "std/math"`, from `share/kremen/stdlib/`. It needs no wider project root. Ordinary source/output command-line paths are separate from import syntax.
 
 UTF-8 path support does not promise that every Windows namespace or extended path length is accepted. Host path limits, access permissions, device names, and filesystem behavior still apply. Do not use unpaired UTF-16 surrogates as portable filenames.
 

@@ -25,8 +25,8 @@ static const Explanation explanations[] = {
      "Use .kr for implementations and .krh for matching declarations. Import an implementation or a directory containing implementations.",
      "import \"math/vec\""},
     {"E013", "Import could not be resolved",
-     "An import path, qualifier, or alias is invalid, missing, or outside the selected project root. Imports are relative local paths.",
-     "Check the path relative to the importing file. Import the .kr implementation; its .krh is loaded automatically. Use --root deliberately when a wider project boundary is needed.",
+     "An import path, qualifier, or alias is invalid, missing, or outside its source boundary. Local imports use the project root; std/ imports use the installed standard library.",
+     "Check a local path relative to the importing file, or keep share/kremen/stdlib beside the installed compiler for std/ imports. Import an implementation, not its .krh. Use --root only to widen a local project boundary.",
      "import vec \"math/vec\""},
     {"E014", "Module dependency cycle or limit",
      "A module is imported again while it is still loading, or the program exceeds the supported module count of 128.",
@@ -189,7 +189,7 @@ static const Explanation explanations[] = {
      "Call readIntResult(), then inspect, handle, or propagate the !i64 result. This rule covers integer input; it is not a general checked I/O effect system.",
      "func readValue() !i64 { return ok(readIntResult()?) }"},
     {"W001", "Unused variable or parameter",
-     "A declared local, receiver, or parameter is never read. Warning checks are fatal by default because an unused value can reveal an incomplete calculation.",
+     "A declared local, receiver, or parameter is never read. Warning checks are fatal by default because an unused value can reveal an incomplete calculation. Text diagnostics identify that policy; JSON keeps kind=error and reports severity=warning with fatal=true.",
      "Use or remove the declaration. Prefix an intentionally unused binding with _. A leading underscore acknowledges unusedness; it does not release a resource.",
      "func answer(_unused i64) i64 { return 42 }"}
 };

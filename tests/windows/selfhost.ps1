@@ -23,7 +23,7 @@ function Invoke-Driver([string[]]$Arguments, [int]$Expected = 0, [string]$Execut
 }
 function Write-Source([string]$Path, [string]$Text) { [IO.File]::WriteAllText($Path, $Text, $Utf8) }
 try {
-    if (!(Invoke-Driver @("--version")).Contains("0.4.8")) { throw "Wrong driver version." }
+    if (!(Invoke-Driver @("--version")).Contains("0.4.9")) { throw "Wrong driver version." }
     Pass "native subset driver version"
     $Source = Join-Path $Work "задача Ω.kr"
     Write-Source $Source "func main() i64 { return 0 }`n"
@@ -126,7 +126,7 @@ func main() i64 {
     Move-Item -LiteralPath $Prefix -Destination $Moved
     Invoke-Driver @("run", $Return, "--cc", $Compiler) 7 (Join-Path $Moved "bin/kremen-selfhost.exe") | Out-Null
     Pass "installed subset resources survive Unicode prefix relocation"
-    Write-Output "Native selfhost 0.4.8 checks passed: $Total."
+    Write-Output "Native selfhost 0.4.9 checks passed: $Total."
 }
 finally {
     $env:KREMEN_SELFHOST_ROOT = $OriginalOverride

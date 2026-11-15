@@ -15,21 +15,21 @@ Choose a portable binary package if you want to write programs now. Choose a sou
 The source release files are:
 
 ```text
-kremen-v0.4.8.zip
-kremen-v0.4.8.tar.gz
-kremen-v0.4.8.sha256
+kremen-v0.4.9.zip
+kremen-v0.4.9.tar.gz
+kremen-v0.4.9.sha256
 ```
 
 If you downloaded both archives, verify them and unpack either one:
 
 ```sh
-sha256sum -c kremen-v0.4.8.sha256
-unzip kremen-v0.4.8.zip
+sha256sum -c kremen-v0.4.9.sha256
+unzip kremen-v0.4.9.zip
 cd kremen
 sha256sum -c SHA256SUMS
 ```
 
-For the tar archive, use `tar -xzf kremen-v0.4.8.tar.gz`. The external checksum file lists both source archives; a missing one is reported as missing. If you downloaded only one, compare its checksum with its line in the external file. A checksum detects changed bytes; it is not a publisher signature.
+For the tar archive, use `tar -xzf kremen-v0.4.9.tar.gz`. The external checksum file lists both source archives; a missing one is reported as missing. If you downloaded only one, compare its checksum with its line in the external file. A checksum detects changed bytes; it is not a publisher signature.
 
 `kremen.zip` is an alias of the current source ZIP. Source archives contain build scripts, documentation, examples, tests, and the verified C seed. They exclude generated executables, build directories, SDK downloads, caches, and Python files. Portable packages are separate platform-specific artifacts.
 
@@ -78,12 +78,15 @@ CC=/absolute/path/to/gcc sh install.sh --prefix /absolute/path/to/kremen
 | `bin/kremen` | Full-language compiler and formatter |
 | `bin/kremen-selfhost` | Kremen-written compiler and CLI for the bootstrap subset |
 | `share/kremen/runtime/kremen_rt.h` | Runtime embedded in generated full-language C |
+| `share/kremen/stdlib/` | Bundled Kremen library sources and paired API declarations |
 | `share/kremen/selfhost/` | Bootstrap sources, seed, runtime, and host primitives |
 | `share/kremen/native/` | Native platform support needed by installed bootstrap resources |
 | `share/kremen/install.marker`, `install.manifest` | Ownership marker and installed-file list |
 | `share/doc/kremen/` | Project license, English guides, examples, and saved benchmark reports |
 
 The source installer compiles both toolchains before changing the destination. Repeating it upgrades an installation owned by its marker and manifest. It refuses an unrelated compiler or occupied data directory without valid ownership information.
+
+The [integer math example](../examples/math.kr) uses the installed `std/math` sources. A personal project can import the library without copying those files or widening its project root. Keep the installed `share/` directory with `bin/` when relocating the prefix.
 
 A source installation normally uses your selected system backend. A portable package additionally contains `backend/` and chooses its matching bundled launcher unless `CC` or `--cc` overrides it. Keep this distinction when comparing prerequisites.
 

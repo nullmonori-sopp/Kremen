@@ -4,7 +4,7 @@ A compiler is **self-hosted** when it can compile the language implementation wr
 
 The bootstrap frontend and its build policy live in `.kr` files. C supplies strings, memory, filesystem access, process primitives, and an entry point. A C11 toolchain, libc, and a hosted OS are still required. Self-hosting has not removed those dependencies.
 
-The subset runs natively on Linux and Windows in 0.4.8. It has the same smaller language on both hosts. Windows uses the native process and UTF-16 filesystem boundary; it does not need a POSIX compatibility shell. A complete [portable package](portable.md) carries the subset driver, its rebuild resources, and a matching C backend.
+The subset runs natively on Linux and Windows in 0.4.9. It has the same smaller language on both hosts. Windows uses the native process and UTF-16 filesystem boundary; it does not need a POSIX compatibility shell. A complete [portable package](portable.md) carries the subset driver, its rebuild resources, and a matching C backend.
 
 ## Build and use the subset toolchain
 

@@ -65,6 +65,10 @@ test: build/kremen$(EXEEXT)
 	sh tests/native/doctor_047.sh ./build/kremen$(EXEEXT)
 	sh tests/native/runtime_048.sh
 	sh tests/native/backend_048.sh
+	sh tests/native/modules_049.sh ./build/kremen$(EXEEXT)
+	sh tests/native/math_049.sh ./build/kremen$(EXEEXT)
+	sh tests/native/optimization_049.sh ./build/kremen$(EXEEXT)
+	sh tests/native/diagnostics_049.sh ./build/kremen$(EXEEXT)
 	sh tests/native/threads_043.sh ./build/kremen$(EXEEXT)
 	sh tests/native/threads_runtime.sh
 	sh tests/native/tutorial.sh ./build/kremen$(EXEEXT)
@@ -98,6 +102,7 @@ examples: build/kremen$(EXEEXT)
 	./build/kremen$(EXEEXT) run examples/algebra.kr
 	./build/kremen$(EXEEXT) run examples/resources.kr
 	./build/kremen$(EXEEXT) run examples/threads.kr
+	./build/kremen$(EXEEXT) run examples/math.kr
 	printf '4\n' | ./build/kremen$(EXEEXT) run examples/learn/checked_input.kr --mode=learn
 
 bootstrap:

@@ -6,13 +6,16 @@
 #ifndef KM_RUNTIME_PATH
 #define KM_RUNTIME_PATH "runtime/kremen_rt.h"
 #endif
+#ifndef KM_STDLIB_PATH
+#define KM_STDLIB_PATH ""
+#endif
 static char current_executable[PATH_MAX];
 #ifndef KM_SELFHOST_PATH
 #define KM_SELFHOST_PATH "selfhost/build/kremen-selfhost" KM_EXE_SUFFIX
 #endif
 
 static void usage(void) {
-    puts("Kremen 0.4.8 — native C11 toolchain\n"
+    puts("Kremen 0.4.9 — native C11 toolchain\n"
          "usage: kremen check|build|run|emit-c source.kr [options]\n"
          "       kremen fmt [--check|-w] [file.kr file.krh ...]\n"
          "       kremen explain [CODE|--list]\n"
@@ -105,6 +108,19 @@ static char *runtime_path(Context *ctx) {
     }
     return km_host_realpath(KM_RUNTIME_PATH, resolved) ? km_strdup(ctx, resolved) : km_strdup(ctx, KM_RUNTIME_PATH);
 }
+static char *stdlib_path(Context *ctx) {
+    char resolved[PATH_MAX];
+    if (*current_executable) {
+        char exe[PATH_MAX]; snprintf(exe, sizeof exe, "%s", current_executable);
+        char *slash = strrchr(exe, '/'); if (slash) *slash = 0;
+        const char *locations[] = {"../share/kremen/stdlib", "../stdlib"};
+        for (size_t i = 0; i < sizeof locations / sizeof *locations; i++) {
+            char *candidate = km_sprintf(ctx, "%s/%s", exe, locations[i]);
+            if (km_host_realpath(candidate, resolved) && km_host_path_is_dir(resolved)) return km_strdup(ctx, resolved);
+        }
+    }
+    return *KM_STDLIB_PATH && km_host_realpath(KM_STDLIB_PATH, resolved) && km_host_path_is_dir(resolved) ? km_strdup(ctx, resolved) : NULL;
+}
 static char *default_backend(Context *ctx) {
     if (*current_executable) {
         char parent[PATH_MAX], resolved[PATH_MAX];
@@ -154,7 +170,7 @@ int main(int argc, char **argv) {
     km_host_streams();
     (void)km_platform_executable(argv[0], current_executable, sizeof current_executable);
     if (argc < 2 || !strcmp(argv[1], "--help") || !strcmp(argv[1], "help")) { usage(); return argc < 2 ? 1 : 0; }
-    if (!strcmp(argv[1], "--version")) { puts("Kremen 0.4.8 (native C11)"); return 0; }
+    if (!strcmp(argv[1], "--version")) { puts("Kremen 0.4.9 (native C11)"); return 0; }
     if (!strcmp(argv[1], "selfhost")) return selfhost(argc, argv);
     const char *command = argv[1]; bool fmt = !strcmp(command, "fmt"), explain = !strcmp(command, "explain"), doctor = !strcmp(command, "doctor");
     Context *ctx = calloc(1, sizeof *ctx); if (!ctx) return 2;
@@ -227,6 +243,7 @@ int main(int argc, char **argv) {
     if (fmt && format_check && write_format) km_error(ctx, (Token){0}, "E001", "fmt --check and -w cannot be combined");
     if (fmt && count > 1 && !format_check && !write_format) km_error(ctx, (Token){0}, "E001", "formatting multiple files requires --check or -w");
     ctx->runtime_path = runtime_path(ctx);
+    ctx->stdlib_root = stdlib_path(ctx);
     int result = 0;
     if (fmt) {
         if (!count) {

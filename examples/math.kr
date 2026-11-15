@@ -1,0 +1,23 @@
+package main
+import "std/math"
+// Fallible operations return !i64: match handles success and failure explicitly.
+func describe(label string, result !i64) {
+	match result {
+		ok(value) => {
+			println(label, value)
+		}
+		fail(code) => {
+			println(label, "failed with code", code)
+		}
+	}
+}
+func main() {
+	println("minimum:", math.min(-5, 9))
+	println("greatest common divisor:", math.gcd(-84, 30))
+	println("magnitude of smallest i64:", math.magnitude(-9223372036854775808))
+	describe("clamped:", math.clamp(150, 0, 100))
+	describe("least common multiple:", math.lcm(12, 18))
+	describe("2 to the tenth power:", math.pow(2, 10))
+	describe("integer square root:", math.isqrt(99))
+	describe("checked overflow:", math.add(9223372036854775807, 1))
+}

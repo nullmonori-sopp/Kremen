@@ -16,7 +16,7 @@ $OldLib = $env:LIB
 $OldLibPath = $env:LIBPATH
 $Total = 0
 $Utf8 = [Text.UTF8Encoding]::new($false)
-function Pass([string]$Label) { $script:Total++; Write-Output "ok portable048.$script:Total - $Label" }
+function Pass([string]$Label) { $script:Total++; Write-Output "ok portable049.$script:Total - $Label" }
 function Invoke-Portable([string[]]$CommandArguments, [int]$Expected = 0, [string]$Executable = $script:Kremen) {
     $OutputFile = Join-Path $Work 'output.txt'
     $ErrorFile = Join-Path $Work 'error.txt'
@@ -86,6 +86,13 @@ try {
             if ((Invoke-Portable @('run',$Source,"--mode=$Mode")) -ne 'native runtime 048 ok') { throw "Runtime output differs in $Mode." }
             Pass "$Mode Unicode filesystem and native worker runtime"
         }
+        $Math = Join-Path $Work 'математика.kr'
+        if (-not (Test-Path -LiteralPath (Join-Path $PackageRoot 'share/kremen/stdlib/math/math.krh') -PathType Leaf)) { throw 'Bundled math header missing.' }
+        [IO.File]::WriteAllText($Math, 'import "std/math"' + "`n" + 'func main() { println(math.gcd(-84, 30), math.min(-5, 9)) }' + "`n", $Utf8)
+        foreach ($Mode in @('work','learn')) {
+            if ((Invoke-Portable @('run',$Math,"--mode=$Mode")) -ne '6 -5') { throw "Bundled math output differs in $Mode." }
+            Pass "$Mode standard math imports outside the portable installation"
+        }
         $CSource = Join-Path $Work 'generated.c'
         Invoke-Portable @('emit-c',$Source,'-o',$CSource) | Out-Null
         $Program = Join-Path $Work 'program.exe'
@@ -133,11 +140,17 @@ try {
     Pass 'prebuilt installation copies the native compiler and SDK'
     if (-not (Invoke-Portable @('doctor') 0 (Join-Path $Prefix 'bin/kremen.exe')).Contains('Worker spawn/join: OK')) { throw 'Installed doctor failed.' }
     Pass 'installed portable compiler discovers its own bundled backend'
+    if (-not (Test-Path -LiteralPath (Join-Path $Prefix 'share/kremen/stdlib/math/math.krh') -PathType Leaf)) { throw 'Installed math header missing.' }
+    if ((Invoke-Portable @('run',$Math,'--mode=learn') 0 (Join-Path $Prefix 'bin/kremen.exe')) -ne '6 -5') { throw 'Installed standard math failed.' }
+    Pass 'prebuilt installation includes usable standard library source and headers'
+    [IO.File]::WriteAllText((Join-Path $Prefix 'share/kremen/stdlib/math/unrelated.txt'), 'retain', $Utf8)
     & (Join-Path $Prefix 'install.ps1') -Prefix $Prefix -Uninstall
     if ((Test-Path -LiteralPath (Join-Path $Prefix 'bin/kremen.exe')) -or (Test-Path -LiteralPath (Join-Path $Prefix 'backend/zig.exe'))) { throw 'Owned installation files remain.' }
+    if (Test-Path -LiteralPath (Join-Path $Prefix 'share/kremen/stdlib/math/math.kr')) { throw 'Owned standard library remains.' }
     if ([IO.File]::ReadAllText((Join-Path $Prefix 'bin/unrelated.txt')) -ne 'retain') { throw 'Uninstall removed unrelated data.' }
+    if ([IO.File]::ReadAllText((Join-Path $Prefix 'share/kremen/stdlib/math/unrelated.txt')) -ne 'retain') { throw 'Uninstall removed unrelated standard library data.' }
     Pass 'prebuilt uninstall removes owned files and preserves unrelated data'
-    Write-Output "Portable Windows 0.4.8 checks passed: $Total."
+    Write-Output "Portable Windows 0.4.9 checks passed: $Total."
 } finally {
     $env:PATH = $OldPath
     $env:CC = $OldCC

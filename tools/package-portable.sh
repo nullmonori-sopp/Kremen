@@ -86,6 +86,8 @@ cp "$BUILD_DIR/kremen" "$DEST/bin/kremen"
 cp -a "$BACKEND_ROOT/." "$DEST/backend/"
 cp "$BUILD_DIR/kremen-backend" "$DEST/backend/bin/clang"
 cp "$ROOT/runtime/kremen_rt.h" "$DEST/share/kremen/runtime/kremen_rt.h"
+mkdir -p "$DEST/share/kremen/stdlib"
+(cd "$ROOT/stdlib" && tar --exclude='A.a' -cf - .) | (cd "$DEST/share/kremen/stdlib" && tar -xf -)
 cp "$ROOT/LICENSE" "$DEST/LICENSE"
 cp "$ROOT/LICENSE" "$DEST/share/doc/kremen/LICENSE"
 cp "$ROOT/VERSION" "$DEST/VERSION"
