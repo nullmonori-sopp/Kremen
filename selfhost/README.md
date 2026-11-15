@@ -11,9 +11,10 @@ This directory contains a compiler and command-line driver written in the subset
 | `stage0.c` | Committed generated C seed for `bootstrap.kr` |
 | `runtime.c`, `runtime.h` | Strings, checked arithmetic, source input/output, arguments, and arena storage |
 | `host.c`, `host.h` | Process, path, temporary-file, and artifact-publication primitives |
-| `platform.h` | Executable discovery, including the POSIX argv/PATH fallback |
+| `platform.h` | Host bridge: native Windows helpers and POSIX executable discovery |
 | `driver.c` | Small C entry point calling `kr_main` |
 | `bootstrap.sh` | Initial build and fixed-point checks |
+| `bootstrap.ps1` | Native Windows build and the same fixed-point comparisons |
 
 There is no parser or generator hidden in the C host layer. C provides the operations the subset cannot yet implement. No Python or network dependency is involved.
 
@@ -30,6 +31,17 @@ selfhost/build/kremen-selfhost bootstrap -o build/kremen-selfhost-next
 The example produces `720|18|ok`. Initial stages use `-std=c11 -O2 -Wall -Wextra -Wpedantic -Werror`; the user-facing driver defaults to `-O3`.
 
 `bootstrap.sh` compiles the seed, translates and compiles stage 1, translates and compiles stage 2, and obtains stage 3. It checks `stage0.c == stage1.c == stage2.c == stage3.c`. The driver also verifies C for both the compiler and CLI during `bootstrap`. Comparisons concern C source, not machine code.
+
+On Windows, use PowerShell 7 with native Clang and the Windows SDK configured for a source build:
+
+```powershell
+.\selfhost\bootstrap.ps1 -Compiler clang
+.\selfhost\build\kremen-selfhost.exe check .\selfhost\example.kr --cc clang
+.\selfhost\build\kremen-selfhost.exe run .\selfhost\example.kr --cc clang -- "$env:TEMP\example.txt"
+Get-Content -LiteralPath "$env:TEMP\example.txt"
+```
+
+The PowerShell script checks the same C fixed point and example. It does not use a Unix shell or pthread compatibility library. A complete [portable package](../docs/portable.md) already contains the subset driver and backend; ordinary use does not need the source-build development tools.
 
 ## The subset's language
 
@@ -53,7 +65,9 @@ Frontend messages contain the input path, line, column, and a bounded excerpt. I
 
 The full compiler's `--diagnostic-format=json` option is not a bootstrap command-line option. The subset continues to emit its own text diagnostics.
 
-Generated arithmetic errors use an embedded source basename and line/column. Basenames keep generated C reproducible across checkout relocation. Those subset runtime errors do not embed the full compiler's source excerpts. Backend errors name generated C files.
+Generated arithmetic errors use an embedded source basename and line/column. Basenames recognize both `/` and `\`, keeping generated C reproducible across checkout relocation and native Windows path spelling. Those subset runtime errors do not embed the full compiler's source excerpts. Backend errors name generated C files.
+
+The subset driver checks its final standard-output flush and sticky stream error after runtime cleanup. A failed output changes a previously successful exit to failure and preserves an existing nonzero exit. Its late text report has no source underline; buffering prevents assigning the error to one original print operation.
 
 ## Updating the seed
 
@@ -69,3 +83,5 @@ make test-selfhost
 ```
 
 Only commit the seed after the fixed point and tests pass. If the new compiler needs syntax the previous stage does not support, introduce that feature in smaller steps. Test the driver as well as the frontend: both use this parser. The 0.4.2 seed includes expression-location tracking and was regenerated through the previous stage.
+
+The 0.4.8 seed is regenerated after correcting basename handling for Windows backslashes. Keep that seed and the matching `bootstrap.kr` together. Replacing the generated C by hand would hide the mismatch rather than establish a valid bootstrap.

@@ -3523,119 +3523,128 @@ int64_t kr_bootstrap_value_1904 = filename_index;
 int64_t kr_bootstrap_value_1905 = rt_at(kr_bootstrap_value_1903, kr_bootstrap_value_1904);
 int64_t kr_bootstrap_value_1906 = kr_bootstrap_value_1905;
 bool kr_bootstrap_value_1907 = (kr_bootstrap_value_1906 == INT64_C(47));
-if (kr_bootstrap_value_1907) {
-int64_t kr_bootstrap_value_1908 = filename_index;
-int64_t kr_bootstrap_value_1909 = rt_iadd(kr_bootstrap_value_1908, INT64_C(1), kr_bootstrap_value_source, INT64_C(908), INT64_C(85));
-filename_start = kr_bootstrap_value_1909;
-}
+bool kr_bootstrap_value_1908 = kr_bootstrap_value_1907;
+if (!kr_bootstrap_value_1908) {
+const char * kr_bootstrap_value_1909 = input;
 int64_t kr_bootstrap_value_1910 = filename_index;
-int64_t kr_bootstrap_value_1911 = rt_iadd(kr_bootstrap_value_1910, INT64_C(1), kr_bootstrap_value_source, INT64_C(909), INT64_C(45));
-filename_index = kr_bootstrap_value_1911;
+int64_t kr_bootstrap_value_1911 = rt_at(kr_bootstrap_value_1909, kr_bootstrap_value_1910);
+int64_t kr_bootstrap_value_1912 = kr_bootstrap_value_1911;
+bool kr_bootstrap_value_1913 = (kr_bootstrap_value_1912 == INT64_C(92));
+kr_bootstrap_value_1908 = kr_bootstrap_value_1913;
+}
+if (kr_bootstrap_value_1908) {
+int64_t kr_bootstrap_value_1914 = filename_index;
+int64_t kr_bootstrap_value_1915 = rt_iadd(kr_bootstrap_value_1914, INT64_C(1), kr_bootstrap_value_source, INT64_C(908), INT64_C(123));
+filename_start = kr_bootstrap_value_1915;
+}
+int64_t kr_bootstrap_value_1916 = filename_index;
+int64_t kr_bootstrap_value_1917 = rt_iadd(kr_bootstrap_value_1916, INT64_C(1), kr_bootstrap_value_source, INT64_C(909), INT64_C(45));
+filename_index = kr_bootstrap_value_1917;
 }
 }
-const char * kr_bootstrap_value_1912 = input;
-int64_t kr_bootstrap_value_1913 = filename_start;
-const char * kr_bootstrap_value_1914 = input;
-int64_t kr_bootstrap_value_1915 = rt_len(kr_bootstrap_value_1914);
-int64_t kr_bootstrap_value_1916 = kr_bootstrap_value_1915;
-const char * kr_bootstrap_value_1917 = rt_slice(kr_bootstrap_value_1912, kr_bootstrap_value_1913, kr_bootstrap_value_1916);
-const char * kr_bootstrap_value_1918 = kr_bootstrap_value_1917;
-const char * kr_bootstrap_value_1919 = semantic_quote_bytes(kr_bootstrap_value_1918);
-semantic_source_literal = kr_bootstrap_value_1919;
-int64_t kr_bootstrap_value_1920 = semantic_rewind();
-(void)(kr_bootstrap_value_1920);
-int64_t kr_bootstrap_value_1921 = semantic_translation_unit();
-(void)(kr_bootstrap_value_1921);
-const char * kr_bootstrap_value_1922 = semantic_globals;
-const char * kr_bootstrap_value_1923 = "kr_main";
-const char * kr_bootstrap_value_1924 = semantic_lookup(kr_bootstrap_value_1922, kr_bootstrap_value_1923);
-const char * kr_bootstrap_value_1925 = kr_bootstrap_value_1924;
-const char * kr_bootstrap_value_1926 = "Fi";
-bool kr_bootstrap_value_1927 = rt_equal(kr_bootstrap_value_1925, kr_bootstrap_value_1926);
-bool kr_bootstrap_value_1928 = (!kr_bootstrap_value_1927);
-if (kr_bootstrap_value_1928) {
-const char * kr_bootstrap_value_1929 = "program requires func main() i64";
-int64_t kr_bootstrap_value_1930 = fail(kr_bootstrap_value_1929);
-return kr_bootstrap_value_1930;
+const char * kr_bootstrap_value_1918 = input;
+int64_t kr_bootstrap_value_1919 = filename_start;
+const char * kr_bootstrap_value_1920 = input;
+int64_t kr_bootstrap_value_1921 = rt_len(kr_bootstrap_value_1920);
+int64_t kr_bootstrap_value_1922 = kr_bootstrap_value_1921;
+const char * kr_bootstrap_value_1923 = rt_slice(kr_bootstrap_value_1918, kr_bootstrap_value_1919, kr_bootstrap_value_1922);
+const char * kr_bootstrap_value_1924 = kr_bootstrap_value_1923;
+const char * kr_bootstrap_value_1925 = semantic_quote_bytes(kr_bootstrap_value_1924);
+semantic_source_literal = kr_bootstrap_value_1925;
+int64_t kr_bootstrap_value_1926 = semantic_rewind();
+(void)(kr_bootstrap_value_1926);
+int64_t kr_bootstrap_value_1927 = semantic_translation_unit();
+(void)(kr_bootstrap_value_1927);
+const char * kr_bootstrap_value_1928 = semantic_globals;
+const char * kr_bootstrap_value_1929 = "kr_main";
+const char * kr_bootstrap_value_1930 = semantic_lookup(kr_bootstrap_value_1928, kr_bootstrap_value_1929);
+const char * kr_bootstrap_value_1931 = kr_bootstrap_value_1930;
+const char * kr_bootstrap_value_1932 = "Fi";
+bool kr_bootstrap_value_1933 = rt_equal(kr_bootstrap_value_1931, kr_bootstrap_value_1932);
+bool kr_bootstrap_value_1934 = (!kr_bootstrap_value_1933);
+if (kr_bootstrap_value_1934) {
+const char * kr_bootstrap_value_1935 = "program requires func main() i64";
+int64_t kr_bootstrap_value_1936 = fail(kr_bootstrap_value_1935);
+return kr_bootstrap_value_1936;
 }
 declarations = "";
 definitions = "";
 semantic_collecting = false;
-int64_t kr_bootstrap_value_1931 = semantic_rewind();
-(void)(kr_bootstrap_value_1931);
-int64_t kr_bootstrap_value_1932 = semantic_translation_unit();
-(void)(kr_bootstrap_value_1932);
+int64_t kr_bootstrap_value_1937 = semantic_rewind();
+(void)(kr_bootstrap_value_1937);
+int64_t kr_bootstrap_value_1938 = semantic_translation_unit();
+(void)(kr_bootstrap_value_1938);
 const char * helpers = "int64_t rt_iadd(int64_t, int64_t, const char *, int64_t, int64_t);\nint64_t rt_isub(int64_t, int64_t, const char *, int64_t, int64_t);\nint64_t rt_imul(int64_t, int64_t, const char *, int64_t, int64_t);\nint64_t rt_idiv(int64_t, int64_t, const char *, int64_t, int64_t);\nint64_t rt_imod(int64_t, int64_t, const char *, int64_t, int64_t);\nint64_t rt_ineg(int64_t, const char *, int64_t, int64_t);\n\n";
 if (semantic_checked) {
-const char * kr_bootstrap_value_1933 = helpers;
-const char * kr_bootstrap_value_1934 = "static const char kr_bootstrap_value_source[] = ";
-const char * kr_bootstrap_value_1935 = semantic_source_literal;
-const char * kr_bootstrap_value_1936 = ";\n\n";
-const char * kr_bootstrap_value_1937 = rt_cat(kr_bootstrap_value_1935, kr_bootstrap_value_1936);
-const char * kr_bootstrap_value_1938 = kr_bootstrap_value_1937;
-const char * kr_bootstrap_value_1939 = rt_cat(kr_bootstrap_value_1934, kr_bootstrap_value_1938);
-const char * kr_bootstrap_value_1940 = kr_bootstrap_value_1939;
-const char * kr_bootstrap_value_1941 = rt_cat(kr_bootstrap_value_1933, kr_bootstrap_value_1940);
-helpers = kr_bootstrap_value_1941;
+const char * kr_bootstrap_value_1939 = helpers;
+const char * kr_bootstrap_value_1940 = "static const char kr_bootstrap_value_source[] = ";
+const char * kr_bootstrap_value_1941 = semantic_source_literal;
+const char * kr_bootstrap_value_1942 = ";\n\n";
+const char * kr_bootstrap_value_1943 = rt_cat(kr_bootstrap_value_1941, kr_bootstrap_value_1942);
+const char * kr_bootstrap_value_1944 = kr_bootstrap_value_1943;
+const char * kr_bootstrap_value_1945 = rt_cat(kr_bootstrap_value_1940, kr_bootstrap_value_1944);
+const char * kr_bootstrap_value_1946 = kr_bootstrap_value_1945;
+const char * kr_bootstrap_value_1947 = rt_cat(kr_bootstrap_value_1939, kr_bootstrap_value_1946);
+helpers = kr_bootstrap_value_1947;
 }
-const char * kr_bootstrap_value_1942 = "// Generated by the Kremen bootstrap compiler.\n#include <stdint.h>\n#include <stdbool.h>\n\n";
-const char * kr_bootstrap_value_1943 = helpers;
-const char * kr_bootstrap_value_1944 = declarations;
-const char * kr_bootstrap_value_1945 = "\n";
-const char * kr_bootstrap_value_1946 = definitions;
-const char * kr_bootstrap_value_1947 = rt_cat(kr_bootstrap_value_1945, kr_bootstrap_value_1946);
-const char * kr_bootstrap_value_1948 = kr_bootstrap_value_1947;
-const char * kr_bootstrap_value_1949 = rt_cat(kr_bootstrap_value_1944, kr_bootstrap_value_1948);
-const char * kr_bootstrap_value_1950 = kr_bootstrap_value_1949;
-const char * kr_bootstrap_value_1951 = rt_cat(kr_bootstrap_value_1943, kr_bootstrap_value_1950);
-const char * kr_bootstrap_value_1952 = kr_bootstrap_value_1951;
-const char * kr_bootstrap_value_1953 = rt_cat(kr_bootstrap_value_1942, kr_bootstrap_value_1952);
-const char * output = kr_bootstrap_value_1953;
-const char * kr_bootstrap_value_1954 = destination;
-const char * kr_bootstrap_value_1955 = output;
-int64_t kr_bootstrap_value_1956 = rt_write(kr_bootstrap_value_1954, kr_bootstrap_value_1955);
-return kr_bootstrap_value_1956;
+const char * kr_bootstrap_value_1948 = "// Generated by the Kremen bootstrap compiler.\n#include <stdint.h>\n#include <stdbool.h>\n\n";
+const char * kr_bootstrap_value_1949 = helpers;
+const char * kr_bootstrap_value_1950 = declarations;
+const char * kr_bootstrap_value_1951 = "\n";
+const char * kr_bootstrap_value_1952 = definitions;
+const char * kr_bootstrap_value_1953 = rt_cat(kr_bootstrap_value_1951, kr_bootstrap_value_1952);
+const char * kr_bootstrap_value_1954 = kr_bootstrap_value_1953;
+const char * kr_bootstrap_value_1955 = rt_cat(kr_bootstrap_value_1950, kr_bootstrap_value_1954);
+const char * kr_bootstrap_value_1956 = kr_bootstrap_value_1955;
+const char * kr_bootstrap_value_1957 = rt_cat(kr_bootstrap_value_1949, kr_bootstrap_value_1956);
+const char * kr_bootstrap_value_1958 = kr_bootstrap_value_1957;
+const char * kr_bootstrap_value_1959 = rt_cat(kr_bootstrap_value_1948, kr_bootstrap_value_1958);
+const char * output = kr_bootstrap_value_1959;
+const char * kr_bootstrap_value_1960 = destination;
+const char * kr_bootstrap_value_1961 = output;
+int64_t kr_bootstrap_value_1962 = rt_write(kr_bootstrap_value_1960, kr_bootstrap_value_1961);
+return kr_bootstrap_value_1962;
 }
 }
 int64_t kr_main(void) {
 {
-int64_t kr_bootstrap_value_1957 = INT64_C(1);
-const char * kr_bootstrap_value_1958 = rt_arg(kr_bootstrap_value_1957);
-const char * input = kr_bootstrap_value_1958;
-int64_t kr_bootstrap_value_1959 = INT64_C(2);
-const char * kr_bootstrap_value_1960 = rt_arg(kr_bootstrap_value_1959);
-const char * destination = kr_bootstrap_value_1960;
-const char * kr_bootstrap_value_1961 = input;
-const char * kr_bootstrap_value_1962 = "";
-bool kr_bootstrap_value_1963 = rt_equal(kr_bootstrap_value_1961, kr_bootstrap_value_1962);
-bool kr_bootstrap_value_1964 = kr_bootstrap_value_1963;
-if (!kr_bootstrap_value_1964) {
-const char * kr_bootstrap_value_1965 = destination;
-const char * kr_bootstrap_value_1966 = "";
-bool kr_bootstrap_value_1967 = rt_equal(kr_bootstrap_value_1965, kr_bootstrap_value_1966);
-kr_bootstrap_value_1964 = kr_bootstrap_value_1967;
-}
-bool kr_bootstrap_value_1968 = kr_bootstrap_value_1964;
-if (!kr_bootstrap_value_1968) {
-int64_t kr_bootstrap_value_1969 = INT64_C(3);
-const char * kr_bootstrap_value_1970 = rt_arg(kr_bootstrap_value_1969);
-const char * kr_bootstrap_value_1971 = kr_bootstrap_value_1970;
+int64_t kr_bootstrap_value_1963 = INT64_C(1);
+const char * kr_bootstrap_value_1964 = rt_arg(kr_bootstrap_value_1963);
+const char * input = kr_bootstrap_value_1964;
+int64_t kr_bootstrap_value_1965 = INT64_C(2);
+const char * kr_bootstrap_value_1966 = rt_arg(kr_bootstrap_value_1965);
+const char * destination = kr_bootstrap_value_1966;
+const char * kr_bootstrap_value_1967 = input;
+const char * kr_bootstrap_value_1968 = "";
+bool kr_bootstrap_value_1969 = rt_equal(kr_bootstrap_value_1967, kr_bootstrap_value_1968);
+bool kr_bootstrap_value_1970 = kr_bootstrap_value_1969;
+if (!kr_bootstrap_value_1970) {
+const char * kr_bootstrap_value_1971 = destination;
 const char * kr_bootstrap_value_1972 = "";
 bool kr_bootstrap_value_1973 = rt_equal(kr_bootstrap_value_1971, kr_bootstrap_value_1972);
-bool kr_bootstrap_value_1974 = (!kr_bootstrap_value_1973);
-kr_bootstrap_value_1968 = kr_bootstrap_value_1974;
+kr_bootstrap_value_1970 = kr_bootstrap_value_1973;
 }
-if (kr_bootstrap_value_1968) {
-const char * kr_bootstrap_value_1975 = "<command line>";
-int64_t kr_bootstrap_value_1976 = INT64_C(1);
-int64_t kr_bootstrap_value_1977 = INT64_C(1);
-const char * kr_bootstrap_value_1978 = "usage: selfhost input.kr output.c";
-int64_t kr_bootstrap_value_1979 = rt_error(kr_bootstrap_value_1975, kr_bootstrap_value_1976, kr_bootstrap_value_1977, kr_bootstrap_value_1978);
-return kr_bootstrap_value_1979;
+bool kr_bootstrap_value_1974 = kr_bootstrap_value_1970;
+if (!kr_bootstrap_value_1974) {
+int64_t kr_bootstrap_value_1975 = INT64_C(3);
+const char * kr_bootstrap_value_1976 = rt_arg(kr_bootstrap_value_1975);
+const char * kr_bootstrap_value_1977 = kr_bootstrap_value_1976;
+const char * kr_bootstrap_value_1978 = "";
+bool kr_bootstrap_value_1979 = rt_equal(kr_bootstrap_value_1977, kr_bootstrap_value_1978);
+bool kr_bootstrap_value_1980 = (!kr_bootstrap_value_1979);
+kr_bootstrap_value_1974 = kr_bootstrap_value_1980;
 }
-const char * kr_bootstrap_value_1980 = input;
-const char * kr_bootstrap_value_1981 = destination;
-int64_t kr_bootstrap_value_1982 = bootstrap_compile(kr_bootstrap_value_1980, kr_bootstrap_value_1981);
-return kr_bootstrap_value_1982;
+if (kr_bootstrap_value_1974) {
+const char * kr_bootstrap_value_1981 = "<command line>";
+int64_t kr_bootstrap_value_1982 = INT64_C(1);
+int64_t kr_bootstrap_value_1983 = INT64_C(1);
+const char * kr_bootstrap_value_1984 = "usage: selfhost input.kr output.c";
+int64_t kr_bootstrap_value_1985 = rt_error(kr_bootstrap_value_1981, kr_bootstrap_value_1982, kr_bootstrap_value_1983, kr_bootstrap_value_1984);
+return kr_bootstrap_value_1985;
+}
+const char * kr_bootstrap_value_1986 = input;
+const char * kr_bootstrap_value_1987 = destination;
+int64_t kr_bootstrap_value_1988 = bootstrap_compile(kr_bootstrap_value_1986, kr_bootstrap_value_1987);
+return kr_bootstrap_value_1988;
 }
 }

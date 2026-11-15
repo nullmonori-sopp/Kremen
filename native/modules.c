@@ -1,14 +1,12 @@
 #include "kremen.h"
 #include "platform.h"
-#include <dirent.h>
 #include <errno.h>
 #include <limits.h>
 #include <sys/stat.h>
-#include <unistd.h>
 
 static bool suffix(const char *s, const char *ending) { size_t a = strlen(s), b = strlen(ending); return a >= b && !strcmp(s + a - b, ending); }
-static bool exists(const char *path) { struct stat st; return stat(path, &st) == 0; }
-static bool is_dir(const char *path) { struct stat st; return stat(path, &st) == 0 && S_ISDIR(st.st_mode); }
+static bool exists(const char *path) { return km_host_path_exists(path); }
+static bool is_dir(const char *path) { return km_host_path_is_dir(path); }
 static char *parent(Context *ctx, const char *path) { const char *last = strrchr(path, '/'); return last ? km_strndup(ctx, path, last == path ? 1 : (size_t)(last - path)) : km_strdup(ctx, "."); }
 
 static void require_project_path(Context *ctx, const char *resolved, Token tok, const char *kind, const char *requested) {
@@ -24,14 +22,14 @@ char *km_resolve(Context *ctx, const char *from, const char *requested) {
     char *candidate = km_sprintf(ctx, "%s/%s", dir, requested);
     if (suffix(candidate, ".krh")) km_error(ctx, tok, "E013", "import the implementation .kr, its .krh is loaded automatically");
     if (!exists(candidate) && !suffix(candidate, ".kr")) candidate = km_sprintf(ctx, "%s.kr", candidate);
-    char resolved[PATH_MAX];
+    char *resolved = km_alloc(ctx, PATH_MAX);
     if (!km_host_realpath(candidate, resolved)) km_error(ctx, tok, "E013", "cannot resolve import '%s' relative to %s: %s", requested, from, strerror(errno));
     require_project_path(ctx, resolved, tok, "import", requested);
     return km_strdup(ctx, resolved);
 }
 
 static void load_source(Context *ctx, Module *module, const char *path, bool header) {
-    char resolved[PATH_MAX];
+    char *resolved = km_alloc(ctx, PATH_MAX);
     Source missing = {.path = (char *)path};
     Token tok = ctx->import_token.src ? ctx->import_token : (Token){.src = &missing, .line = 1, .col = 1};
     if (!km_host_realpath(path, resolved)) km_error(ctx, tok, "E010", "cannot resolve source %s: %s", path, strerror(errno));
@@ -80,11 +78,17 @@ Module *km_load(Context *ctx, const char *path) {
     Token tok = ctx->import_token;
     Source missing = {.path = (char *)path};
     if (!tok.src) tok = (Token){.src = &missing, .line = 1, .col = 1};
-    char resolved[PATH_MAX];
+    char *resolved = km_alloc(ctx, PATH_MAX);
     if (!km_host_realpath(path, resolved)) km_error(ctx, tok, "E010", "cannot resolve %s: %s", path, strerror(errno));
     for (size_t i = 0; i < ctx->modules.len; i++) {
         Module *m = ctx->modules.data[i];
-        if (!km_host_path_compare(m->path, resolved)) {
+        bool same = !km_host_path_compare(m->path, resolved);
+#if defined(_WIN32)
+        /* NTFS directories may opt into case-sensitive names. A spelling
+         * comparison alone must not conflate two different module files. */
+        same = same && km_host_same_file(m->path, resolved);
+#endif
+        if (same) {
             if (m->loading) km_error(ctx, tok, "E014", "import cycle involving %s", resolved);
             return m;
         }
@@ -98,16 +102,18 @@ Module *km_load(Context *ctx, const char *path) {
     if (!ctx->project_root) ctx->project_root = is_dir(resolved) ? km_strdup(ctx, resolved) : parent(ctx, resolved);
     require_project_path(ctx, resolved, tok, "module", path);
     if (is_dir(resolved)) {
-        DIR *dir = opendir(resolved);
-        if (!dir) km_error(ctx, tok, "E010", "cannot list %s", resolved);
+        KmHostDirectory dir;
+        if (!km_host_dir_open(&dir, resolved)) km_error(ctx, tok, "E010", "cannot list %s", resolved);
         char **files = km_alloc(ctx, 512 * sizeof *files); size_t count = 0;
-        struct dirent *entry;
-        while ((entry = readdir(dir))) {
-            if (!suffix(entry->d_name, ".kr")) continue;
-            if (count == 512) { closedir(dir); km_error(ctx, tok, "E010", "too many files in module"); }
-            files[count++] = km_sprintf(ctx, "%s/%s", resolved, entry->d_name);
+        char *name = km_alloc(ctx, PATH_MAX); int read;
+        while ((read = km_host_dir_read(&dir, name)) > 0) {
+            if (!suffix(name, ".kr")) continue;
+            if (count == 512) { km_host_dir_close(&dir); km_error(ctx, tok, "E010", "too many files in module"); }
+            files[count++] = km_sprintf(ctx, "%s/%s", resolved, name);
         }
-        closedir(dir); qsort(files, count, sizeof *files, compare_names);
+        int failure = errno; km_host_dir_close(&dir);
+        if (read < 0) km_error(ctx, tok, "E010", "cannot read module directory %s: %s", resolved, strerror(failure));
+        qsort(files, count, sizeof *files, compare_names);
         if (!count) km_error(ctx, tok, "E012", "module directory has no .kr sources: %s", resolved);
         for (size_t i = 0; i < count; i++) load_implementation(ctx, m, files[i]);
     } else load_implementation(ctx, m, resolved);

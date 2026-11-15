@@ -1,6 +1,6 @@
 # Kremen language reference
 
-This page describes the full language accepted by `kremen` in 0.4.7. It is a reference for rules and built-ins. If the terms are unfamiliar, start with [the tutorial](tutorial.md). The compiler under `selfhost/` accepts a smaller language; its [reference](../selfhost/README.md) is separate.
+This page describes the full language accepted by `kremen` in 0.4.8. It is a reference for rules and built-ins. If the terms are unfamiliar, start with [the tutorial](tutorial.md). The compiler under `selfhost/` accepts a smaller language; its [reference](../selfhost/README.md) is separate.
 
 Examples that show only a declaration or block are fragments to put inside a program. Complete programs include `func main()`.
 
@@ -219,7 +219,7 @@ This is explicit cleanup; there are no implicit user-defined destructors. There 
 
 ## Threads
 
-The full runtime uses native pthread-backed threads: POSIX threads on Linux and winpthreads in the experimental Windows UCRT64 profile. A worker is a named, non-receiver function with exactly one `i64` parameter and an `i64` result. Starting a worker copies its integer argument; joining retrieves its integer result.
+The full runtime uses native host threads through a private adapter: system POSIX threads on Linux and CRT-aware Windows threads with native synchronization on Windows. Windows does not require a pthread compatibility library. A worker is a named, non-receiver function with exactly one `i64` parameter and an `i64` result. Starting a worker copies its integer argument; joining retrieves its integer result.
 
 | Call | Result and purpose |
 | --- | --- |
@@ -251,7 +251,7 @@ Only the creator may join or close a handle. Copies refer to the same worker sta
 
 Thread handles can be held in local variables and local `!thread` results, or passed to a helper executing in the same creator thread. They cannot be returned, borrowed, placed in ordinary composites, or nested inside further results. The worker interface cannot receive references, pointers, strings, slices, or other resource handles. Worker functions cannot capture local variables. Each worker has its own runtime allocation, arena, file, and cleanup bookkeeping. Limits are 256 unjoined children and 65,536 retained thread handles per creator. Generated `print`/`println` calls and input operations are serialized; filesystem effects on shared paths still need a program-level design.
 
-See [Working with threads](threads.md) for a step-by-step explanation and the current boundaries. Mutexes, atomics, channels, detached jobs, and timed joins are not part of this release. Full-language generated C must be compiled and linked with `-pthread`.
+See [Working with threads](threads.md) for a step-by-step explanation and the current boundaries. Mutexes, atomics, channels, detached jobs, and timed joins are not part of this release. POSIX generated C uses `-pthread`; Windows uses its native adapter without that flag.
 
 ## Arenas
 
@@ -338,7 +338,7 @@ Handle copies refer to the same resource. Closing invalidates all copies; later 
 
 All supported `fsOpen` modes are byte-preserving: `r`, `w`, and `a` are aliases of `rb`, `wb`, and `ab`. Windows text-mode newline translation and `0x1a` end-of-input handling do not apply to those file streams. A sticky stream error remains a failed `fsWriteAll` even when the supplied string is empty. Standard input and output use the host's conventions separately.
 
-`fsRename` follows host filesystem rules. The Windows profile supports replacing a destination file and treats matching file identities as a successful no-op; failed replacement preserves the old target. Directory replacement and permissions can differ by host. [Windows setup](windows.md) documents the initial path-encoding limits.
+`fsRename` follows host filesystem rules. Windows supports replacing a destination file and treats matching file identities as a successful no-op; failed replacement preserves the old target. Directory replacement and permissions can differ by host. Windows filesystem paths are decoded from UTF-8 and passed to wide host APIs; returned directory names use UTF-8. NUL and invalid path encodings are rejected. [Windows setup](windows.md) documents host-specific limits.
 
 A read is limited to 64 MiB; directory listing is limited to 1,000,000 entries. Free a successful listing's slice explicitly in `unsafe`; its name strings stay managed until process exit. Input/file strings also stay managed until exit. The filesystem API is not confined to the import root.
 

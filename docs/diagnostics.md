@@ -2,7 +2,7 @@
 
 An error message is a report about a specific operation, not a judgment about your ability to program. Read the first line, find the marked code, and make one small change. Then run `check` again.
 
-This page describes 0.4.7. Examples shorten directory names for readability; the full compiler normally prints the resolved source path, with unsafe terminal characters escaped.
+This page describes 0.4.8. Examples shorten directory names for readability; the full compiler normally prints the resolved source path, with unsafe terminal characters escaped.
 
 ## Read the location first
 
@@ -183,9 +183,9 @@ kremen doctor
 kremen doctor --cc gcc
 ```
 
-`doctor` compiles and runs a small probe with the actual runtime, strict C11 flags, and pthread support. It also checks a worker spawn/join result. `E016` means this setup probe could not be created, compiled, or executed successfully. Read the operation and status in the error; the probe has no user-source line to underline. An unreadable runtime remains `E010`.
+`doctor` compiles and runs a small probe with the actual runtime, strict C11 flags, and the host's native thread adapter. It also checks a worker spawn/join result. `E016` means this setup probe could not be created, compiled, or executed successfully. Read the operation and status in the error; the probe has no user-source line to underline. An unreadable runtime remains `E010`.
 
-The command accepts `--cc` and the diagnostic-format option, with no source path or semantic mode. The successful report is ordinary text. JSON selects Kremen's error renderer; it does not convert external compiler or probe diagnostics into JSON. A native probe must run on the current host, so cross-compilers are outside this command's contract. See [Windows setup](windows.md) for the supported UCRT64 dependencies.
+The command accepts `--cc` and the diagnostic-format option, with no source path or semantic mode. The successful report is ordinary text. JSON selects Kremen's error renderer; it does not convert external compiler or probe diagnostics into JSON. A native probe must run on the current host, so cross-compilers are outside this command's contract. A [portable package](portable.md) selects its bundled backend unless `CC` or `--cc` overrides it. See [Windows setup](windows.md) for native Windows source-build prerequisites.
 
 ## Which component produced the error?
 

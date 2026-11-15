@@ -1,6 +1,18 @@
 #ifndef KREMEN_BOOTSTRAP_RUNTIME_H
 #define KREMEN_BOOTSTRAP_RUNTIME_H
 
+#if defined(_WIN32)
+#ifndef _CRT_RAND_S
+#define _CRT_RAND_S
+#endif
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+#ifndef _CRT_NONSTDC_NO_WARNINGS
+#define _CRT_NONSTDC_NO_WARNINGS
+#endif
+#endif
+
 #include <stdbool.h>
 #include <stdint.h>
 

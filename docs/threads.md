@@ -1,6 +1,6 @@
 # Working with threads
 
-A thread is an independent path of execution inside a process. Each successful Kremen spawn creates one native pthread-backed thread, using POSIX threads on Linux or winpthreads in the experimental Windows profile. Two worker threads can run at the same time on different CPU cores. This helps when a program has independent work to do; starting a thread and joining it immediately does not by itself make a calculation faster.
+A thread is an independent path of execution inside a process. Each successful Kremen spawn creates one native host thread. Linux uses its system POSIX-thread implementation; Windows starts a CRT-aware native thread and uses native synchronization. No pthread-emulation DLL is needed on Windows. Two workers can run at the same time on different CPU cores. This helps when a program has independent work to do; starting a thread and joining it immediately does not by itself make a calculation faster.
 
 Kremen 0.4.3 introduces a deliberately small threading interface. A worker receives one `i64` value and returns one `i64` value. It cannot capture a caller's local variables, borrow the caller's memory, or receive a slice or file handle. This gives the checker a clear boundary before more general shared-memory features are added.
 
@@ -93,7 +93,7 @@ Mutex values, atomics, channels, shared-memory slices, thread pools, timed joins
 
 ## Building generated C yourself
 
-The normal `build` and `run` commands add `-pthread` automatically. If you use `emit-c` and invoke the C compiler yourself, include it too:
+The normal `build` and `run` commands select the appropriate host flags. On Linux they add `-pthread`. If you use `emit-c` and invoke the C compiler yourself on Linux, include it too:
 
 ```sh
 kremen emit-c workers.kr -o workers.c
@@ -101,4 +101,4 @@ cc -std=c11 -Wall -Wextra -Wpedantic -Werror -O3 -pthread workers.c -o workers
 ./workers
 ```
 
-Linux is the established hosted target; the experimental [Windows profile](windows.md) uses MSYS2 UCRT64 GCC and winpthreads. Threads do not add a freestanding kernel target or remove the C toolchain, runtime-library, and host-OS dependencies. See [Safety and memory](safety.md) for the wider boundary.
+Windows generated C uses the native adapter without `-pthread`. The [Windows guide](windows.md) explains native source builds, and [portable packages](portable.md) include a matching backend for ordinary users. Threads do not add a freestanding kernel target or remove the C-lowering stage, system C runtime, or OS dependencies. The language-level ownership rules above are shared across hosts. See [Safety and memory](safety.md) for the wider boundary.

@@ -1,0 +1,13 @@
+*.c text eol=lf
+*.h text eol=lf
+*.S text eol=lf
+*.kr text eol=lf
+*.krh text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+Makefile text eol=lf
+VERSION text eol=lf
+SHA256SUMS text eol=lf
+kremenc text eol=lf

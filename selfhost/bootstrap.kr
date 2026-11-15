@@ -905,7 +905,7 @@ func bootstrap_compile(input string, destination string) i64 {
         var filename_start i64 = 0
         var filename_index i64 = 0
         for filename_index < rt_len(input) {
-            if rt_at(input, filename_index) == 47 { filename_start = filename_index + 1 }
+            if rt_at(input, filename_index) == 47 || rt_at(input, filename_index) == 92 { filename_start = filename_index + 1 }
             filename_index = filename_index + 1
         }
         semantic_source_literal = semantic_quote_bytes(rt_slice(input, filename_start, rt_len(input)))

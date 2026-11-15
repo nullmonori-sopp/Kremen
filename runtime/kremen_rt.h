@@ -1,3 +1,14 @@
+#if defined(_WIN32)
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+#ifndef _CRT_NONSTDC_NO_WARNINGS
+#define _CRT_NONSTDC_NO_WARNINGS
+#endif
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601
+#endif
+#endif
 
 #include <inttypes.h>
 #include <stdbool.h>
@@ -8,10 +19,7 @@
 #include <string.h>
 #include <limits.h>
 #include <errno.h>
-#include <dirent.h>
 #include <sys/stat.h>
-#include <unistd.h>
-#include <pthread.h>
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -21,6 +29,42 @@
 #endif
 #include <windows.h>
 #include <direct.h>
+#include <io.h>
+#include <process.h>
+#include <wchar.h>
+typedef HANDLE kr_host_thread;
+typedef SRWLOCK kr_host_mutex;
+#define KR_HOST_MUTEX_INIT SRWLOCK_INIT
+#define KR_HOST_ENTRY unsigned __stdcall
+#define KR_HOST_ENTRY_DONE 0
+static int kr_host_mutex_lock(kr_host_mutex *mutex) { AcquireSRWLockExclusive(mutex); return 0; }
+static int kr_host_mutex_unlock(kr_host_mutex *mutex) { ReleaseSRWLockExclusive(mutex); return 0; }
+static int kr_host_thread_create(kr_host_thread *thread, unsigned (__stdcall *entry)(void *), void *data) {
+    uintptr_t handle = _beginthreadex(NULL, 0, entry, data, 0, NULL);
+    if (!handle) return errno ? errno : EAGAIN;
+    *thread = (HANDLE)handle; return 0;
+}
+static int kr_host_thread_join(kr_host_thread thread) {
+    if (WaitForSingleObject(thread, INFINITE) != WAIT_OBJECT_0) return EIO;
+    return CloseHandle(thread) ? 0 : EIO;
+}
+static _Noreturn void kr_host_thread_exit(void) { _endthreadex(0); abort(); }
+#else
+#include <dirent.h>
+#include <unistd.h>
+#include <pthread.h>
+typedef pthread_t kr_host_thread;
+typedef pthread_mutex_t kr_host_mutex;
+#define KR_HOST_MUTEX_INIT PTHREAD_MUTEX_INITIALIZER
+#define KR_HOST_ENTRY void *
+#define KR_HOST_ENTRY_DONE NULL
+static int kr_host_mutex_lock(kr_host_mutex *mutex) { return pthread_mutex_lock(mutex); }
+static int kr_host_mutex_unlock(kr_host_mutex *mutex) { return pthread_mutex_unlock(mutex); }
+static int kr_host_thread_create(kr_host_thread *thread, void *(*entry)(void *), void *data) {
+    return pthread_create(thread, NULL, entry, data);
+}
+static int kr_host_thread_join(kr_host_thread thread) { return pthread_join(thread, NULL); }
+static _Noreturn void kr_host_thread_exit(void) { pthread_exit(NULL); abort(); }
 #endif
 
 typedef struct kr_defer_node {
@@ -31,7 +75,7 @@ typedef struct kr_defer_node {
 static _Thread_local kr_defer_node *kr_defers = NULL;
 
 typedef struct kr_thread {
-    pthread_t id;
+    kr_host_thread id;
     int64_t (*worker)(int64_t);
     int64_t argument, result, code;
     bool joined;
@@ -42,15 +86,15 @@ static _Thread_local kr_thread **kr_thread_slots;
 static _Thread_local size_t kr_thread_slot_count;
 static _Thread_local size_t kr_thread_active, kr_thread_count;
 static _Thread_local bool kr_child_failure;
-static pthread_mutex_t kr_output_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t kr_input_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t kr_diagnostic_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t kr_error_message_mutex = PTHREAD_MUTEX_INITIALIZER;
+static kr_host_mutex kr_output_mutex = KR_HOST_MUTEX_INIT;
+static kr_host_mutex kr_input_mutex = KR_HOST_MUTEX_INIT;
+static kr_host_mutex kr_diagnostic_mutex = KR_HOST_MUTEX_INIT;
+static kr_host_mutex kr_error_message_mutex = KR_HOST_MUTEX_INIT;
 static _Thread_local unsigned kr_output_depth, kr_input_depth;
 static void kr_cleanup(void);
 static void kr_release_io(void) {
-    if (kr_output_depth) { kr_output_depth = 0; (void)pthread_mutex_unlock(&kr_output_mutex); }
-    if (kr_input_depth) { kr_input_depth = 0; (void)pthread_mutex_unlock(&kr_input_mutex); }
+    if (kr_output_depth) { kr_output_depth = 0; (void)kr_host_mutex_unlock(&kr_output_mutex); }
+    if (kr_input_depth) { kr_input_depth = 0; (void)kr_host_mutex_unlock(&kr_input_mutex); }
 }
 
 /* The caller keeps this node alive until run_until. A registration boundary
@@ -144,7 +188,7 @@ static void kr_report_path(const char *path) {
 }
 
 static void kr_report_error(const char *message, size_t length, int id) {
-    (void)pthread_mutex_lock(&kr_diagnostic_mutex);
+    (void)kr_host_mutex_lock(&kr_diagnostic_mutex);
     const kr_location *location = id > 0 && (size_t)id <= kr_source_location_count ? &kr_source_locations[id - 1] : NULL;
     if (location != NULL) {
         kr_report_path(location->path);
@@ -168,7 +212,7 @@ static void kr_report_error(const char *message, size_t length, int id) {
     if (kr_self_thread != NULL) {
         (void)fprintf(stderr, " note: worker started with argument %" PRId64 "; threadJoin reports ECANCELED\n", kr_self_thread->argument);
     }
-    (void)pthread_mutex_unlock(&kr_diagnostic_mutex);
+    (void)kr_host_mutex_unlock(&kr_diagnostic_mutex);
 }
 
 _Noreturn void kr_panic(const char *msg, int line) {
@@ -178,27 +222,27 @@ _Noreturn void kr_panic(const char *msg, int line) {
     if (kr_self_thread != NULL) {
         kr_self_thread->code = ECANCELED;
         kr_cleanup();
-        pthread_exit(NULL);
+        kr_host_thread_exit();
     }
     exit(EXIT_FAILURE);
 }
 
 void kr_output_begin(void) {
-    if (kr_output_depth == 0 && pthread_mutex_lock(&kr_output_mutex) != 0)
+    if (kr_output_depth == 0 && kr_host_mutex_lock(&kr_output_mutex) != 0)
         kr_panic("cannot lock output", 0);
     kr_output_depth++;
 }
 void kr_output_end(void) {
     if (kr_output_depth == 0) kr_panic("unbalanced output lock", 0);
-    if (--kr_output_depth == 0) (void)pthread_mutex_unlock(&kr_output_mutex);
+    if (--kr_output_depth == 0) (void)kr_host_mutex_unlock(&kr_output_mutex);
 }
 static void kr_input_begin(void) {
-    if (kr_input_depth == 0 && pthread_mutex_lock(&kr_input_mutex) != 0)
+    if (kr_input_depth == 0 && kr_host_mutex_lock(&kr_input_mutex) != 0)
         kr_panic("cannot lock input", 0);
     kr_input_depth++;
 }
 static void kr_input_end(void) {
-    if (--kr_input_depth == 0) (void)pthread_mutex_unlock(&kr_input_mutex);
+    if (--kr_input_depth == 0) (void)kr_host_mutex_unlock(&kr_input_mutex);
 }
 
 size_t kr_idx(int64_t index, size_t n, int line) {
@@ -228,11 +272,11 @@ static _Thread_local bool kr_cleanup_registered = false;
 
 static void kr_cleanup(void) {
     /* Each creator exclusively owns this registry. Results are read only
-     * after pthread_join establishes synchronization with its child. */
+     * after the host join establishes synchronization with its child. */
     while (kr_threads != NULL) {
         kr_thread *thread = kr_threads; kr_threads = thread->next;
         if (!thread->joined) {
-            int code = pthread_join(thread->id, NULL);
+            int code = kr_host_thread_join(thread->id);
             if (code != 0) { kr_child_failure = true; continue; }
             if (thread->code != 0) kr_child_failure = true;
         }
@@ -297,12 +341,12 @@ void kr_runtime_init(void) {
     if (!kr_register_cleanup()) kr_panic("cannot register runtime cleanup", 0);
 }
 
-static void *kr_thread_entry(void *data) {
+static KR_HOST_ENTRY kr_thread_entry(void *data) {
     kr_thread *thread = data;
     kr_self_thread = thread;
     thread->result = thread->worker(thread->argument);
     kr_cleanup();
-    return NULL;
+    return KR_HOST_ENTRY_DONE;
 }
 
 static size_t kr_thread_slot(kr_thread *handle, size_t capacity) {
@@ -338,7 +382,7 @@ bool kr_thread_spawn(int64_t (*worker)(int64_t), int64_t argument, kr_thread **o
     kr_thread *thread = calloc(1, sizeof *thread);
     if (thread == NULL) { *code = ENOMEM; return false; }
     thread->worker = worker; thread->argument = argument;
-    int failure = pthread_create(&thread->id, NULL, kr_thread_entry, thread);
+    int failure = kr_host_thread_create(&thread->id, kr_thread_entry, thread);
     if (failure != 0) { free(thread); *code = failure; return false; }
     thread->next = kr_threads; kr_threads = thread;
     size_t slot = kr_thread_slot(thread, kr_thread_slot_count);
@@ -363,7 +407,7 @@ bool kr_thread_join(kr_thread *handle, int64_t *out, int64_t *code) {
     *out = 0; *code = 0;
     kr_thread *thread = kr_thread_owned(handle);
     if (thread == NULL || thread->joined) { *code = EBADF; return false; }
-    int failure = pthread_join(thread->id, NULL);
+    int failure = kr_host_thread_join(thread->id);
     if (failure != 0) { *code = failure; return false; }
     thread->joined = true; kr_thread_active--;
     if (thread->code != 0) { *code = thread->code; return false; }
@@ -757,7 +801,7 @@ _Noreturn void kr_user_panic(kr_string message, int line) {
     if (kr_self_thread != NULL) {
         kr_self_thread->code = ECANCELED;
         kr_cleanup();
-        pthread_exit(NULL);
+        kr_host_thread_exit();
     }
     exit(EXIT_FAILURE);
 }
@@ -765,8 +809,8 @@ _Noreturn void kr_user_panic(kr_string message, int line) {
 /* Filesystem errors are ordinary errno values in result.code, never unwinds. */
 static int64_t kr_io_code(void) { return errno > 0 ? (int64_t)errno : (int64_t)EIO; }
 #if defined(_WIN32)
-/* Win32 error numbers and CRT errno are separate domains. Keep filesystem
- * results in the documented errno domain, including MoveFileEx failures. */
+/* Filesystem APIs accept UTF-8. Strict conversion prevents two malformed byte
+ * paths from silently naming the same replacement-character Windows path. */
 static int kr_windows_errno(DWORD error) {
     switch (error) {
     case ERROR_SUCCESS: return 0;
@@ -780,21 +824,42 @@ static int kr_windows_errno(DWORD error) {
     case ERROR_TOO_MANY_OPEN_FILES: return EMFILE;
     case ERROR_NOT_ENOUGH_MEMORY: case ERROR_OUTOFMEMORY: return ENOMEM;
     case ERROR_FILENAME_EXCED_RANGE: return ENAMETOOLONG;
-    case ERROR_INVALID_NAME: case ERROR_INVALID_PARAMETER: return EINVAL;
+    case ERROR_INVALID_NAME: case ERROR_INVALID_PARAMETER: case ERROR_NO_UNICODE_TRANSLATION: return EINVAL;
     default: return EIO;
     }
 }
-static bool kr_windows_same_file(const char *left, const char *right) {
+static wchar_t *kr_windows_path(kr_string value, int64_t *code) {
+    if (value.len > INT_MAX || (value.len && memchr(value.data, 0, value.len))) { *code = EINVAL; return NULL; }
+    int needed = value.len ? MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data, (int)value.len, NULL, 0) : 0;
+    if (value.len && !needed) { *code = EINVAL; return NULL; }
+    if ((size_t)needed >= SIZE_MAX / sizeof(wchar_t)) { *code = ENAMETOOLONG; return NULL; }
+    wchar_t *path = malloc(((size_t)needed + 1) * sizeof *path);
+    if (!path) { *code = ENOMEM; return NULL; }
+    if (needed && MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data, (int)value.len, path, needed) != needed) {
+        free(path); *code = EINVAL; return NULL;
+    }
+    path[needed] = L'\0'; return path;
+}
+static char *kr_windows_utf8(const wchar_t *value, int64_t *code) {
+    int needed = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value, -1, NULL, 0, NULL, NULL);
+    if (!needed) { *code = EINVAL; return NULL; }
+    char *copy = malloc((size_t)needed);
+    if (!copy) { *code = ENOMEM; return NULL; }
+    if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value, -1, copy, needed, NULL, NULL) != needed) {
+        free(copy); *code = EINVAL; return NULL;
+    }
+    return copy;
+}
+static bool kr_windows_same_file(const wchar_t *left, const wchar_t *right) {
     DWORD sharing = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
-    HANDLE a = CreateFileA(left, FILE_READ_ATTRIBUTES, sharing, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    HANDLE a = CreateFileW(left, FILE_READ_ATTRIBUTES, sharing, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
     if (a == INVALID_HANDLE_VALUE) return false;
-    HANDLE b = CreateFileA(right, FILE_READ_ATTRIBUTES, sharing, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    HANDLE b = CreateFileW(right, FILE_READ_ATTRIBUTES, sharing, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
     BY_HANDLE_FILE_INFORMATION x, y;
     bool same = b != INVALID_HANDLE_VALUE && GetFileInformationByHandle(a, &x) && GetFileInformationByHandle(b, &y) &&
         x.dwVolumeSerialNumber == y.dwVolumeSerialNumber && x.nFileIndexHigh == y.nFileIndexHigh && x.nFileIndexLow == y.nFileIndexLow;
     if (b != INVALID_HANDLE_VALUE) (void)CloseHandle(b);
-    (void)CloseHandle(a);
-    return same;
+    (void)CloseHandle(a); return same;
 }
 #endif
 static char *kr_fs_path(kr_string value, int64_t *code) {
@@ -803,6 +868,19 @@ static char *kr_fs_path(kr_string value, int64_t *code) {
     if (path == NULL) { *code = ENOMEM; return NULL; }
     if (value.len) memcpy(path, value.data, value.len);
     path[value.len] = 0; return path;
+}
+static FILE *kr_fs_fopen(kr_string value, const char *mode, int64_t *code) {
+#if defined(_WIN32)
+    wchar_t *path = kr_windows_path(value, code);
+    if (!path) return NULL;
+    const wchar_t *wide_mode = mode[0] == 'r' ? L"rb" : mode[0] == 'w' ? L"wb" : L"ab";
+    FILE *stream = _wfopen(path, wide_mode);
+#else
+    char *path = kr_fs_path(value, code);
+    if (!path) return NULL;
+    FILE *stream = fopen(path, mode);
+#endif
+    int64_t error = stream ? 0 : kr_io_code(); free(path); *code = error; return stream;
 }
 static bool kr_fs_read_stream(FILE *stream, kr_string *out, int64_t *code) {
     const size_t limit = 64u * 1024u * 1024u;
@@ -838,29 +916,46 @@ static bool kr_fs_read_stream(FILE *stream, kr_string *out, int64_t *code) {
     data[size] = 0; kr_track(data, 0); out->data = data; out->len = size; *code = 0; return true;
 }
 bool kr_fs_read(kr_string path, kr_string *out, int64_t *code) {
-    *code = 0; char *name = kr_fs_path(path, code); if (name == NULL) return false;
-    FILE *stream = fopen(name, "rb"); int64_t error = stream == NULL ? kr_io_code() : 0; free(name);
-    if (stream == NULL) { *code = error; return false; }
+    *code = 0; FILE *stream = kr_fs_fopen(path, "rb", code);
+    if (!stream) return false;
     bool ok = kr_fs_read_stream(stream, out, code);
     if (fclose(stream) && ok) { *code = kr_io_code(); return false; }
     return ok;
 }
 bool kr_fs_write(kr_string path, kr_string value, bool append, int64_t *code) {
-    *code = 0; char *name = kr_fs_path(path, code); if (name == NULL) return false;
-    FILE *stream = fopen(name, append ? "ab" : "wb"); int64_t error = stream == NULL ? kr_io_code() : 0; free(name);
-    if (stream == NULL) { *code = error; return false; }
+    *code = 0; FILE *stream = kr_fs_fopen(path, append ? "ab" : "wb", code);
+    if (!stream) return false;
     bool ok = value.len == 0 || fwrite(value.data, 1, value.len, stream) == value.len;
     if (!ok) *code = kr_io_code();
     if (fclose(stream) && ok) { *code = kr_io_code(); ok = false; }
     return ok;
 }
 bool kr_fs_stat(kr_string path, int operation, int64_t *value, int64_t *code) {
-    *code = 0; char *name = kr_fs_path(path, code); if (name == NULL) return false;
+    *code = 0;
 #if defined(_WIN32)
-    struct _stat64 info; int result = _stat64(name, &info); int64_t error = result ? kr_io_code() : 0; free(name);
+    wchar_t *name = kr_windows_path(path, code); if (!name) return false;
+    HANDLE file = CreateFileW(name, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                              NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    int64_t error = file == INVALID_HANDLE_VALUE ? kr_windows_errno(GetLastError()) : 0;
+    free(name);
+    if (file == INVALID_HANDLE_VALUE) {
+        if (operation == 0 && (error == ENOENT || error == ENOTDIR)) { *value = 0; return true; }
+        *code = error; return false;
+    }
+    BY_HANDLE_FILE_INFORMATION info;
+    bool ok = GetFileInformationByHandle(file, &info) != 0;
+    error = ok ? 0 : kr_windows_errno(GetLastError()); (void)CloseHandle(file);
+    if (!ok) { *code = error; return false; }
+    if (operation == 0) *value = 1;
+    else if (operation == 1) *value = (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? 1 : 0;
+    else {
+        uint64_t size = ((uint64_t)info.nFileSizeHigh << 32) | info.nFileSizeLow;
+        if (size > INT64_MAX) { *code = EOVERFLOW; return false; }
+        *value = (int64_t)size;
+    }
 #else
+    char *name = kr_fs_path(path, code); if (!name) return false;
     struct stat info; int result = stat(name, &info); int64_t error = result ? kr_io_code() : 0; free(name);
-#endif
     if (result) {
         if (operation == 0 && (error == ENOENT || error == ENOTDIR)) { *value = 0; return true; }
         *code = error; return false;
@@ -868,41 +963,65 @@ bool kr_fs_stat(kr_string path, int operation, int64_t *value, int64_t *code) {
     if (operation == 0) *value = 1;
     else if (operation == 1) *value = S_ISDIR(info.st_mode) ? 1 : 0;
     else { if (info.st_size < 0 || (uintmax_t)info.st_size > INT64_MAX) { *code = EOVERFLOW; return false; } *value = (int64_t)info.st_size; }
+#endif
     return true;
 }
 bool kr_fs_modify(kr_string path, int operation, int64_t *code) {
-    *code = 0; char *name = kr_fs_path(path, code); if (name == NULL) return false;
+    *code = 0;
 #if defined(_WIN32)
-    struct _stat64 info;
-    int result = operation == 0 ? _mkdir(name) :
-        (_stat64(name, &info) == 0 && S_ISDIR(info.st_mode) ? _rmdir(name) : remove(name));
+    wchar_t *name = kr_windows_path(path, code); if (!name) return false;
+    BOOL ok;
+    if (operation == 0) ok = CreateDirectoryW(name, NULL);
+    else {
+        DWORD attributes = GetFileAttributesW(name);
+        ok = attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) ? RemoveDirectoryW(name) : DeleteFileW(name);
+    }
+    int64_t error = ok ? 0 : kr_windows_errno(GetLastError()); free(name); *code = error; return ok != 0;
 #else
+    char *name = kr_fs_path(path, code); if (!name) return false;
     int result = operation == 0 ? mkdir(name, 0777) : remove(name);
-#endif
     int64_t error = result ? kr_io_code() : 0; free(name); *code = error; return result == 0;
+#endif
 }
 bool kr_fs_rename(kr_string from, kr_string to, int64_t *code) {
-    *code = 0; char *a = kr_fs_path(from, code); if (a == NULL) return false;
-    char *b = kr_fs_path(to, code); if (b == NULL) { free(a); return false; }
+    *code = 0;
 #if defined(_WIN32)
-    /* CRT rename refuses an existing destination on Windows. Replace files
-     * through Win32 without a delete-first gap or loss on a failed move. */
-    int result = kr_windows_same_file(a, b) || MoveFileExA(a, b, MOVEFILE_REPLACE_EXISTING) ? 0 : -1;
-    int64_t error = result ? kr_windows_errno(GetLastError()) : 0;
+    wchar_t *a = kr_windows_path(from, code); if (!a) return false;
+    wchar_t *b = kr_windows_path(to, code); if (!b) { free(a); return false; }
+    bool ok = kr_windows_same_file(a, b) || MoveFileExW(a, b, MOVEFILE_REPLACE_EXISTING);
+    int64_t error = ok ? 0 : kr_windows_errno(GetLastError());
 #else
-    int result = rename(a, b); int64_t error = result ? kr_io_code() : 0;
+    char *a = kr_fs_path(from, code); if (!a) return false;
+    char *b = kr_fs_path(to, code); if (!b) { free(a); return false; }
+    bool ok = rename(a, b) == 0; int64_t error = ok ? 0 : kr_io_code();
 #endif
-    free(a); free(b); *code = error; return result == 0;
+    free(a); free(b); *code = error; return ok;
 }
 bool kr_fs_cwd(kr_string *out, int64_t *code) {
-    *code = 0; size_t capacity = 128; char *data = NULL;
+    *code = 0;
+#if defined(_WIN32)
+    DWORD capacity = 128; wchar_t *wide = NULL;
+    for (;;) {
+        wchar_t *grown = realloc(wide, (size_t)capacity * sizeof *wide);
+        if (!grown) { free(wide); *code = ENOMEM; return false; } wide = grown;
+        DWORD length = GetCurrentDirectoryW(capacity, wide);
+        if (!length) { *code = kr_windows_errno(GetLastError()); free(wide); return false; }
+        if (length < capacity) break;
+        if (length >= 1024u * 1024u) { free(wide); *code = ENAMETOOLONG; return false; }
+        capacity = length + 1;
+    }
+    char *data = kr_windows_utf8(wide, code); free(wide);
+    if (!data) return false;
+#else
+    size_t capacity = 128; char *data = NULL;
     for (;;) {
         char *grown = realloc(data, capacity);
-        if (grown == NULL) { free(data); *code = ENOMEM; return false; } data = grown;
-        if (getcwd(data, capacity) != NULL) break;
+        if (!grown) { free(data); *code = ENOMEM; return false; } data = grown;
+        if (getcwd(data, capacity)) break;
         if (errno != ERANGE || capacity >= 1024u * 1024u) { *code = kr_io_code(); free(data); return false; }
         capacity *= 2;
     }
+#endif
     kr_track(data, 0); out->data = data; out->len = strlen(data); return true;
 }
 static int kr_fs_compare(const void *a, const void *b) {
@@ -910,45 +1029,82 @@ static int kr_fs_compare(const void *a, const void *b) {
     int cmp = n ? memcmp(x->data, y->data, n) : 0;
     return cmp ? cmp : (x->len > y->len) - (x->len < y->len);
 }
-bool kr_fs_list(kr_string path, kr_slice *out, int64_t *code) {
-    *code = 0; char *name = kr_fs_path(path, code); if (name == NULL) return false;
-    DIR *dir = opendir(name); int64_t error = dir == NULL ? kr_io_code() : 0; free(name);
-    if (dir == NULL) { *code = error; return false; }
-    kr_string *names = NULL; size_t count = 0, capacity = 0;
-    for (;;) {
-        errno = 0; struct dirent *entry = readdir(dir);
-        if (entry == NULL) { if (errno) error = kr_io_code(); break; }
-        if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
-        if (count == 1000000) { error = EFBIG; break; }
-        if (count == capacity) {
-            size_t cap = capacity ? capacity * 2 : 16;
-            kr_string *grown = realloc(names, cap * sizeof *grown);
-            if (grown == NULL) { error = ENOMEM; break; } names = grown; capacity = cap;
-        }
-        size_t n = strlen(entry->d_name); char *copy = malloc(n + 1);
-        if (copy == NULL) { error = ENOMEM; break; }
-        memcpy(copy, entry->d_name, n + 1); kr_track(copy, 0); names[count].data = copy; names[count++].len = n;
+static bool kr_fs_list_add(kr_string **names, size_t *count, size_t *capacity, char *copy, int64_t *code) {
+    if (*count == 1000000) { free(copy); *code = EFBIG; return false; }
+    if (*count == *capacity) {
+        size_t cap = *capacity ? *capacity * 2 : 16;
+        kr_string *grown = realloc(*names, cap * sizeof *grown);
+        if (!grown) { free(copy); *code = ENOMEM; return false; }
+        *names = grown; *capacity = cap;
     }
-    if (closedir(dir) && error == 0) error = kr_io_code();
-    if (error != 0) { free(names); *code = error; return false; }
+    size_t length = strlen(copy); kr_track(copy, 0);
+    (*names)[*count].data = copy; (*names)[(*count)++].len = length; return true;
+}
+bool kr_fs_list(kr_string path, kr_slice *out, int64_t *code) {
+    *code = 0; kr_string *names = NULL; size_t count = 0, capacity = 0;
+#if defined(_WIN32)
+    wchar_t *name = kr_windows_path(path, code); if (!name) return false;
+    DWORD attributes = GetFileAttributesW(name);
+    if (attributes == INVALID_FILE_ATTRIBUTES) { *code = kr_windows_errno(GetLastError()); free(name); return false; }
+    if (!(attributes & FILE_ATTRIBUTE_DIRECTORY)) { *code = ENOTDIR; free(name); return false; }
+    size_t n = wcslen(name);
+    if (n > SIZE_MAX / sizeof(wchar_t) - 3) { free(name); *code = ENAMETOOLONG; return false; }
+    wchar_t *pattern = realloc(name, (n + 3) * sizeof *pattern);
+    if (!pattern) { free(name); *code = ENOMEM; return false; }
+    pattern[n++] = L'\\'; pattern[n++] = L'*'; pattern[n] = L'\0';
+    WIN32_FIND_DATAW entry; HANDLE directory = FindFirstFileW(pattern, &entry);
+    DWORD find_error = directory == INVALID_HANDLE_VALUE ? GetLastError() : ERROR_SUCCESS;
+    free(pattern);
+    if (directory == INVALID_HANDLE_VALUE) {
+        DWORD error = find_error;
+        if (error != ERROR_FILE_NOT_FOUND) { *code = kr_windows_errno(error); return false; }
+    } else {
+        for (;;) {
+            if (wcscmp(entry.cFileName, L".") && wcscmp(entry.cFileName, L"..")) {
+                if (count == 1000000) { *code = EFBIG; break; }
+                char *copy = kr_windows_utf8(entry.cFileName, code);
+                if (!copy || !kr_fs_list_add(&names, &count, &capacity, copy, code)) break;
+            }
+            if (!FindNextFileW(directory, &entry)) {
+                DWORD error = GetLastError();
+                if (error != ERROR_NO_MORE_FILES) *code = kr_windows_errno(error);
+                break;
+            }
+        }
+        if (!FindClose(directory) && !*code) *code = kr_windows_errno(GetLastError());
+    }
+#else
+    char *name = kr_fs_path(path, code); if (!name) return false;
+    DIR *directory = opendir(name); int64_t error = directory ? 0 : kr_io_code(); free(name);
+    if (!directory) { *code = error; return false; }
+    for (;;) {
+        errno = 0; struct dirent *entry = readdir(directory);
+        if (!entry) { if (errno) *code = kr_io_code(); break; }
+        if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
+        if (count == 1000000) { *code = EFBIG; break; }
+        size_t n = strlen(entry->d_name); char *copy = malloc(n + 1);
+        if (!copy) { *code = ENOMEM; break; }
+        memcpy(copy, entry->d_name, n + 1);
+        if (!kr_fs_list_add(&names, &count, &capacity, copy, code)) break;
+    }
+    if (closedir(directory) && !*code) *code = kr_io_code();
+#endif
+    if (*code) { free(names); return false; }
     if (count > 1) qsort(names, count, sizeof *names, kr_fs_compare);
     *out = kr_slice_alloc((int64_t)count, sizeof(kr_string), 0);
     if (count) memcpy(out->owner->data, names, count * sizeof *names);
     free(names); return true;
 }
 bool kr_fs_open(kr_string path, kr_string mode, kr_file **out, int64_t *code) {
-    *code = 0; char *name = kr_fs_path(path, code); if (name == NULL) return false;
-    char *m = kr_fs_path(mode, code); if (m == NULL) { free(name); return false; }
+    *code = 0; char *m = kr_fs_path(mode, code); if (!m) return false;
     if (strcmp(m,"r") && strcmp(m,"w") && strcmp(m,"a") && strcmp(m,"rb") && strcmp(m,"wb") && strcmp(m,"ab")) {
-        free(name); free(m); *code = EINVAL; return false;
+        free(m); *code = EINVAL; return false;
     }
-    /* Kremen file strings and byte counts retain their bytes on every host.
-     * The short modes are aliases, not CRT text-translation requests. */
     const char *binary_mode = m[0] == 'r' ? "rb" : m[0] == 'w' ? "wb" : "ab";
-    FILE *stream = fopen(name, binary_mode); int64_t error = stream == NULL ? kr_io_code() : 0; free(name); free(m);
-    if (stream == NULL) { *code = error; return false; }
+    FILE *stream = kr_fs_fopen(path, binary_mode, code); free(m);
+    if (!stream) return false;
     kr_file *file = malloc(sizeof *file);
-    if (file == NULL) { (void)fclose(stream); *code = ENOMEM; return false; }
+    if (!file) { (void)fclose(stream); *code = ENOMEM; return false; }
     if (!kr_register_cleanup()) { free(file); (void)fclose(stream); *code = ENOMEM; return false; }
     file->stream = stream; file->live = true; file->next = kr_files; kr_files = file; *out = file; return true;
 }
@@ -973,11 +1129,11 @@ bool kr_fs_write_all(kr_file *file, kr_string data, int64_t *out, int64_t *code)
     *out = (int64_t)data.len; return true;
 }
 kr_string kr_error_message(int64_t code) {
-    (void)pthread_mutex_lock(&kr_error_message_mutex);
+    (void)kr_host_mutex_lock(&kr_error_message_mutex);
     const char *message = code > INT_MAX || code < 0 ? "unknown error" : strerror((int)code);
     size_t n = strlen(message); char *copy = malloc(n + 1);
     if (copy != NULL) memcpy(copy, message, n + 1);
-    (void)pthread_mutex_unlock(&kr_error_message_mutex);
+    (void)kr_host_mutex_unlock(&kr_error_message_mutex);
     if (copy == NULL) kr_panic("out of memory", 0);
     kr_track(copy, 0); kr_string result = {copy, n}; return result;
 }

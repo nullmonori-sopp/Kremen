@@ -1,5 +1,8 @@
 #ifndef KREMEN_PLATFORM_H
 #define KREMEN_PLATFORM_H
+#if defined(_WIN32)
+#include "../native/platform.h"
+#else
 /* Small POSIX executable discovery boundary; no /proc requirement. */
 #include <errno.h>
 #include <limits.h>
@@ -61,4 +64,5 @@ static inline bool km_platform_executable(const char *argument, char *output, si
     output[0] = 0; errno = ENOENT;
     return false;
 }
+#endif /* Windows / POSIX */
 #endif

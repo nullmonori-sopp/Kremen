@@ -62,10 +62,12 @@ exec "$KREMEN_TEST_REAL_CC" "$@"
 CC
 chmod 755 "$COMPILER"
 run_ok "$DRIVER" check "$SOURCE" --cc "$COMPILER"
-for flag in -std=c11 -Wall -Wextra -Wpedantic -Werror -fsyntax-only; do
+for flag in -std=c11 -Wall -Wextra -Wpedantic -Werror -c -o; do
     grep -Fx -- "$flag" "$KREMEN_TEST_CC_LOG" > /dev/null || fail "check did not use $flag"
 done
-pass 'check invokes strict C backend and handles literal source paths'
+checked_object=$(awk '$0 == "-o" { getline; print; exit }' "$KREMEN_TEST_CC_LOG")
+[ -n "$checked_object" ] && [ ! -e "$checked_object" ] && [ ! -d "$(dirname "$checked_object")" ] || fail 'check left its private object or staging directory'
+pass 'check invokes strict C backend, handles literal paths, and removes its private object'
 
 run_ok "$DRIVER" emit-c "$SOURCE" -o "$WORK/emitted source.c"
 [ -s "$WORK/emitted source.c" ] || fail 'empty emitted C'

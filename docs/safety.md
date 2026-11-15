@@ -1,6 +1,6 @@
 # Safety and memory in Kremen
 
-Kremen checks many mistakes before a program runs and checks others while it runs. These checks are useful, but they do not make every possible program correct. This page explains the actual boundaries of the full language in 0.4.7. The self-hosted subset has a different, smaller set of checks.
+Kremen checks many mistakes before a program runs and checks others while it runs. These checks are useful, but they do not make every possible program correct. This page explains the actual boundaries of the full language in 0.4.8. The self-hosted subset has a different, smaller set of checks.
 
 If you are new to memory, begin with [tutorial lesson 9](tutorial.md#9-understand-ownership-before-using-dynamic-memory). A variable owns a value. A reference borrows access to that value. A slice describes storage owned by a runtime allocation. Copying a slice does not copy its elements or extend the lifetime of that storage.
 
@@ -44,7 +44,7 @@ Raw memory does not acquire a complete validity proof. A non-null pointer may st
 
 ## The threading boundary
 
-The full runtime supports native pthread-backed workers through `threadSpawn`, `threadJoin`, and `threadClose`, using POSIX threads on Linux and winpthreads in the experimental Windows profile. A worker is a named Kremen function taking and returning an `i64`; it has no captures. This interface does not transfer references, pointers, slices, strings, file handles, arena handles, or thread handles between threads. The full language also has no mutable global variables.
+The full runtime supports native workers through `threadSpawn`, `threadJoin`, and `threadClose`. A private host adapter uses system POSIX threads on Linux and CRT-aware Windows threads with native synchronization on Windows. Windows does not load a pthread-emulation library. A worker is a named Kremen function taking and returning an `i64`; it has no captures. This interface does not transfer references, pointers, slices, strings, file handles, arena handles, or thread handles between threads. The full language also has no mutable global variables.
 
 Thread handles remain with their creator. They cannot be returned, borrowed, or put inside ordinary containers. Copies refer to one join state: explicit repeated join returns an error, while `threadClose` is idempotent. A thread-local registry keeps its handle records until the creator exits. Outstanding children are joined before the creator's resources are reclaimed.
 
@@ -74,7 +74,11 @@ Frontend diagnostic paths and messages escape terminal controls and direction-ch
 
 ## Toolchain and platform boundary
 
-The established full-language target is a hosted Linux process with libc and POSIX threads. 0.4.7 adds an experimental Windows x86-64 profile using MSYS2 UCRT64 GCC and winpthreads. Generated full-language C is compiled and linked with `-pthread` in both profiles. The native Windows boundary uses existing file handles for canonical source paths and file identity; initial narrow path APIs do not establish arbitrary Unicode or long-path support. [Windows setup](windows.md) describes the concrete environment and deployment limits.
+The full language targets hosted Linux and Windows processes. The common frontend and runtime use a private host boundary for processes, threads, directories, and path operations. Linux uses system POSIX-thread support and generated C adds `-pthread`. Windows uses native thread and synchronization primitives; it does not require MSYS2, WSL, or winpthreads.
+
+The Windows boundary translates UTF-8 paths and process arguments to UTF-16 and resolves existing source paths through file handles. File identities protect source and toolchain resources from output aliases; a root ancestor's identity also matters when directory names differ only by case. Invalid path encodings and NUL are rejected. Unicode support does not establish every Windows namespace, extended path length, or filesystem configuration. [Windows setup](windows.md) describes the concrete behavior and remaining limits.
+
+A [portable package](portable.md) includes a matching Zig C/LLVM backend and its SDK resources. It runs offline without a system development compiler on `PATH`; temporary and cache storage must still be writable. The package does not eliminate the system C runtime, target ABI, or OS services. Source builds and explicit external backends have their own development and deployment prerequisites.
 
 `kremen doctor` compiles and executes a native runtime probe. It helps find setup problems but does not sandbox code or replace regression testing. Strict C flags help detect generator defects; they do not prove that the compiler is free of defects. [Validation](validation.md) describes the actual regression and sanitizer coverage.
 
