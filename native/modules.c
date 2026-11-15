@@ -9,22 +9,45 @@ static bool exists(const char *path) { return km_host_path_exists(path); }
 static bool is_dir(const char *path) { return km_host_path_is_dir(path); }
 static char *parent(Context *ctx, const char *path) { const char *last = strrchr(path, '/'); return last ? km_strndup(ctx, path, last == path ? 1 : (size_t)(last - path)) : km_strdup(ctx, "."); }
 
-static void require_project_path(Context *ctx, const char *resolved, Token tok, const char *kind, const char *requested) {
-    if (!ctx->project_root) return;
-    if (!km_host_inside(resolved, ctx->project_root))
+static void require_path(Context *ctx, const char *resolved, const char *root, Token tok, const char *kind, const char *requested) {
+    if (!root) return;
+    if (!km_host_inside(resolved, root)) {
+        if (root == ctx->stdlib_root)
+            km_error(ctx, tok, "E013", "%s escapes standard library root: %s", kind, requested);
         km_error(ctx, tok, "E013", "%s escapes project root: %s (use --root to select a wider project)", kind, requested);
+    }
 }
+
+static bool standard_import(const char *requested) { return !strncmp(requested, "std/", 4); }
+static Module *load_module(Context *ctx, const char *path, const char *root);
 
 char *km_resolve(Context *ctx, const char *from, const char *requested) {
     Token tok = ctx->import_token;
     if (km_host_absolute_import(requested)) km_error(ctx, tok, "E013", "imports require a relative local path: %s", requested);
-    char *dir = is_dir(from) ? km_strdup(ctx, from) : parent(ctx, from);
-    char *candidate = km_sprintf(ctx, "%s/%s", dir, requested);
+    const char *root = tok.src && tok.src->module ? tok.src->module->root : ctx->project_root;
+    char *dir;
+    const char *relative = requested;
+    if (standard_import(requested)) {
+        relative = requested + 4;
+        for (const char *part = relative; ; ) {
+            const char *end = strchr(part, '/'); size_t len = end ? (size_t)(end - part) : strlen(part);
+            if (!len || (len == 1 && part[0] == '.') || (len == 2 && !strncmp(part, "..", 2)) || memchr(part, '\\', len) || memchr(part, ':', len))
+                km_error(ctx, tok, "E013", "invalid standard library import: %s", requested);
+            if (!end) break;
+            part = end + 1;
+        }
+        if (!ctx->stdlib_root) {
+            ctx->diagnostic_hint = "Install the complete Kremen package, including share/kremen/stdlib, next to the compiler.";
+            km_error(ctx, tok, "E013", "standard library is unavailable: %s", requested);
+        }
+        root = ctx->stdlib_root; dir = ctx->stdlib_root;
+    } else dir = is_dir(from) ? km_strdup(ctx, from) : parent(ctx, from);
+    char *candidate = km_sprintf(ctx, "%s/%s", dir, relative);
     if (suffix(candidate, ".krh")) km_error(ctx, tok, "E013", "import the implementation .kr, its .krh is loaded automatically");
     if (!exists(candidate) && !suffix(candidate, ".kr")) candidate = km_sprintf(ctx, "%s.kr", candidate);
     char *resolved = km_alloc(ctx, PATH_MAX);
     if (!km_host_realpath(candidate, resolved)) km_error(ctx, tok, "E013", "cannot resolve import '%s' relative to %s: %s", requested, from, strerror(errno));
-    require_project_path(ctx, resolved, tok, "import", requested);
+    require_path(ctx, resolved, root, tok, "import", requested);
     return km_strdup(ctx, resolved);
 }
 
@@ -35,7 +58,7 @@ static void load_source(Context *ctx, Module *module, const char *path, bool hea
     if (!km_host_realpath(path, resolved)) km_error(ctx, tok, "E010", "cannot resolve source %s: %s", path, strerror(errno));
     /* Directory entries and automatically paired headers need the same
      * canonical boundary check as the import expression itself. */
-    require_project_path(ctx, resolved, tok, "source", path);
+    require_path(ctx, resolved, module->root, tok, "source", path);
     Source *src = km_read_source(ctx, resolved, header); src->module = module;
     km_sources_push(ctx, &module->sources, src);
     Nodes decls = km_parse(ctx, src);
@@ -49,7 +72,8 @@ static void load_source(Context *ctx, Module *module, const char *path, bool hea
         if (!n->text || strlen(n->text) != n->text_len) km_error(ctx, n->tok, "E013", "invalid import path");
         Token previous_origin = ctx->import_token; ctx->import_token = n->tok;
         char *resolved = km_resolve(ctx, path, n->text);
-        Module *target = km_load(ctx, resolved);
+        const char *root = standard_import(n->text) ? ctx->stdlib_root : module->root;
+        Module *target = load_module(ctx, resolved, root);
         ctx->import_token = previous_origin;
         const char *alias = n->name ? n->name : target->name;
         for (Import *old = module->imports; old; old = old->next) {
@@ -74,19 +98,22 @@ static void load_implementation(Context *ctx, Module *module, const char *path) 
 
 static int compare_names(const void *a, const void *b) { return strcmp(*(const char *const *)a, *(const char *const *)b); }
 
-Module *km_load(Context *ctx, const char *path) {
+static Module *load_module(Context *ctx, const char *path, const char *root) {
     Token tok = ctx->import_token;
     Source missing = {.path = (char *)path};
     if (!tok.src) tok = (Token){.src = &missing, .line = 1, .col = 1};
     char *resolved = km_alloc(ctx, PATH_MAX);
     if (!km_host_realpath(path, resolved)) km_error(ctx, tok, "E010", "cannot resolve %s: %s", path, strerror(errno));
+    if (!ctx->project_root) ctx->project_root = is_dir(resolved) ? km_strdup(ctx, resolved) : parent(ctx, resolved);
+    if (!root) root = ctx->project_root;
+    require_path(ctx, resolved, root, tok, "module", path);
     for (size_t i = 0; i < ctx->modules.len; i++) {
         Module *m = ctx->modules.data[i];
-        bool same = !km_host_path_compare(m->path, resolved);
+        bool same = !km_host_path_compare(m->path, resolved) && !km_host_path_compare(m->root, root);
 #if defined(_WIN32)
         /* NTFS directories may opt into case-sensitive names. A spelling
          * comparison alone must not conflate two different module files. */
-        same = same && km_host_same_file(m->path, resolved);
+        same = same && km_host_same_file(m->path, resolved) && km_host_same_file(m->root, root);
 #endif
         if (same) {
             if (m->loading) km_error(ctx, tok, "E014", "import cycle involving %s", resolved);
@@ -95,12 +122,11 @@ Module *km_load(Context *ctx, const char *path) {
     }
     if (ctx->modules.len >= 128) km_error(ctx, tok, "E014", "too many modules (limit 128)");
     Module *m = km_alloc(ctx, sizeof *m); m->path = km_strdup(ctx, resolved); m->loading = true;
+    m->root = root;
     const char *base = strrchr(resolved, '/'); base = base ? base + 1 : resolved;
     m->name = km_strndup(ctx, base, strlen(base) - (suffix(base, ".kr") ? 3 : 0));
     m->cname = km_sprintf(ctx, "m%zu", ctx->modules.len);
     km_modules_push(ctx, &ctx->modules, m);
-    if (!ctx->project_root) ctx->project_root = is_dir(resolved) ? km_strdup(ctx, resolved) : parent(ctx, resolved);
-    require_project_path(ctx, resolved, tok, "module", path);
     if (is_dir(resolved)) {
         KmHostDirectory dir;
         if (!km_host_dir_open(&dir, resolved)) km_error(ctx, tok, "E010", "cannot list %s", resolved);
@@ -120,3 +146,5 @@ Module *km_load(Context *ctx, const char *path) {
     m->loading = false; m->loaded = true;
     return m;
 }
+
+Module *km_load(Context *ctx, const char *path) { return load_module(ctx, path, ctx->project_root); }

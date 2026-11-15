@@ -6,8 +6,8 @@ Choose the Linux x86-64 or Windows x86-64 package for the computer that will run
 
 | Host | Portable archive |
 | --- | --- |
-| Linux x86-64 | `kremen-v0.4.8-linux-x86_64-portable.tar.gz` |
-| Windows x86-64 | `kremen-v0.4.8-windows-x86_64-portable.zip` |
+| Linux x86-64 | `kremen-v0.4.9-linux-x86_64-portable.tar.gz` |
+| Windows x86-64 | `kremen-v0.4.9-windows-x86_64-portable.zip` |
 
 Each portable archive has its own external `.sha256` file, and an internal `SHA256SUMS` lists the packaged files. Keep the download's directory structure when extracting it.
 
@@ -18,7 +18,7 @@ After unpacking, the important directories are:
 | Directory | What it contains |
 | --- | --- |
 | `bin/` | Full-language compiler and bootstrap-subset driver |
-| `share/kremen/` | Matching runtime, bootstrap resources, and native platform support |
+| `share/kremen/` | Matching runtime, bundled library sources, bootstrap resources, and native platform support |
 | `share/doc/kremen/` | Documentation, examples, and project license |
 | `backend/` | Bundled Zig SDK, its licenses, and the small `bin/clang` launcher |
 
@@ -37,6 +37,8 @@ Open a terminal in the unpacked directory:
 ```
 
 The example prints `Hello, Kremen!`. `doctor` compiles and runs a small probe with the selected backend and actual runtime, including a worker spawn and join. This catches an incomplete extraction, missing backend resources, or an incompatible host.
+
+The package also includes the first [math library](math.md). Run `./bin/kremen run share/doc/kremen/examples/math.kr` to try it. Your own programs can use `import "std/math"` from any project directory; the compiler finds the matching sources in `share/kremen/stdlib/`.
 
 For a personal program outside the package:
 

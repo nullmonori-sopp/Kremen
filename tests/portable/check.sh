@@ -4,12 +4,12 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 [ "$#" -eq 1 ] || { printf '%s\n' 'Usage: sh tests/portable/check.sh /unpacked/package'; exit 2; }
 PACKAGE_ROOT=$(CDPATH= cd -- "$1" && pwd)
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/kremen-portable048.XXXXXX")
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/kremen-portable049.XXXXXX")
 trap 'chmod -R u+w "$WORK" 2>/dev/null || :; rm -rf "$WORK"' EXIT HUP INT TERM
 mkdir "$WORK/no developer tools"
 EMPTY_PATH="$WORK/no developer tools"
 TOTAL=0
-pass() { TOTAL=$((TOTAL + 1)); printf 'ok portable048.%s - %s\n' "$TOTAL" "$1"; }
+pass() { TOTAL=$((TOTAL + 1)); printf 'ok portable049.%s - %s\n' "$TOTAL" "$1"; }
 fail() { printf 'FAIL: %s\n' "$1" >&2; [ ! -f "$WORK/error" ] || cat "$WORK/error" >&2; exit 1; }
 (cd "$PACKAGE_ROOT" && sha256sum -c SHA256SUMS) > "$WORK/manifest.log" 2> "$WORK/error" || fail 'package checksums'
 pass 'complete portable archive checksum manifest'
@@ -32,6 +32,13 @@ for mode in work learn; do
     (cd "$WORK" && invoke run "$WORK/источники/задача 🌍.kr" --mode="$mode")
     grep -Fx 'native runtime 048 ok' "$WORK/output" > /dev/null || fail "$mode runtime output"
     pass "$mode Unicode filesystem and native worker runtime"
+done
+printf 'import "std/math"\nfunc main() { println(math.gcd(-84, 30), math.min(-5, 9)) }\n' > "$WORK/источники/math.kr"
+[ -f "$PACKAGE_ROOT/share/kremen/stdlib/math/math.krh" ] || fail 'bundled math header'
+for mode in work learn; do
+    (cd "$WORK" && invoke run "$WORK/источники/math.kr" --mode="$mode")
+    grep -Fx '6 -5' "$WORK/output" > /dev/null || fail "$mode bundled math output"
+    pass "$mode standard math imports outside the portable installation"
 done
 invoke emit-c "$WORK/источники/задача 🌍.kr" -o "$WORK/generated.c"
 env -u CC PATH="$EMPTY_PATH" "$BACKEND" -std=c11 -Wall -Wextra -Wpedantic -Werror -pthread "$WORK/generated.c" -o "$WORK/program" > "$WORK/output" 2> "$WORK/error" || fail 'standalone C compilation'
@@ -68,8 +75,15 @@ printf 'retain\n' > "$PREFIX/bin/unrelated"
 sh "$PACKAGE_ROOT/install.sh" --prefix "$PREFIX" > "$WORK/install.log" 2> "$WORK/error" || fail 'prebuilt installation'
 env -u CC -u KREMEN_SELFHOST_ROOT PATH="$EMPTY_PATH" "$PREFIX/bin/kremen" doctor > "$WORK/output" 2> "$WORK/error" || fail 'installed portable doctor'
 pass 'prebuilt installation retains a working bundled backend'
+[ -f "$PREFIX/share/kremen/stdlib/math/math.krh" ] || fail 'installed math header'
+env -u CC -u KREMEN_SELFHOST_ROOT PATH="$EMPTY_PATH" "$PREFIX/bin/kremen" run "$WORK/источники/math.kr" --mode=learn > "$WORK/output" 2> "$WORK/error" || fail 'installed standard math'
+grep -Fx '6 -5' "$WORK/output" > /dev/null || fail 'installed standard math output'
+pass 'prebuilt installation includes usable standard library source and headers'
+printf 'retain\n' > "$PREFIX/share/kremen/stdlib/math/unrelated"
 sh "$PREFIX/share/kremen/install-portable.sh" --prefix "$PREFIX" --uninstall > "$WORK/install.log" 2> "$WORK/error" || fail 'prebuilt uninstall'
 [ ! -e "$PREFIX/bin/kremen" ] && [ ! -e "$PREFIX/backend/zig" ] || fail 'owned installation remains'
+[ ! -e "$PREFIX/share/kremen/stdlib/math/math.kr" ] || fail 'owned standard library remains'
 grep -Fx retain "$PREFIX/bin/unrelated" > /dev/null || fail 'unrelated file removed'
+grep -Fx retain "$PREFIX/share/kremen/stdlib/math/unrelated" > /dev/null || fail 'unrelated standard library file removed'
 pass 'prebuilt uninstall removes owned files and preserves unrelated data'
-printf 'Portable Linux 0.4.8 checks passed: %s.\n' "$TOTAL"
+printf 'Portable Linux 0.4.9 checks passed: %s.\n' "$TOTAL"

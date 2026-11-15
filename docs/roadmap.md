@@ -2,7 +2,7 @@
 
 The goal is to make Kremen useful for ordinary systems experiments and for structured learning. The initial `work` and `learn` profiles in 0.4.5 share language semantics, safety rules, module formats, and the C backend. Learning adds explicit requirements and explanations while retaining the shared safety checks.
 
-This is a development plan. Each release must be tested on its own merits, and unfinished work can move to a later milestone. The 0.4.4 through 0.4.8 rows describe implemented work; later rows remain planned. The first profile pilot moved forward to 0.4.5 so its real behavior could be tested before a larger lesson system. Versions 0.4.7 and 0.4.8 prioritized a usable Windows host and portable distribution. Resource/effect contracts, project-profile configuration, and richer diagnostic recovery still need separate specifications and validation.
+This is a development plan. Each release must be tested on its own merits, and unfinished work can move to a later milestone. The 0.4.4 through 0.4.9 rows describe implemented work; later rows remain planned. The first profile pilot moved forward to 0.4.5 so its real behavior could be tested before a larger lesson system. Versions 0.4.7 and 0.4.8 prioritized a usable Windows host and portable distribution. Version 0.4.9 adds a first library and focused stability work; the previously proposed lesson runner remains future work. Resource/effect contracts, project-profile configuration, and richer diagnostic recovery still need separate specifications and validation.
 
 | Version | Focus | Evidence needed before calling it complete |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ This is a development plan. Each release must be tested on its own merits, and u
 | 0.4.6 | Begin typed place/discard lowering; stabilize checking and output | Avoid unnecessary fixed-array length copies while preserving effects and checks; close learn result-discard gaps; cache zero-state queries; report failed writes and input conditions correctly |
 | 0.4.7 | First native Windows profile, setup diagnostics, and checked discards | Define the UCRT64 environment and platform boundary; preserve source/effect checks; avoid unnecessary discarded-value copies; validate binary filesystem behavior and report setup failures |
 | 0.4.8 | Native host adapters and complete portable packages | Native Windows threads and UTF-16 paths without a compatibility runtime; native subset bootstrap; bundled backend discovery; package, relocation, and real-host checks |
-| 0.4.9 | Deterministic lesson runner and a first learning track | Runnable lessons, observable tests, ordered hints, offline operation, and validation by people unfamiliar with the language |
+| 0.4.9 | First bundled integer library and focused stability work | Checked integer results at boundary values in both profiles; bounded library imports; smaller repeated-match stack frames; clear fatal-warning metadata; installed and portable library use |
 | 0.4.10 | Stabilize the release candidate | Compatibility review, bounded diagnostics, regression coverage, clean installations, complete English guides, and no placeholder commands |
 | 0.5.0 | Publish the tested profile and learning workflow | A coherent first course and a stable documented interface; remaining experimental features clearly identified |
 
@@ -19,15 +19,17 @@ The release after 0.4.10 is planned as 0.5.0, rather than 0.4.11. These are vers
 
 ## What exists today
 
-0.4.8 has `--mode=work|learn`, an offline diagnostic catalog with 46 entries, `kremen doctor`, ten tutorial programs, a checked-input learning example, and independent integer workers. Native [Windows support](windows.md) now uses Windows threading, process, and filesystem primitives; [portable packages](portable.md) provide the backend for offline use on Linux and Windows. The smaller bootstrap subset can rebuild on both hosts. [Work and learn profiles](profiles.md) specifies the five learning requirements and their expanded result-payload coverage. Project profile configuration, `kremen learn`, and browser execution do not exist yet.
+0.4.9 has `--mode=work|learn`, an offline diagnostic catalog with 46 entries, `kremen doctor`, ten tutorial programs, a checked-input learning example, independent integer workers, and the bundled [integer math library](math.md). Native [Windows support](windows.md) uses Windows threading, process, and filesystem primitives; [portable packages](portable.md) provide the backend for offline use on Linux and Windows. The smaller bootstrap subset can rebuild on both hosts. [Work and learn profiles](profiles.md) specifies the five learning requirements and their expanded result-payload coverage. Project profile configuration, `kremen learn`, and browser execution do not exist yet.
 
-The backend now has a focused typed lowering path for fixed-array lengths, explicit aggregate discards, and entirely ignored tuple patterns without unnecessary selected-value copies. This is an incremental step, not a replacement of the whole frontend/backend boundary with a general-purpose intermediate representation. Broader IR design and function-effect contracts remain separate work; adding an internal helper does not establish those language features.
+The backend now has focused typed lowering paths for fixed-array lengths, explicit aggregate discards, entirely ignored tuple patterns, and matches on existing values without unnecessary full-subject copies. This is an incremental step, not a replacement of the whole frontend/backend boundary with a general-purpose intermediate representation. Broader IR design and function-effect contracts remain separate work; adding an internal helper does not establish those language features.
 
 The first learning requirements should teach real properties: explicit failure handling, resource cleanup, checked ranges, and understanding allocation or blocking. A rule needs a precise definition and a useful remedy. Broad claims about program intent, absence of all deadlocks, or guaranteed execution time require evidence the compiler does not currently provide.
 
 Requirements should increase through lessons. A first-language learner needs small tasks and accessible explanations before pointer lifetimes, concurrent shutdown, or memory-ordering exercises. A completed task should explain how its idea transfers to another language.
 
 ## Work that needs a separate design
+
+A lesson runner still needs a lesson format, deterministic checks, ordered hints, and an offline progress model. The first track also needs testing by people unfamiliar with the language. The current examples and work/learn checks are building blocks for that work, rather than an implemented course application.
 
 General shared-memory concurrency requires a transfer and sharing model before slices or pointers can cross threads. Generics, typed application errors, automatic resource destruction, C ABI control, and freestanding targets also need specifications and focused tests. They are not promised as incidental additions to these patch releases.
 

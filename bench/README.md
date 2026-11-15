@@ -93,3 +93,17 @@ Builtin lowering also stops serializing a call-argument string that it never use
 Explicit aggregate-place discards and entirely ignored tuple patterns now avoid unnecessary by-value C temporaries. The regression suite runs repeated large-array and tuple discards with an 8 MiB stack at `-O0` and `-O3`, and separately checks evaluation order, runtime failures, cleanup, partial bindings, and learn's result rules. This extends the checked-discard approach from fixed-array lengths to those specific source forms.
 
 The change fixes reproduced stack-frame growth caused by unused copies. It does not establish general copy elision, a total stack quota, or a broad application speedup. Earlier saved reports retain their original compiler and platform context; the Windows profile has no application performance baseline in this release.
+
+## Match stack use in 0.4.9
+
+```sh
+make
+sh bench/match_stack.sh
+sh bench/match_stack.sh --compiler ./build/kremen --before /path/to/kremen-0.4.8
+```
+
+This Linux probe generates one enum containing a `[100000]i64` payload, a zero-initialized local, and 20 matches that ignore the payload. It emits C in work mode, compiles it with GCC-compatible `-O0 -fstack-usage`, reads the generated main function's static frame size, and runs the executable with an 8 MiB stack limit. `CC` selects the C compiler. An older Kremen binary is optional and must be supplied separately; the script does not download or bundle one. Core dumps are disabled for the deliberate baseline crash probe.
+
+In the saved [0.4.9 report](report-0.4.9.txt), GCC 14.2.0 on Linux x86-64 reported **16,800,352 bytes before and 800,352 bytes after**, a 95.24% reduction in that function's frame. The old program crashed under the specified stack limit; the updated one printed `7`. A place subject now keeps its checked address, snapshots the discriminator, and copies named payload bindings before the arm body runs. Ignored payloads need no aggregate snapshot. Rvalue producers still execute and produce their values normally.
+
+This is a debug-build stack measurement of a specific source shape. The C compiler can already eliminate these copies at `-O3`; no general release-build speedup is demonstrated. Frame sizes can change with the C compiler, target ABI, instrumentation, and options. The regression suite separately checks bound-value snapshots, evaluation order, runtime errors, and deferred cleanup.

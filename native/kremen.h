@@ -36,6 +36,7 @@ struct Type { TypeKind kind; char *name; Type *elem; size_t count; int bits; boo
 typedef enum { N_STRUCT, N_FN, N_PARAM, N_BLOCK, N_VAR, N_ASSIGN, N_EXPRSTMT, N_IF, N_FOR, N_RETURN, N_UNSAFE, N_BREAK, N_CONTINUE, N_INT, N_BOOL, N_STRING, N_NAME, N_BINARY, N_UNARY, N_CALL, N_FIELD, N_INDEX, N_STRUCTLIT, N_ARRAYLIT, N_IMPORT, N_TRY, N_DEFER, N_CATCH, N_ARENA, N_ENUM, N_VARIANT, N_MATCH, N_ARM, N_TUPLE, N_DESTRUCT } NodeKind;
 struct Node {
     NodeKind kind; Token tok; char *name, *op, *text, *cname, *builtin;
+    const Token *name_token;
     unsigned location_id;
     size_t text_len; uint64_t integer; bool flag, negative, external;
     Type *type, *annotation, *result, *typearg;
@@ -49,12 +50,12 @@ struct Node {
 struct Symbol { char *name, *cname; Type *type; bool mutable, used; unsigned depth; Token tok; Symbol *root, *via; bool borrow_mut; };
 typedef struct Import { char *alias; Module *target; Token tok; struct Import *next; } Import;
 struct Source { char *path, *data; size_t len; bool header; Module *module; Token import_origin; };
-struct Module { char *path, *name, *cname; Nodes decls; Sources sources; Import *imports; bool loading, loaded; };
+struct Module { char *path, *name, *cname; const char *root; Nodes decls; Sources sources; Import *imports; bool loading, loaded; };
 struct Context {
     ArenaBlock *arena; size_t arena_bytes; Sources sources; Modules modules; Nodes decls, structs, functions;
     Type *t_void, *t_bool, *t_string, *t_arena, *t_file, *t_thread, *ints[8]; unsigned next_type, next_symbol;
     jmp_buf failure; bool failure_ready; unsigned errors;
-    char *project_root, *runtime_path, *cc; bool no_asm; int optimization;
+    char *project_root, *stdlib_root, *runtime_path, *cc; bool no_asm; int optimization;
     Token import_token;
     Token related_token;
     const char *related_message;

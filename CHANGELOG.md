@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.9 — 2026-11-15
+
+- Add the bundled `std/math` module with eleven integer functions, explicit overflow and domain-error results, and no allocation or native math-library dependency.
+- Resolve `std/` imports from the installation while keeping separate canonical boundaries for project and standard-library sources. Ship the sources and API declarations in source installs and portable packages.
+- Avoid full enum/result subject copies when a `match` can inspect an existing value. Snapshot named payload bindings before the arm body while preserving evaluation order, bounds, lifetime, and result checks.
+- Add JSON `severity` and `fatal` fields without changing the existing `kind` field. Explain fatal warnings directly in text output, select unused binding names precisely, and retain strict warning checks in both profiles.
+- Extend math, code-generation, diagnostic, import-boundary, installer, and portable-package regressions. Add an introductory math guide and update the language and release documentation. See [release notes](docs/v0.4.9.md).
+
 ## 0.4.8 — 2026-11-12
 
 - Replace the Windows pthread compatibility layer with CRT-aware native threads, native joins, and SRW locks while preserving the language's worker ownership and cleanup rules.

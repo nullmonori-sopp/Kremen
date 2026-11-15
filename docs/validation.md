@@ -1,8 +1,8 @@
-# Validation record for 0.4.8
+# Validation record for 0.4.9
 
 The local release environment is Linux x86-64, GCC 14.2.0, and a POSIX shell. Native Windows validation is a separate PowerShell/Clang job. Compiler and generated C use strict C11 warnings as errors. POSIX full-language programs add `-pthread`; the Windows adapter uses native thread primitives without that compatibility library. Defaults are `-O3`, with `-O2` for the initial bootstrap stages. Portable-package checks use the package's real bundled SDK rather than the machine's development compiler.
 
-The Linux suites contain the 900 checks from 0.4.7 plus 18 native-runtime, 9 backend/package, 6 subset-output, and 4 subset-path cases, for 937 checks. Negative cases must return the intended diagnostic, not terminate through a signal. Installer checks, bootstrap fixed points, sanitizer runs, native Windows checks, and real portable-package execution are additional validation described below. Full-device tests use Linux `/dev/full` and explicitly skip those cases when it is unavailable, so other hosts can report a smaller count. A Windows integration count is separate from the Linux count.
+The Linux suites contain the 937 checks from 0.4.8 plus 23 standard-import, 48 math, 36 match-codegen, and 18 diagnostic cases, for 1,062 checks. Negative cases must return the intended diagnostic, not terminate through a signal. Installer checks, bootstrap fixed points, sanitizer runs, native Windows checks, and real portable-package execution are additional validation described below. Full-device tests use Linux `/dev/full` and explicitly skip those cases when it is unavailable, so other hosts can report a smaller count. A Windows integration count is separate from the Linux count.
 
 ## Commands to reproduce
 
@@ -43,6 +43,10 @@ The 0.4.8 seed is regenerated after correcting bootstrap basename emission for b
 | `tests/native/doctor_047.sh` | 14 | Actual strict-C/pthread worker probe, backend selection and failures, literal process arguments, CLI validation, offline explanation, and relocated runtime lookup |
 | `tests/native/runtime_048.sh` | 18 | Unicode files/directories, invalid paths, native workers, nested joining/cleanup, ownership failures, automatic joins, and handled worker failure |
 | `tests/native/backend_048.sh` | 9 | Bundled backend argument transport, executable discovery and package construction using a controlled fixture SDK |
+| `tests/native/modules_049.sh` | 23 | Reserved standard imports, no project shadowing or wider root, aliases, headers, malformed paths, canonical source boundaries, and missing resources |
+| `tests/native/math_049.sh` | 48 | All eleven integer operations, signed boundaries and failures, independent arithmetic properties, both profiles and optimization levels |
+| `tests/native/optimization_049.sh` | 36 | Large enum/result match subjects, named payload snapshots, effects, checks, invalid foreign tags, and defer cleanup |
+| `tests/native/diagnostics_049.sh` | 18 | Warning policy, additive JSON severity, exact identifier ranges, imported/related locations, bounded output, errors and learning categories |
 | `tests/native/threads_043.sh` | 19 | Spawn/join results, deferred joins, worker panic, automatic child cleanup, strict worker types, and forbidden handle escape |
 | `tests/native/threads_runtime.sh` | 16 | Actual worker overlap, nested jobs, handle ownership, limits, repeated joins, thread-local resources, panic cleanup, and synchronized input/output |
 | `tests/native/tutorial.sh` | 11 | Ten lesson programs, successful/invalid integer input, expected output, and file contents |
@@ -65,9 +69,13 @@ The new codegen suite compiles fixtures at `-O0` and `-O3`. Its repeated large-a
 
 The 0.4.8 runtime fixture uses the same C cases on Linux and Windows. It checks valid Unicode names, rejected invalid path data, native and nested worker execution, retained creator ownership, repeated joins, automatic cleanup, and a handled child failure. The backend fixture records literal arguments and builds a controlled package tree. It does not pretend that its fixture SDK compiled a program; the real-SDK checks below provide that evidence.
 
+The 0.4.9 math suite runs twelve groups in work and learn at both `-O0` and `-O3`. Each configuration includes boundary cases, 4,096 square-root inputs, 1,089 signed pairs, and 143 power inputs. The property checks use defining inequalities or small independent calculations rather than copying the library algorithms. Import fixtures install a tiny separate library and verify that a project cannot shadow `std/` or inherit a wider boundary from it.
+
+The new match regression reproduces an old 8 MiB stack failure. See the [focused stack benchmark](../bench/README.md#matching-large-payloads) for a repeatable GCC frame measurement and its limits. The tests also verify that copied pattern bindings survive reassignment of the subject.
+
 ## AddressSanitizer and UndefinedBehaviorSanitizer
 
-`make test-sanitize` instruments the native compiler and the subset compiler, driver, runtime, and OS layer. It reruns semantic, frontend, diagnostic, runtime, toolchain, and input checks under ASan/UBSan, including the profile, security, mutation, stabilization, checker/codegen, native-output, runtime-output, doctor, and threading regressions. The native-runtime and backend regressions participate too. Diagnostic and formatting helpers, the learning example, fixed-array length/discard fixtures, long chains, and imported/method fixtures are instrumented too. Generated C is also instrumented for selected v0.3, borrowing, bootstrap arithmetic, and seven slice-assignment lifetime scenarios. Mutated accepted programs receive strict C syntax checks; the generator itself is ordinary native C. Doctor's native compiler is instrumented in this run; the setup probe itself uses its ordinary strict backend flags.
+`make test-sanitize` instruments the native compiler and the subset compiler, driver, runtime, and OS layer. It reruns semantic, frontend, diagnostic, runtime, toolchain, and input checks under ASan/UBSan, including the profile, security, mutation, stabilization, checker/codegen, native-output, runtime-output, doctor, and threading regressions. The native-runtime and backend regressions participate too. The 0.4.9 diagnostic suite instruments the compiler; the new math and match suites also instrument their generated C at both optimization levels. Diagnostic and formatting helpers, the learning example, fixed-array length/discard fixtures, long chains, and imported/method fixtures are instrumented too. Generated C is also instrumented for selected v0.3, borrowing, bootstrap arithmetic, and seven slice-assignment lifetime scenarios. Mutated accepted programs receive strict C syntax checks; the generator itself is ordinary native C. Doctor's native compiler is instrumented in this run; the setup probe itself uses its ordinary strict backend flags.
 
 `make test-thread-sanitize` runs the 16 C thread-runtime scenarios with ThreadSanitizer. The overlap test uses synchronization to require two workers to be active; success cannot be reproduced by simply executing workers sequentially. Ownership and cleanup tests exercise nested workers, worker-local allocations, and shared standard-stream locking. TSan is an additional host/toolchain check; support for every POSIX system is not implied.
 
@@ -89,7 +97,7 @@ Native diagnostic fixtures explicitly include both `-O0` and `-O3` builds.
 
 ## Installation and portability
 
-`make test-install` builds and installs both compilers into a temporary prefix containing spaces. It checks versions, offline native/learning explanations, the installed learn-profile example before and after relocation, installed tutorial output and reports, the license and thread guide, runtime lookup, prefix relocation, the installed worker example, subset program execution, upgrade, invalid-manifest refusal, unrelated-file preservation, collision refusal, and uninstall.
+`make test-install` builds and installs both compilers into a temporary prefix containing spaces. It checks versions, offline native/learning explanations, the installed learn-profile example before and after relocation, installed tutorial output and reports, the license and thread guide, runtime lookup, prefix relocation, the installed worker example, standard math from an independent project in both profiles, paired library sources/headers, subset program execution, upgrade, invalid-manifest refusal, unrelated-file preservation, collision refusal, and uninstall.
 
 The platform suite forces `KM_NO_PROC_SELF_EXE=1` and tests argv/PATH fallback on Linux, including an empty PATH element and executable symlink. A fresh compiler copy is built without assembly from a checkout path containing an apostrophe, using a compiler path with similarly difficult characters. This validates those fallback paths on Linux; it is not evidence of release testing on macOS or ARM.
 
@@ -103,13 +111,13 @@ Windows checks run as native x86-64 programs from PowerShell 7, using Clang and 
 .\tests\windows\selfhost.ps1 -Toolchain .\selfhost\build\kremen-selfhost.exe -Compiler clang
 ```
 
-The frontend checks exercise native process arguments, both semantic profiles, Unicode sources and temporary paths, formatting, imports, deep module chains, JSON errors, source protection, files, and workers. The subset checks cover native bootstrap, Unicode paths, literal program arguments, executable names, and verified self-rebuild. The direct C runtime fixture covers the same 18 cases as its Linux runner. The historical MSYS2 script is not the 0.4.8 native Windows validation target.
+The frontend checks exercise native process arguments, both semantic profiles, Unicode sources and temporary paths, formatting, imports, deep module chains, JSON errors, source protection, files, and workers. The subset checks cover native bootstrap, Unicode paths, literal program arguments, executable names, and verified self-rebuild. The direct C runtime fixture covers the same 18 cases as its Linux runner. The native Windows suite contains 50 checks, plus 14 subset checks. Both CMake and an out-of-tree PowerShell build execute math from outside the checkout directory, checking runtime and standard-library discovery. The historical MSYS2 script is not the native Windows validation target.
 
 Cross-compilation can catch declarations and linker problems, but it does not prove native execution. Likewise, doctor only proves that its small runtime program compiled and ran. Native Windows execution, Linux regressions, and compiler/sanitizer checks are separate evidence. The release targets Windows x86-64 and Linux x86-64; it does not establish every old Windows version, every Linux host, other architectures, every Windows path namespace, or a separate MSVC frontend build policy.
 
 ## Real portable packages
 
-The portable checks unpack the complete SDK-backed packages, clear `CC`, remove development compilers from `PATH`, and compile and execute Kremen programs through the discovered bundled backend. They check both work and learn, Unicode paths, relocation, runtime lookup, and subset use. The compiler, launcher, resources, SDK libraries, and license files move together.
+The portable checks unpack the complete SDK-backed packages, clear `CC`, remove development compilers from `PATH`, and compile and execute Kremen programs through the discovered bundled backend. There are 15 portable scenarios on each host. They check both work and learn, Unicode paths, relocation, runtime lookup, standard math, installed math, and subset use. The compiler, launcher, resources, SDK libraries, and license files move together.
 
 The Linux portable release links its frontend and subset driver statically. Its backend uses `x86_64-linux-musl` and static linking for generated programs. This avoids the host's glibc ABI; the package still requires a compatible Linux kernel and x86-64 CPU. A source build with a system compiler keeps that compiler's normal runtime choices.
 
@@ -119,7 +127,7 @@ Package creation downloads a selected SDK only when explicitly requested. It che
 
 ```sh
 make dist
-unzip ../kremen-v0.4.8.zip -d /tmp/kremen-release-check
+unzip ../kremen-v0.4.9.zip -d /tmp/kremen-release-check
 cd /tmp/kremen-release-check/kremen
 sha256sum -c SHA256SUMS
 make all selfhost

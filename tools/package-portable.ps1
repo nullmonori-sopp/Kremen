@@ -89,6 +89,14 @@ try {
     $null = New-Item -ItemType Directory -Path (Join-Path $Dest 'backend/bin') -Force
     Copy-Item -LiteralPath $Launcher -Destination (Join-Path $Dest 'backend/bin/clang.exe') -Force
     Copy-Item -LiteralPath (Join-Path $Root 'runtime/kremen_rt.h') -Destination (Join-Path $Dest 'share/kremen/runtime/kremen_rt.h')
+    $LibraryRoot = Join-Path $Root 'stdlib'
+    foreach ($File in Get-ChildItem -LiteralPath $LibraryRoot -Recurse -File -Force) {
+        if ($File.Name -eq 'A.a') { continue }
+        $Relative = $File.FullName.Substring($LibraryRoot.Length).TrimStart([char[]]'\/')
+        $TargetPath = Join-Path $Dest "share/kremen/stdlib/$Relative"
+        $null = New-Item -ItemType Directory -Path (Split-Path -Parent $TargetPath) -Force
+        Copy-Item -LiteralPath $File.FullName -Destination $TargetPath
+    }
     Copy-Item -LiteralPath (Join-Path $Root 'LICENSE') -Destination (Join-Path $Dest 'LICENSE')
     Copy-Item -LiteralPath (Join-Path $Root 'LICENSE') -Destination (Join-Path $Dest 'share/doc/kremen/LICENSE')
     Copy-Item -LiteralPath (Join-Path $Root 'VERSION') -Destination (Join-Path $Dest 'VERSION')

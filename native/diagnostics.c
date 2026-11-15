@@ -189,7 +189,7 @@ static const Explanation explanations[] = {
      "Call readIntResult(), then inspect, handle, or propagate the !i64 result. This rule covers integer input; it is not a general checked I/O effect system.",
      "func readValue() !i64 { return ok(readIntResult()?) }"},
     {"W001", "Unused variable or parameter",
-     "A declared local, receiver, or parameter is never read. Warning checks are fatal by default because an unused value can reveal an incomplete calculation.",
+     "A declared local, receiver, or parameter is never read. Warning checks are fatal by default because an unused value can reveal an incomplete calculation. Text diagnostics identify that policy; JSON keeps kind=error and reports severity=warning with fatal=true.",
      "Use or remove the declaration. Prefix an intentionally unused binding with _. A leading underscore acknowledges unusedness; it does not release a resource.",
      "func answer(_unused i64) i64 { return 42 }"}
 };

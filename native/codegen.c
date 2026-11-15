@@ -409,15 +409,19 @@ static LoweredValue lower_value(Generator *g, Node *node)
     return (LoweredValue){node->type, expression(g, node)};
 }
 
+static bool is_place(Node *node)
+{
+    return node->kind == N_NAME || node->kind == N_FIELD || node->kind == N_INDEX ||
+           (node->kind == N_UNARY && !strcmp(node->op, "*"));
+}
+
 /* Fixed-array len needs evaluation and place checks, but never the elements.
  * Forming a checked address preserves index/null/stale-slice/result checks
  * without creating a potentially megabyte-sized by-value C temporary. Other
  * expressions still run normally, including function calls and their effects. */
 static void discard_value(Generator *g, Node *node)
 {
-    bool place = node->kind == N_NAME || node->kind == N_FIELD || node->kind == N_INDEX ||
-                 (node->kind == N_UNARY && !strcmp(node->op, "*"));
-    if (place) line(g, "(void)&(%s);", lvalue(g, node, NULL));
+    if (is_place(node)) line(g, "(void)&(%s);", lvalue(g, node, NULL));
     else {
         LoweredValue value = lower_value(g, node);
         if (*value.code) line(g, "(void)%s;", value.code);
@@ -772,13 +776,26 @@ static void statement(Generator *g, Node *node)
         break;
     }
     case N_MATCH: {
-        char *subject=expression(g,node->value);bool fallback=false;
-        line(g,"(void)%s;",subject);
+        /* A place already owns its storage. Read its discriminator once and
+         * copy only bound payloads, before the arm executes any source code.
+         * This retains value-pattern semantics without a stack-sized copy of
+         * every ignored payload. lvalue still performs all place checks and
+         * evaluates indices once; rvalue producers retain their snapshot. */
+        char *subject;
+        if(is_place(node->value)) {
+            char *address=fresh(g,"match_address");
+            char *place=lvalue(g,node->value,NULL);
+            line(g,"%s *%s = &(%s);",ctype(g,node->type),address,place);
+            subject=km_sprintf(g->ctx,"(*%s)",address);
+        } else subject=expression(g,node->value);
+        bool fallback=false;char *tag=fresh(g,"match_tag");
+        line(g,"%s %s = %s.%s;",node->type->kind==TY_RESULT?"bool":"uint32_t",tag,subject,node->type->kind==TY_RESULT?"ok":"tag");
+        line(g,"(void)%s;",tag);
         for(size_t i=0;i<node->items.len;i++){
             Node *arm=node->items.data[i];bool any=arm->integer==UINT64_MAX;
             if(any){line(g,"%s{",i?"else ":"");fallback=true;}
-            else if(node->type->kind==TY_RESULT)line(g,"%sif (%s%s.ok) {",i?"else ":"",arm->integer?"!":"",subject);
-            else line(g,"%sif (%s.tag == %" PRIu64 ") {",i?"else ":"",subject,arm->integer);
+            else if(node->type->kind==TY_RESULT)line(g,"%sif (%s%s) {",i?"else ":"",arm->integer?"!":"",tag);
+            else line(g,"%sif (%s == %" PRIu64 ") {",i?"else ":"",tag,arm->integer);
             g->indent++;
             for(size_t j=0;j<arm->params.len;j++){Node *b=arm->params.data[j];if(!b->symbol)continue;
                 char *value=node->type->kind==TY_RESULT?km_sprintf(g->ctx,"%s.%s",subject,arm->integer?"code":"value"):km_sprintf(g->ctx,"%s.payload.kr_v_%" PRIu64 ".kr_%zu",subject,arm->integer,j);

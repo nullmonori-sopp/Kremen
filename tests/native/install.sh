@@ -21,6 +21,16 @@ grep -F 'Bind and use' "$WORK/explanation" > /dev/null
 "$PREFIX/bin/kremen" run "$ROOT/examples/hello.kr" > "$WORK/actual"
 printf 'Hello, Kremen!\n' > "$WORK/expected"
 cmp "$WORK/expected" "$WORK/actual"
+[ -f "$PREFIX/share/kremen/stdlib/math/math.kr" ]
+[ -f "$PREFIX/share/kremen/stdlib/math/math.krh" ]
+cmp "$ROOT/stdlib/math/math.kr" "$PREFIX/share/kremen/stdlib/math/math.kr"
+mkdir "$WORK/independent project"
+printf 'import "std/math"\nfunc main() { println(math.gcd(-84, 30), math.min(-5, 9)) }\n' > "$WORK/independent project/main.kr"
+for mode in work learn; do
+    (cd "$WORK/independent project" && "$PREFIX/bin/kremen" run main.kr --mode="$mode") > "$WORK/math-actual"
+    printf '6 -5\n' > "$WORK/math-expected"
+    cmp "$WORK/math-expected" "$WORK/math-actual"
+done
 [ -f "$PREFIX/share/doc/kremen/docs/tutorial.md" ]
 [ -f "$PREFIX/share/doc/kremen/docs/threads.md" ]
 [ -f "$PREFIX/share/doc/kremen/LICENSE" ]
@@ -40,6 +50,9 @@ printf '720|18|ok\n' > "$WORK/selfhost-expected"
 cmp "$WORK/selfhost-expected" "$WORK/selfhost-example"
 "$MOVED/bin/kremen" emit-c "$ROOT/examples/hello.kr" -o "$WORK/probe-moved.c"
 grep -F 'installed runtime lookup probe' "$WORK/probe-moved.c" > /dev/null
+(cd "$WORK/independent project" && "$MOVED/bin/kremen" run main.kr --mode=learn) > "$WORK/math-actual"
+cmp "$WORK/math-expected" "$WORK/math-actual"
+printf 'preserve\n' > "$MOVED/share/kremen/stdlib/math/unrelated.txt"
 "$MOVED/bin/kremen" explain W001 > "$WORK/explanation"
 grep -F 'Unused variable' "$WORK/explanation" > /dev/null
 printf '4\n' > "$WORK/learning-input"
@@ -67,6 +80,9 @@ sh "$ROOT/install.sh" --prefix "$MOVED" --uninstall > "$WORK/log" 2>&1 || { cat 
 [ ! -e "$MOVED/bin/kremen-selfhost" ]
 [ ! -e "$MOVED/share/kremen/selfhost/runtime.c" ]
 [ ! -e "$MOVED/share/kremen/runtime/kremen_rt.h" ]
+[ ! -e "$MOVED/share/kremen/stdlib/math/math.kr" ]
+[ ! -e "$MOVED/share/kremen/stdlib/math/math.krh" ]
+grep -Fx preserve "$MOVED/share/kremen/stdlib/math/unrelated.txt" > /dev/null
 grep -Fx preserve "$MOVED/bin/unrelated" > /dev/null
 grep -Fx preserve "$MOVED/share/unrelated" > /dev/null
-printf '%s\n' 'Installer passed: install/upgrade, spaces, runtime lookup, relocation, manifest validation, collision refusal and uninstall.'
+printf '%s\n' 'Installer passed: install/upgrade, spaces, runtime and stdlib lookup, relocation, manifest validation, collision refusal and uninstall.'

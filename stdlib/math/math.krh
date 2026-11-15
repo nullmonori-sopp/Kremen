@@ -1,0 +1,14 @@
+package math
+// Failure codes: 2001 overflow, 2002 reversed bounds, 2003 negative exponent,
+// and 2004 negative square-root input. All operations are allocation-free.
+func min(left i64, right i64) i64
+func max(left i64, right i64) i64
+func clamp(value i64, lower i64, upper i64)!i64
+func magnitude(value i64) u64
+func abs(value i64)!i64
+func add(left i64, right i64)!i64
+func mul(left i64, right i64)!i64
+func gcd(left i64, right i64) u64
+func lcm(left i64, right i64)!i64
+func pow(base i64, exponent i64)!i64
+func isqrt(value i64)!i64

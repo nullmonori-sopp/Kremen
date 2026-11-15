@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(Kremen VERSION 0.4.8 LANGUAGES C)
+project(Kremen VERSION 0.4.9 LANGUAGES C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
@@ -8,6 +8,9 @@ add_executable(kremen native/core.c native/diagnostics.c native/doctor.c native/
     native/parser.c native/modules.c native/checker.c native/learn.c native/codegen.c
     native/format.c native/main.c native/fast_copy.c)
 add_executable(kremen-backend tools/backend_launcher.c)
+target_compile_definitions(kremen PRIVATE
+    KM_RUNTIME_PATH="${CMAKE_CURRENT_SOURCE_DIR}/runtime/kremen_rt.h"
+    KM_STDLIB_PATH="${CMAKE_CURRENT_SOURCE_DIR}/stdlib")
 foreach(target kremen kremen-backend)
     if(CMAKE_C_COMPILER_ID STREQUAL "MSVC" OR CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
         target_compile_options(${target} PRIVATE /W4 /WX)
@@ -24,5 +27,6 @@ endforeach()
 install(TARGETS kremen RUNTIME DESTINATION bin)
 install(FILES runtime/kremen_rt.h DESTINATION share/kremen/runtime)
 install(FILES native/platform.h DESTINATION share/kremen/native)
+install(DIRECTORY stdlib DESTINATION share/kremen)
 install(DIRECTORY docs examples DESTINATION share/doc/kremen)
 install(FILES README.md LICENSE CHANGELOG.md DESTINATION share/doc/kremen)

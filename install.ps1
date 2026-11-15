@@ -13,7 +13,7 @@ $manifest = Join-Path $Prefix 'share/kremen/install.manifest'
 $owned = (Test-Path -LiteralPath $marker -PathType Leaf) -and (Test-Path -LiteralPath $manifest -PathType Leaf) -and
     ([IO.File]::ReadAllText($marker).Trim() -eq 'kremen-native-install-v1')
 function Check-Path([string]$Relative) {
-    if ($Relative -notmatch '^(bin/kremen(?:-selfhost)?\.exe|share/kremen/(?:selfhost/[^:]+|native/platform\.h|runtime/kremen_rt\.h|install\.(?:marker|manifest))|share/doc/kremen/[^:]+|backend/[^:]+|install\.ps1)$' -or
+    if ($Relative -notmatch '^(bin/kremen(?:-selfhost)?\.exe|share/kremen/(?:(?:selfhost|stdlib)/[^:]+|native/platform\.h|runtime/kremen_rt\.h|install\.(?:marker|manifest))|share/doc/kremen/[^:]+|backend/[^:]+|install\.ps1)$' -or
         $Relative -match '(^|/)(\.|\.\.|)($|/)' -or $Relative.Contains('\')) { throw "Invalid installation manifest path: $Relative" }
     $path = Join-Path $Prefix $Relative
     $current = $path
@@ -74,12 +74,31 @@ try {
         }
         Copy-Item -LiteralPath (Join-Path $SourceRoot 'runtime/kremen_rt.h') -Destination (Join-Path $stage 'share/kremen/runtime')
         Copy-Item -LiteralPath (Join-Path $SourceRoot 'native/platform.h') -Destination (Join-Path $stage 'share/kremen/native')
+        $libraryRoot = Join-Path $SourceRoot 'stdlib'
+        foreach ($file in Get-ChildItem -LiteralPath $libraryRoot -Recurse -File -Force) {
+            if ($file.Name -eq 'A.a') { continue }
+            $relative = $file.FullName.Substring($libraryRoot.Length).TrimStart([char[]]'\/')
+            $target = Join-Path $stage "share/kremen/stdlib/$relative"
+            [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target)) | Out-Null
+            Copy-Item -LiteralPath $file.FullName -Destination $target
+        }
         foreach ($name in @('bootstrap.kr','toolchain.kr','stage0.c','runtime.c','runtime.h','driver.c','host.c','host.h','platform.h')) {
             Copy-Item -LiteralPath (Join-Path $SourceRoot "selfhost/$name") -Destination (Join-Path $stage 'share/kremen/selfhost')
         }
         [IO.Directory]::CreateDirectory((Join-Path $stage 'share/doc/kremen')) | Out-Null
         foreach ($name in @('docs','examples','README.md','CHANGELOG.md','LICENSE')) {
-            Copy-Item -LiteralPath (Join-Path $SourceRoot $name) -Destination (Join-Path $stage 'share/doc/kremen') -Recurse
+            $from = Join-Path $SourceRoot $name
+            if (Test-Path -LiteralPath $from -PathType Leaf) {
+                Copy-Item -LiteralPath $from -Destination (Join-Path $stage 'share/doc/kremen')
+                continue
+            }
+            foreach ($file in Get-ChildItem -LiteralPath $from -Recurse -File -Force) {
+                if ($file.Name -eq 'A.a') { continue }
+                $relative = $file.FullName.Substring($from.Length).TrimStart([char[]]'\/')
+                $target = Join-Path $stage "share/doc/kremen/$name/$relative"
+                [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target)) | Out-Null
+                Copy-Item -LiteralPath $file.FullName -Destination $target
+            }
         }
     }
     Copy-Item -LiteralPath $PSCommandPath -Destination (Join-Path $stage 'install.ps1')

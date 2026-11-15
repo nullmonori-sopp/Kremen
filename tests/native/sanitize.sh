@@ -15,6 +15,7 @@ export ASAN_OPTIONS UBSAN_OPTIONS
 "$COMPILER" -std=c11 -pthread -Wall -Wextra -Wpedantic -Werror -O1 -g \
     -fsanitize=address,undefined -fno-sanitize-recover=all \
     -DKM_RUNTIME_PATH="\"$ROOT/runtime/kremen_rt.h\"" \
+    -DKM_STDLIB_PATH="\"$ROOT/stdlib\"" \
     native/core.c native/diagnostics.c native/doctor.c native/lexer.c native/parser.c native/modules.c \
     native/checker.c native/learn.c native/codegen.c native/format.c native/main.c \
     native/fast_copy.c -o "$BUILD/kremen"
@@ -23,6 +24,9 @@ sh tests/native/v3.sh "$BUILD/kremen"
 sh tests/native/frontend_stability.sh "$BUILD/kremen"
 sh tests/native/diagnostics.sh "$BUILD/kremen"
 sh tests/native/diagnostics_043.sh "$BUILD/kremen"
+sh tests/native/diagnostics_049.sh "$BUILD/kremen"
+SANITIZE_GENERATED=1 sh tests/native/math_049.sh "$BUILD/kremen"
+SANITIZE_GENERATED=1 sh tests/native/optimization_049.sh "$BUILD/kremen"
 SANITIZE_GENERATED=1 sh tests/native/checker_codegen_043.sh "$BUILD/kremen"
 SANITIZE_GENERATED=1 sh tests/native/stabilization_044.sh "$BUILD/kremen"
 SANITIZE_GENERATED=1 sh tests/native/profiles_045.sh "$BUILD/kremen"

@@ -46,7 +46,7 @@ validate_manifest() {
             *'/../'*|../*|*/..|/*|*'/./'*|*'//'*|'') return 1 ;;
         esac
         case "$relative" in
-            bin/kremen|bin/kremen.exe|bin/kremen-selfhost|share/kremen/selfhost/*|share/kremen/native/platform.h|share/kremen/runtime/kremen_rt.h|share/kremen/install.marker|share/kremen/install.manifest|share/doc/kremen/*) ;;
+            bin/kremen|bin/kremen.exe|bin/kremen-selfhost|share/kremen/selfhost/*|share/kremen/stdlib/*|share/kremen/native/platform.h|share/kremen/runtime/kremen_rt.h|share/kremen/install.marker|share/kremen/install.manifest|share/doc/kremen/*) ;;
             *) return 1 ;;
         esac
     done < "$MANIFEST"
@@ -94,6 +94,12 @@ if [ "$WITH_SELFHOST" = true ]; then
     done
 fi
 install -m 644 "$SOURCE_ROOT/runtime/kremen_rt.h" "$WORK/share/kremen/runtime/kremen_rt.h"
+find "$SOURCE_ROOT/stdlib" -type f ! -name 'A.a' > "$WORK/stdlib-files"
+while IFS= read -r source; do
+    relative=${source#"$SOURCE_ROOT/"}
+    mkdir -p -- "$WORK/share/kremen/$(dirname -- "$relative")"
+    install -m 644 "$source" "$WORK/share/kremen/$relative"
+done < "$WORK/stdlib-files"
 if [ -f "$SOURCE_ROOT/LICENSE" ]; then
     install -m 644 "$SOURCE_ROOT/LICENSE" "$WORK/share/doc/kremen/LICENSE"
 fi
@@ -109,7 +115,12 @@ done
 for report in "$SOURCE_ROOT/bench"/*.txt; do
     install -m 644 "$report" "$WORK/share/doc/kremen/bench/$(basename -- "$report")"
 done
-cp -R "$SOURCE_ROOT/examples" "$WORK/share/doc/kremen/examples"
+find "$SOURCE_ROOT/examples" -type f ! -name 'A.a' > "$WORK/example-files"
+while IFS= read -r source; do
+    relative=${source#"$SOURCE_ROOT/"}
+    mkdir -p -- "$WORK/share/doc/kremen/$(dirname -- "$relative")"
+    install -m 644 "$source" "$WORK/share/doc/kremen/$relative"
+done < "$WORK/example-files"
 printf '%s\n' kremen-native-install-v1 > "$WORK/share/kremen/install.marker"
 (cd "$WORK" && find bin share -type f | LC_ALL=C sort) > "$WORK/manifest"
 printf '%s\n' share/kremen/install.manifest >> "$WORK/manifest"

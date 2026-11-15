@@ -1,6 +1,6 @@
 # Kremen language reference
 
-This page describes the full language accepted by `kremen` in 0.4.8. It is a reference for rules and built-ins. If the terms are unfamiliar, start with [the tutorial](tutorial.md). The compiler under `selfhost/` accepts a smaller language; its [reference](../selfhost/README.md) is separate.
+This page describes the full language accepted by `kremen` in 0.4.9. It is a reference for rules and built-ins. If the terms are unfamiliar, start with [the tutorial](tutorial.md). The compiler under `selfhost/` accepts a smaller language; its [reference](../selfhost/README.md) is separate.
 
 Examples that show only a declaration or block are fragments to put inside a program. Complete programs include `func main()`.
 
@@ -29,7 +29,9 @@ import vectors "math/vec"
 
 These are alternative imports: the first uses `vec` as its qualifier; the second uses `vectors`. The path is resolved relative to the importing file's directory. Import a file without its `.kr` extension, or a directory containing multiple `.kr` and `.krh` files. No dependency is downloaded. Cycles and paths outside the project root, including symlink escapes, are rejected. The default root is the entry file's directory; `--root /absolute/project` selects a wider root.
 
-The selected root must be a directory containing the canonical entry-module path and all loaded sources. Directory entries and paired headers receive the same check as the import itself. Filesystem operations performed by the compiled program are separate from this source-loading rule.
+The selected root must be a directory containing the canonical entry-module path and all loaded project sources. Directory entries and paired headers receive the same check as the import itself. Filesystem operations performed by the compiled program are separate from this source-loading rule.
+
+Paths beginning with `std/` select a bundled standard-library module. The first is `import "std/math"`; its default qualifier is `math`. You can use an alias, such as `import numbers "std/math"`. The compiler finds these sources in the installation, with no dependency download and no wider `--root` requirement. Your project's own `std/` directory cannot replace them. Standard-library sources and paired headers are checked against the separate library root; `..`, absolute paths, and symlink escapes cannot use this mechanism to bypass the project's source boundary. See [Integer math](math.md) for the API and a complete program.
 
 A complete module example is in [examples/modules](../examples/modules/main.kr):
 
@@ -293,6 +295,8 @@ func main() { show(Event.Number(42)) }
 An enum is a tagged union stored as a value, without a separate allocation. It has between 1 and 256 variants. A payload may contain ordinary composite values, but not references or pointers. Even a payload-free constructor uses `()`. Directly recursive value layouts are rejected; recursion through slices need not create an infinite layout.
 
 `match` is a statement. Cover every variant, or end with `_ => { ... }`. Duplicate variants, wrong payload arity, and arms after `_` are errors. Pattern names bind immutable payload copies; `_` discards one. Qualified patterns such as `Event.Number` or `module.Event.Number` are supported. Nested patterns, literal patterns, and guards are not implemented.
+
+The subject is evaluated once. Named payload bindings are copied before the selected arm's body runs, so changing the original enum inside that body does not change the bindings. When the subject is an existing variable, field, indexed element, or dereferenced value, code generation can inspect its discriminator and copy only named payloads instead of copying the complete subject. Index, lifetime, and result-access checks still run. A function call that returns an enum or result still produces its ordinary value.
 
 ## Tuples
 

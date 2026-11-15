@@ -1,8 +1,81 @@
 # Updating an existing repository
 
-Use the complete 0.4.8 source tree when updating an older project. It includes the preceding stabilization and documentation work. Copying only the new files is not enough: keep compiler sources, build rules, tests, installed resources, and documentation from the same release.
+Use the complete 0.4.9 source tree when updating an older project. It includes the preceding stabilization and documentation work. Copying only the new files is not enough: keep compiler sources, build rules, tests, installed resources, and documentation from the same release.
 
 The lists below compare released checksum manifests. Paths are relative to the `kremen` project root. They describe release contents, not any additional local edits in your own repository. Merge those edits before replacing files.
+
+## From 0.4.8 to 0.4.9
+
+Add these files:
+
+```text
+bench/match_stack.sh
+bench/report-0.4.9.txt
+docs/math.md
+docs/v0.4.9.md
+examples/math.kr
+stdlib/math/math.kr
+stdlib/math/math.krh
+tests/native/diagnostics_049.sh
+tests/native/math_049.sh
+tests/native/modules_049.sh
+tests/native/optimization_049.sh
+```
+
+Replace these existing files:
+
+```text
+.github/workflows/ci.yml
+CHANGELOG.md
+CMakeLists.txt
+Makefile
+README.md
+VERSION
+bench/README.md
+build.ps1
+docs/README.md
+docs/diagnostics.md
+docs/install.md
+docs/language.md
+docs/portable.md
+docs/profiles.md
+docs/repository-update.md
+docs/roadmap.md
+docs/safety.md
+docs/selfhosting.md
+docs/validation.md
+docs/windows.md
+install.ps1
+install.sh
+native/checker.c
+native/codegen.c
+native/core.c
+native/diagnostics.c
+native/kremen.h
+native/main.c
+native/modules.c
+native/parser.c
+selfhost/toolchain.kr
+tests/native/install.sh
+tests/native/sanitize.sh
+tests/portable/check.ps1
+tests/portable/check.sh
+tests/windows/native.ps1
+tests/windows/selfhost.ps1
+tools/install-portable.sh
+tools/package-portable.ps1
+tools/package-portable.sh
+```
+
+Regenerate and replace `SHA256SUMS` after all source edits. No source files are removed. Keep the compiler, runtime, standard library, build scripts, installers, and tests from the same release.
+
+The new `stdlib/math/` directory contains ordinary Kremen implementation and API declarations. Add both files. Source and portable installers place that directory under `share/kremen/stdlib/`. Importing `std/math` needs no wider project root or online package download. Do not add SDK binaries, build directories, generated test programs, or release archives to the source tree.
+
+The parser retains binding-name locations for clearer unused-variable warnings. The checker, AST header, and parser changes belong together. Diagnostic JSON keeps its existing error kind and adds severity/fatal fields. Code generation reduces unnecessary copies for existing match subjects while retaining copied pattern bindings and runtime checks.
+
+The native Windows and Linux workflows test the library and resource discovery. Portable archives still carry the pinned SDK introduced in 0.4.8. The full compiler remains C11; the self-hosted driver and smaller bootstrap compiler remain distinct. The driver version changes here, while the already verified bootstrap seed is unchanged.
+
+Read [0.4.9 notes](v0.4.9.md), [integer math](math.md), and [validation](validation.md) for the implemented behavior and checks. The [match stack probe](../bench/README.md#matching-large-payloads) records a specific debug-build improvement, not a general speed guarantee.
 
 ## From 0.4.7 to 0.4.8
 

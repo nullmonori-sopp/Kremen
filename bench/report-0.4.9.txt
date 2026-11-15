@@ -1,0 +1,35 @@
+Measured on 2026-11-15 with Kremen 0.4.8 and the 0.4.9 match-lowering change.
+The same generated fixture, C compiler and C options were used for both builds.
+
+Reproduce with separately built compiler executables:
+  sh bench/match_stack.sh --compiler /path/to/kremen-0.4.9 --before /path/to/kremen-0.4.8
+Measure the current checkout alone:
+  make
+  sh bench/match_stack.sh
+
+Recorded output:
+
+Kremen repeated-match stack probe
+host: Linux x86_64
+C compiler: cc (Debian 14.2.0-19) 14.2.0
+C options: -std=c11 -pthread -Wall -Wextra -Wpedantic -Werror -O0 -fstack-usage
+fixture: enum { Empty; Data([100000]i64) }, one zero-initialized local, 20 matches ignoring payloads
+source POSIX cksum: 1550383320 978
+execution stack limit: 8192 KiB; expected stdout: 7 followed by newline
+before compiler: Kremen 0.4.8 (native C11)
+before main frame bytes: 16800352
+before execution status: 139; expected stdout: no
+current compiler: Kremen 0.4.9 (native C11)
+current main frame bytes: 800352
+current execution status: 0; expected stdout: yes
+main frame reduction: 95.24%
+This measures the generated main frame for one -O0 workload, not total stack or application throughput.
+Frame sizes depend on the C compiler, ABI and options; no general -O3 speedup is demonstrated.
+
+Interpretation:
+The 0.4.8 executable exceeded the 8 MiB stack limit and received SIGSEGV (139).
+The 0.4.9 executable printed the expected value and exited successfully.
+The recorded bytes describe only the generated main function's static frame.
+They do not measure peak process memory, a whole-program stack quota, or speed.
+These measurements are specific to this Linux x86-64 toolchain and fixture.
+They make no claim about Windows frame sizes or general release-build throughput.

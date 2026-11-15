@@ -19,6 +19,15 @@ jobs:
         run: make test test-install
       - name: Portable C profile
         run: make USE_ASM=0 all check
+      - name: CMake resources outside the checkout directory
+        run: |
+          cmake -S . -B build/cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/cmake --parallel 2
+          compiler="$PWD/build/cmake/kremen"
+          example="$PWD/examples/math.kr"
+          cd "$RUNNER_TEMP"
+          "$compiler" run "$example" --mode=work
+          "$compiler" run "$example" --mode=learn
       - name: Verify source archives
         run: |
           KREMEN_RELEASE_VERSION=$(cat VERSION)
@@ -60,6 +69,27 @@ jobs:
         run: |
           cmake -S . -B build/cmake -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release
           cmake --build build/cmake
+          $compiler = (Resolve-Path './build/cmake/kremen.exe').Path
+          $example = (Resolve-Path './examples/math.kr').Path
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & $compiler run $example --mode=work
+            if ($LASTEXITCODE -ne 0) { throw 'CMake work-profile resources failed.' }
+            & $compiler run $example --mode=learn
+            if ($LASTEXITCODE -ne 0) { throw 'CMake learn-profile resources failed.' }
+          } finally { Pop-Location }
+          $customBuild = Join-Path $env:RUNNER_TEMP 'kremen build Ω'
+          ./build.ps1 -Compiler clang -BuildDir $customBuild
+          $compiler = Join-Path $customBuild 'kremen.exe'
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & $compiler run $example --mode=work
+            if ($LASTEXITCODE -ne 0) { throw 'Custom PowerShell build resources failed.' }
+            & $compiler run $example --mode=learn
+            if ($LASTEXITCODE -ne 0) { throw 'Custom PowerShell learn resources failed.' }
+            & $compiler selfhost --version
+            if ($LASTEXITCODE -ne 0) { throw 'Custom PowerShell subset discovery failed.' }
+          } finally { Pop-Location }
       - name: Native Windows frontend and runtime
         shell: pwsh
         run: ./tests/windows/native.ps1 -Kremen ./build/kremen.exe -Compiler clang

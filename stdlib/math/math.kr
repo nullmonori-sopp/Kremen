@@ -1,0 +1,147 @@
+package math
+// Integer mathematics with explicit failure values. No allocation is needed.
+// Failure codes: 2001 overflow, 2002 reversed bounds, 2003 negative exponent,
+// and 2004 negative square-root input. These functions never use panic for
+// arithmetic errors, including when an argument is the smallest i64 value.
+func min(left i64, right i64) i64 {
+	if left < right {
+		return left
+	}
+	return right
+}
+func max(left i64, right i64) i64 {
+	if left > right {
+		return left
+	}
+	return right
+}
+// Bounds are inclusive. Reversed bounds fail with code 2002.
+func clamp(value i64, lower i64, upper i64)!i64 {
+	if lower > upper {
+		return fail(2002)
+	}
+	return ok(min(max(value, lower), upper))
+}
+// Unlike abs, magnitude can represent the magnitude of every i64 value.
+func magnitude(value i64) u64 {
+	if value < 0 {
+		return u64(-(value + 1)) + 1
+	}
+	return u64(value)
+}
+// The magnitude of -9223372036854775808 cannot fit in an i64.
+func abs(value i64)!i64 {
+	if value == -9223372036854775808 {
+		return fail(2001)
+	}
+	if value < 0 {
+		return ok(-value)
+	}
+	return ok(value)
+}
+// Return a failure instead of panicking when the signed sum cannot fit.
+func add(left i64, right i64)!i64 {
+	if right > 0 {
+		if left > 9223372036854775807 - right {
+			return fail(2001)
+		}
+	}
+	if right < 0 {
+		if left < -9223372036854775808 - right {
+			return fail(2001)
+		}
+	}
+	return ok(left + right)
+}
+// Compare unsigned magnitudes before multiplying, including i64's lower end.
+func mul(left i64, right i64)!i64 {
+	var negative =(left < 0) !=(right < 0)
+	var leftMagnitude = magnitude(left)
+	var rightMagnitude = magnitude(right)
+	var limit u64 = 9223372036854775807
+	if negative {
+		limit += 1
+	}
+	if rightMagnitude != 0 {
+		if leftMagnitude > limit / rightMagnitude {
+			return fail(2001)
+		}
+	}
+	var product = leftMagnitude *rightMagnitude
+	if negative {
+		if product == 9223372036854775808 {
+			return ok(-9223372036854775808)
+		}
+		return ok(-i64(product))
+	}
+	return ok(i64(product))
+}
+// The result is nonnegative; gcd(0, 0) is defined as zero. u64 also holds
+// gcd(-9223372036854775808, 0), which a positive i64 cannot represent.
+func gcd(left i64, right i64) u64 {
+	var first = magnitude(left)
+	var second = magnitude(right)
+	for second != 0 {
+		var remainder = first % second
+		first = second
+		second = remainder
+	}
+	return first
+}
+// The result is nonnegative and must fit in i64. Any zero argument yields
+// zero. Dividing by gcd before multiplying avoids needless overflow.
+func lcm(left i64, right i64)!i64 {
+	if left == 0 || right == 0 {
+		return ok(0)
+	}
+	var reduced = magnitude(left) / gcd(left, right)
+	var other = magnitude(right)
+	if reduced > u64(9223372036854775807) / other {
+		return fail(2001)
+	}
+	return ok(i64(reduced * other))
+}
+// Exponents must be nonnegative (code 2003). The empty product, including
+// pow(0, 0), is one. Squaring takes O(log(exponent)) multiplications.
+func pow(base i64, exponent i64)!i64 {
+	if exponent < 0 {
+		return fail(2003)
+	}
+	var answer i64 = 1
+	var factor = base
+	var remaining = exponent
+	for remaining > 0 {
+		if remaining % 2 == 1 {
+			answer = mul(answer, factor)?
+		}
+		remaining /= 2
+		if remaining > 0 {
+			factor = mul(factor, factor)?
+		}
+	}
+	return ok(answer)
+}
+// Return floor(sqrt(value)); negative input fails with code 2004. Searching
+// at most 3037000499 (floor(sqrt(i64 max))) takes at most 32 iterations.
+// Division in the comparison keeps even the largest input free of overflow.
+func isqrt(value i64)!i64 {
+	if value < 0 {
+		return fail(2004)
+	}
+	if value < 2 {
+		return ok(value)
+	}
+	var lower i64 = 1
+	var upper = min(value, 3037000499)
+	var answer i64 = 0
+	for lower <= upper {
+		var middle = lower +(upper - lower) / 2
+		if middle <= value / middle {
+			answer = middle
+			lower = middle + 1
+		} else {
+			upper = middle - 1
+		}
+	}
+	return ok(answer)
+}

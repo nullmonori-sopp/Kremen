@@ -22,7 +22,7 @@ $SavedTmp = $env:TMP
 $SavedPath = $env:PATH
 $NativeOptions = @()
 if (-not $PackageRoot) { $NativeOptions = @('--cc', $Compiler) }
-function Pass([string]$Label) { $script:Total++; Write-Output "ok native048.$script:Total - $Label" }
+function Pass([string]$Label) { $script:Total++; Write-Output "ok native049.$script:Total - $Label" }
 function Write-Source([string]$Path, [string]$Text) { [IO.File]::WriteAllText($Path, $Text, $Utf8) }
 function Run([string]$Executable, [string[]]$Arguments = @(), [int]$Expected = 0, [string]$Directory = $Work) {
     $Start = [Diagnostics.ProcessStartInfo]::new()
@@ -60,7 +60,9 @@ function Reject([string[]]$Arguments, [string]$Code) {
     $Result = Invoke-Kremen ($Arguments + '--diagnostic-format=json') 1
     if ($Result.Out.Length) { throw 'Rejected command wrote to stdout.' }
     $Diagnostic = $Result.Error | ConvertFrom-Json
-    if ($Diagnostic.code -cne $Code -or $Diagnostic.kind -cne 'error' -or $Diagnostic.explain -cne "kremen explain $Code") {
+    $Severity = if ($Code.StartsWith('W')) { 'warning' } else { 'error' }
+    if ($Diagnostic.code -cne $Code -or $Diagnostic.kind -cne 'error' -or $Diagnostic.explain -cne "kremen explain $Code" -or
+        $Diagnostic.severity -cne $Severity -or $Diagnostic.fatal -ne $true) {
         throw "Unexpected diagnostic: $($Result.Error)"
     }
     return $Diagnostic
@@ -129,6 +131,21 @@ try {
     Write-Source $Imported "import calc `"модули/вычисление`"`nfunc main() { println(calc.answer()) }`n"
     Expect-Output (Invoke-Kremen (@('run',$Imported,'--mode=learn') + $NativeOptions)) '42'
     Pass 'Unicode local imports load matching declaration headers'
+    $Math = Join-Path $Work 'математика.kr'
+    Write-Source $Math ('import "std/math"' + "`n" + 'func main() { println(math.gcd(-84, 30), math.min(-5, 9)) }' + "`n")
+    foreach ($Mode in @('work','learn')) {
+        Expect-Output (Invoke-Kremen (@('run',$Math,"--mode=$Mode") + $NativeOptions)) '6 -5'
+        Pass "$Mode standard math imports from an independent Unicode project"
+    }
+    $Warning = Join-Path $Work 'предупреждение.kr'
+    Write-Source $Warning "func main() {`r`n    var unused = 1`r`n}`r`n"
+    foreach ($Mode in @('work','learn')) {
+        $Diagnostic = Reject @('check',$Warning,"--mode=$Mode") 'W001'
+        if ($Diagnostic.line -ne 2 -or $Diagnostic.column -ne 9 -or $Diagnostic.end_column -ne 15 -or $Diagnostic.length -ne 6) {
+            throw 'Warning did not select the complete unused identifier.'
+        }
+        Pass "$Mode fatal warning selects the binding name in CRLF source"
+    }
     $null = Invoke-Kremen @('check',$Main,'--root',$Work.ToUpperInvariant())
     Pass 'equivalent path case selects the same project root'
     $InvalidImport = Join-Path $Work 'invalid-import.kr'
@@ -185,7 +202,7 @@ try {
         Expect-Output (Invoke-Kremen (@('run',$CaseMain) + $NativeOptions)) '1 2'
         Pass 'case-sensitive NTFS modules retain distinct file identities'
     } else {
-        Write-Output 'SKIP native048 case-sensitive module identity: per-directory case sensitivity is unavailable on this host.'
+        Write-Output 'SKIP native049 case-sensitive module identity: per-directory case sensitivity is unavailable on this host.'
     }
     foreach ($Mode in @('work','learn')) {
         Expect-Output (Invoke-Kremen (@('run',(Join-Path $Root 'tests/windows/runtime048.kr'),"--mode=$Mode") + $NativeOptions)) 'native runtime 048 ok'
@@ -231,6 +248,8 @@ try {
         Move-Item -LiteralPath $Prefix -Destination $Moved
         Expect-Output (Run (Join-Path $Moved 'bin/kremen.exe') @('run',$Main)) '7'
         Pass 'installed compiler runtime and backend survive Unicode prefix relocation'
+        Expect-Output (Run (Join-Path $Moved 'bin/kremen.exe') @('run',$Math,'--mode=learn')) '6 -5'
+        Pass 'installed standard math survives Unicode prefix relocation'
         Write-Source (Join-Path $Moved 'unrelated.txt') 'keep'
         $Manifest = Join-Path $Moved 'share/kremen/install.manifest'
         $ManifestBytes = [IO.File]::ReadAllBytes($Manifest)
@@ -244,7 +263,7 @@ try {
         if ((Test-Path -LiteralPath (Join-Path $Moved 'bin/kremen.exe')) -or [IO.File]::ReadAllText((Join-Path $Moved 'unrelated.txt'),$Utf8) -ne 'keep') { throw 'Uninstall ownership boundary failed.' }
         Pass 'uninstall removes owned files and preserves unrelated content'
     }
-    Write-Output "Native Windows 0.4.8 checks passed: $Total."
+    Write-Output "Native Windows 0.4.9 checks passed: $Total."
 } finally {
     $env:CC = $SavedCC; $env:TEMP = $SavedTemp; $env:TMP = $SavedTmp; $env:PATH = $SavedPath
     Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue
