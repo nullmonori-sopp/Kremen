@@ -147,3 +147,4 @@ try {
     $env:LIBPATH = $OldLibPath
     if (Test-Path -LiteralPath $Work) { Remove-Item -LiteralPath $Work -Recurse -Force }
 }
+exit 0

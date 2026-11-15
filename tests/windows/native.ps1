@@ -249,3 +249,4 @@ try {
     $env:CC = $SavedCC; $env:TEMP = $SavedTemp; $env:TMP = $SavedTmp; $env:PATH = $SavedPath
     Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue
 }
+exit 0

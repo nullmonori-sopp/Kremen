@@ -161,7 +161,7 @@ eae60d5f2ed50408d4a3897dc2c5f045390a3be8692bdce375354fe29c7f343d  ./tests/native
 292c451795e9ca9a595b2c475d672b64170dd6129dcd569a6aef40e3647c736b  ./tests/native/v3_traps.kr
 23c974e1627152b570f3145c227f4fedc66d38dfd4e19732dcd3d730ba93ea5a  ./tests/native/v3_values.kr
 f2681fd9d332c527de7e5bf96876ba1e6ece73c1dc10c677c81c1e9812d4d9bc  ./tests/native/values.kr
-f66a817f55011bd2cf2617489b5588203bda6e763268ab16398a52a8813e66fc  ./tests/portable/check.ps1
+c14d0fcf7f488beef588119ad6295903cfe9adedd51a27e82e79a7bf800a7185  ./tests/portable/check.ps1
 5542a1b1dd49ffaed3b618fcf45f76b65a7d96582a50e5e2eedbb6821061939e  ./tests/portable/check.sh
 cbab1683c6b70ac47829b2305ca9346035866fad91ca0bf3bfbac8422a7ff365  ./tests/selfhost/diagnostics.sh
 ac7e62fc4d120b85dd7cc73b9f7a2f60862c7ba1c6459a3deed7d0d7b71a84af  ./tests/selfhost/frontend_stability.sh
@@ -174,10 +174,10 @@ fee479dceb3ff12fc4c466ecfc5f4e93637e9cf3eb545a1457b97021d2e9c90e  ./tests/selfho
 0f0ec2219c5a3c30b9fcd4ee4bda561dc0a4da959eb1c92d5e93808fe10b37e8  ./tests/selfhost/semantics.sh
 502a6bb9f29dc8f155cf21c6ddca457fb990e21d1f07bb771035113fbe8a5329  ./tests/selfhost/toolchain.sh
 5bf2427a000f39a6b83af52f6cecd2d37aef1c006809042e4f04532641fc1a5b  ./tests/windows/check.sh
-eaeb4f861a87b0aa5a075d28f8af32df192c47aa93d59bd063602755a651a87b  ./tests/windows/native.ps1
+36a1af23667470d40ee4169f4a5de4ca48d84a1da4209917d50adf4be2fbb83d  ./tests/windows/native.ps1
 be8bf26b9c626b1420289dce51c250f8051762a64e369072fd8f72e94ccbd3de  ./tests/windows/runtime.kr
 391c61aba8ed38eef1f404ce97cd81e2d0cbb0ad1b4a75eb2c5f687982e98faa  ./tests/windows/runtime048.kr
-281f635dfd44e0be065c9dca9475b9b9e6f832bf93e8a6604be00953735b227e  ./tests/windows/selfhost.ps1
+12afa8c8e48e597f76a617473392ff9e9f5cfe2da8be6c727cdf7516bcfe9f5b  ./tests/windows/selfhost.ps1
 9ec0084f08c38b62ef19ceba0a6e00bc1f0f3761c75b807a8c67523ba7a1dda6  ./tools/backend_launcher.c
 aba97ebab4db87982234ec6d4bbeda0c35ef8def54f1701e53aa6e0b41af59e3  ./tools/install-portable.sh
 88b6514d71be1908128b42d682467e72afdaaa89f89a4c316cb8a7708fe7d22b  ./tools/package-portable.ps1

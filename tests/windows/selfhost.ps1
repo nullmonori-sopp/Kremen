@@ -132,3 +132,6 @@ finally {
     $env:KREMEN_SELFHOST_ROOT = $OriginalOverride
     Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue
 }
+# Negative cases intentionally execute programs that return nonzero statuses.
+# Report the test script's verified outcome rather than that last child code.
+exit 0
