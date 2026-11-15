@@ -94,7 +94,7 @@ Explicit aggregate-place discards and entirely ignored tuple patterns now avoid 
 
 The change fixes reproduced stack-frame growth caused by unused copies. It does not establish general copy elision, a total stack quota, or a broad application speedup. Earlier saved reports retain their original compiler and platform context; the Windows profile has no application performance baseline in this release.
 
-## Match stack use in 0.4.9
+## Matching large payloads
 
 ```sh
 make
