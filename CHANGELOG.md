@@ -5,6 +5,7 @@
 - Replace the Windows pthread compatibility layer with CRT-aware native threads, native joins, and SRW locks while preserving the language's worker ownership and cleanup rules.
 - Use UTF-8 paths and arguments internally and UTF-16 Windows APIs at the host boundary, including source loading, process arguments, temporary files, and runtime filesystem operations.
 - Add native PowerShell builds and bootstrap stages. The smaller self-hosted compiler and CLI can now rebuild on Windows as well as Linux.
+- Recognize both path separators when emitting bootstrap source basenames, and regenerate the committed C seed through the verified bootstrap workflow.
 - Make failed subset output produce an unsuccessful command status instead of disappearing during final stream flushing.
 - Add portable packages with a matching Zig 0.15.2 C backend and a small argument-preserving launcher, retaining the complete SDK and its licenses.
 - Find the bundled backend relative to the compiler while retaining explicit `--cc` and `CC` overrides. Ordinary portable-package use works offline without a separately installed development environment.

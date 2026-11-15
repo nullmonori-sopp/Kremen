@@ -37,7 +37,7 @@ To run the subset bootstrap by itself, use `selfhost/bootstrap.ps1 -Compiler cla
 
 | Command | Work performed |
 | --- | --- |
-| `check SOURCE.kr` | Subset parsing and type checking, followed by strict C syntax checking |
+| `check SOURCE.kr` | Subset parsing and type checking, followed by strict C compilation to a private temporary object, without linking or executing it |
 | `emit-c SOURCE.kr -o FILE` | Generate C into a required explicit output file |
 | `build SOURCE.kr [-o FILE]` | Build an executable, default `a.out` on Linux or `a.exe` on Windows |
 | `run SOURCE.kr [-- ARG ...]` | Build temporarily and run with the supplied arguments |
@@ -52,6 +52,8 @@ Arguments after `--` go literally to the program, including spaces and shell met
 `bootstrap` generates C for both `bootstrap.kr` and `toolchain.kr`, builds the next driver, then asks it to generate C for both sources again. The files must match byte for byte before the executable is published.
 
 The initial build also checks the committed C seed against stages 1, 2, and 3. This is a fixed point of generated C source, not a promise of byte-identical executable files or a proof that the compiler has no bugs. It demonstrates that the subset implementation can reproduce its own frontend and CLI. The [bootstrap reference](../selfhost/README.md) explains the seed workflow.
+
+Version 0.4.8 corrects basename emission for Windows backslashes as well as forward slashes. Without that correction, invoking the compiler with a PowerShell path could change an embedded source label and make otherwise equivalent stages differ. The committed `stage0.c` is regenerated with the matching `bootstrap.kr`; copying only one of those files creates a mismatched bootstrap. Keep a previous verified compiler when changing either source and follow the fixed-point workflow before publishing a new seed.
 
 ## Files, paths, and resources
 

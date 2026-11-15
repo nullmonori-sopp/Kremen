@@ -27,8 +27,21 @@ try {
     Pass "native subset driver version"
     $Source = Join-Path $Work "задача Ω.kr"
     Write-Source $Source "func main() i64 { return 0 }`n"
-    Invoke-Driver @("check", $Source, "--cc", $Compiler) | Out-Null
-    Pass "check accepts Unicode source paths"
+    $CheckTemporary = Join-Path $Work 'check temporary'
+    [IO.Directory]::CreateDirectory($CheckTemporary) | Out-Null
+    $PreviousTemp = $env:TEMP
+    $PreviousTmp = $env:TMP
+    try {
+        $env:TEMP = $CheckTemporary
+        $env:TMP = $CheckTemporary
+        Invoke-Driver @("check", $Source, "--cc", $Compiler) | Out-Null
+        if (@(Get-ChildItem -LiteralPath $CheckTemporary -Force).Count -ne 0) { throw 'Subset check left a private object or temporary directory.' }
+    }
+    finally {
+        $env:TEMP = $PreviousTemp
+        $env:TMP = $PreviousTmp
+    }
+    Pass "check accepts Unicode source paths and removes its private object"
     $CSource = Join-Path $Work "исходник.c"
     Invoke-Driver @("emit-c", $Source, "-o", $CSource) | Out-Null
     if (!(Test-Path -LiteralPath $CSource)) { throw "C output missing." }

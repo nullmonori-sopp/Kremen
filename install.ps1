@@ -51,7 +51,7 @@ if ($Uninstall) {
     return
 }
 if (-not $owned) {
-    foreach ($reserved in @('bin/kremen.exe','bin/kremen-selfhost.exe','share/kremen','share/doc/kremen','backend')) {
+    foreach ($reserved in @('bin/kremen.exe','bin/kremen-selfhost.exe','share/kremen','share/doc/kremen','backend','install.ps1')) {
         if (Test-Path -LiteralPath (Join-Path $Prefix $reserved)) { throw "Refusing to overwrite an unowned path: $reserved" }
     }
 }

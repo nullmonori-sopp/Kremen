@@ -9,7 +9,7 @@ add_executable(kremen native/core.c native/diagnostics.c native/doctor.c native/
     native/format.c native/main.c native/fast_copy.c)
 add_executable(kremen-backend tools/backend_launcher.c)
 foreach(target kremen kremen-backend)
-    if(MSVC)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC" OR CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
         target_compile_options(${target} PRIVATE /W4 /WX)
         if(CMAKE_C_COMPILER_ID MATCHES "Clang")
             target_compile_options(${target} PRIVATE /clang:-Wextra /clang:-Wpedantic)

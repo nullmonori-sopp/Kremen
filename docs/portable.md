@@ -68,6 +68,8 @@ Open PowerShell in the unpacked directory:
 
 No Unix shell is involved. The Windows frontend decodes its native command line as UTF-16 and exposes UTF-8 paths to the language and compiler internals. Source paths, temporary paths, and filesystem built-ins use wide Windows operations. The [Windows guide](windows.md) describes path handling, source builds, and host-specific filesystem behavior.
 
+The bundled backend selects `x86_64-windows-gnu` using the SDK's own headers and libraries. That is a compiler target, not a requirement to install a GNU or MSYS environment on the destination computer. The generated Kremen runtime still uses the native Windows thread and filesystem adapter, without winpthreads.
+
 The package's `install.ps1` can copy it into a selected user prefix and later remove its owned files. Installation is optional; direct paths into an unpacked package work as well. See [Installation](install.md#windows-source-builds-and-installation) for the parameters.
 
 ## How backend selection works

@@ -260,6 +260,7 @@ func driver_cleanup() i64 {
         host_remove(rt_cat(driver_work, "/program.c"))
         host_remove(rt_cat(driver_work, "/program"))
         host_remove(rt_cat(driver_work, "/program.exe"))
+        host_remove(rt_cat(driver_work, "/checked.o"))
         host_remove(rt_cat(driver_work, "/compiler.c"))
         host_remove(rt_cat(driver_work, "/compiler.o"))
         host_remove(rt_cat(driver_work, "/toolchain.c"))
@@ -299,7 +300,9 @@ func driver_normal() i64 {
         driver_c_command()
         driver_argument(generated)
         if rt_equal(driver_command, "check") {
-            driver_argument("-fsyntax-only")
+            driver_argument("-c")
+            driver_argument("-o")
+            driver_argument(rt_cat(driver_work, "/checked.o"))
         } else {
             driver_argument(rt_cat(driver_root, "/runtime.c"))
             driver_argument(rt_cat(driver_root, "/driver.c"))

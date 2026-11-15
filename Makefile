@@ -115,6 +115,7 @@ test-selfhost: selfhost/build/kremen-selfhost$(EXEEXT)
 	sh tests/selfhost/runtime_stability.sh
 	sh tests/selfhost/diagnostics.sh
 	sh tests/selfhost/output_048.sh
+	sh tests/selfhost/paths_048.sh
 
 bench: build/kremen$(EXEEXT)
 	$(CC_COMMAND) $(STRICT) $(CFLAGS) bench/copy.c $(COPY) -o build/bench-copy

@@ -30,13 +30,12 @@ jobs:
           cd "release check/kremen"
           sha256sum -c SHA256SUMS
           make all selfhost check
+          mkdir -p "$GITHUB_WORKSPACE/build/source-artifacts"
+          cp "$GITHUB_WORKSPACE/../kremen-v$KREMEN_RELEASE_VERSION.zip" "$GITHUB_WORKSPACE/../kremen-v$KREMEN_RELEASE_VERSION.tar.gz" "$GITHUB_WORKSPACE/../kremen-v$KREMEN_RELEASE_VERSION.sha256" "$GITHUB_WORKSPACE/build/source-artifacts/"
       - uses: actions/upload-artifact@v4
         with:
           name: kremen-source
-          path: |
-            ../kremen-v*.zip
-            ../kremen-v*.tar.gz
-            ../kremen-v*.sha256
+          path: build/source-artifacts/*
   sanitizers:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

@@ -58,6 +58,8 @@ The source build uses the portable C implementation of byte copying. The Linux a
 
 The bootstrap subset has its own `selfhost/bootstrap.ps1` workflow. It verifies the committed seed against successive generated C stages before publishing the driver. See [Self-hosting](selfhosting.md) for its commands and language limits. Compiling the subset on Windows does not mean the full language's frontend has become self-hosted.
 
+Use the matching 0.4.8 bootstrap source and regenerated C seed together. The emitter recognizes both path separators so embedded source basenames remain stable between native PowerShell paths and Linux paths.
+
 To install a complete portable package into your user profile, run its `install.ps1`. The same installer can copy an already built source tree. [Installation](install.md#windows-source-builds-and-installation) explains `-Prefix`, `-SourceRoot`, upgrades, and removal; the package can also be used directly without installation.
 
 ## Paths and Unicode

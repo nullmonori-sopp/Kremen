@@ -114,6 +114,18 @@ try {
     Invoke-Portable @('check',$Subset) 0 $Rebuilt | Out-Null
     Remove-Item -LiteralPath $Rebuilt
     Pass 'bundled backend reproduces and runs the subset compiler and driver'
+    $Collision = Join-Path $Work 'unowned installer'
+    [IO.Directory]::CreateDirectory($Collision) | Out-Null
+    $Sentinel = Join-Path $Collision 'install.ps1'
+    [IO.File]::WriteAllText($Sentinel, 'unrelated installer sentinel', $Utf8)
+    $Refused = $false
+    try {
+        & (Join-Path $PackageRoot 'install.ps1') -SourceRoot $PackageRoot -Prefix $Collision | Out-Null
+    } catch { $Refused = $true }
+    if (-not $Refused -or [IO.File]::ReadAllText($Sentinel) -ne 'unrelated installer sentinel' -or
+        (Test-Path -LiteralPath (Join-Path $Collision 'bin/kremen.exe'))) {
+        throw 'Installer did not preserve an unrelated install.ps1 at an unowned prefix.'
+    }
     $Prefix = Join-Path $Work 'установленная копия'
     [IO.Directory]::CreateDirectory((Join-Path $Prefix 'bin')) | Out-Null
     [IO.File]::WriteAllText((Join-Path $Prefix 'bin/unrelated.txt'), 'retain', $Utf8)

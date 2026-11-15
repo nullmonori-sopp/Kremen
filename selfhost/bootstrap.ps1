@@ -33,6 +33,19 @@ function Build-Stage([string]$Source, [string]$Output) {
 function Assert-SameFile([string]$Left, [string]$Right) {
     if ((Get-FileHash -LiteralPath $Left -Algorithm SHA256).Hash -ne
         (Get-FileHash -LiteralPath $Right -Algorithm SHA256).Hash) {
+        $LeftBytes = [IO.File]::ReadAllBytes($Left)
+        $RightBytes = [IO.File]::ReadAllBytes($Right)
+        $Common = [Math]::Min($LeftBytes.Length, $RightBytes.Length)
+        $Offset = 0
+        while ($Offset -lt $Common -and $LeftBytes[$Offset] -eq $RightBytes[$Offset]) { $Offset++ }
+        $Start = [Math]::Max(0, $Offset - 16)
+        $LeftCount = [Math]::Min(64, $LeftBytes.Length - $Start)
+        $RightCount = [Math]::Min(64, $RightBytes.Length - $Start)
+        $LeftHex = [BitConverter]::ToString($LeftBytes, $Start, $LeftCount)
+        $RightHex = [BitConverter]::ToString($RightBytes, $Start, $RightCount)
+        Write-Output "Fixed-point mismatch: left bytes=$($LeftBytes.Length), right bytes=$($RightBytes.Length), first difference=$Offset"
+        Write-Output "Left bytes at ${Start}: $LeftHex"
+        Write-Output "Right bytes at ${Start}: $RightHex"
         throw "Bootstrap fixed point differs: $Left and $Right"
     }
 }

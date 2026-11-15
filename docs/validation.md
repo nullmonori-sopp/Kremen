@@ -2,7 +2,7 @@
 
 The local release environment is Linux x86-64, GCC 14.2.0, and a POSIX shell. Native Windows validation is a separate PowerShell/Clang job. Compiler and generated C use strict C11 warnings as errors. POSIX full-language programs add `-pthread`; the Windows adapter uses native thread primitives without that compatibility library. Defaults are `-O3`, with `-O2` for the initial bootstrap stages. Portable-package checks use the package's real bundled SDK rather than the machine's development compiler.
 
-The Linux suites contain the 900 checks from 0.4.7 plus 18 native-runtime, 9 backend/package, and 6 subset-output cases, for 933 checks. Negative cases must return the intended diagnostic, not terminate through a signal. Installer checks, bootstrap fixed points, sanitizer runs, native Windows checks, and real portable-package execution are additional validation described below. Full-device tests use Linux `/dev/full` and explicitly skip those cases when it is unavailable, so other hosts can report a smaller count. A Windows integration count is separate from the Linux count.
+The Linux suites contain the 900 checks from 0.4.7 plus 18 native-runtime, 9 backend/package, 6 subset-output, and 4 subset-path cases, for 937 checks. Negative cases must return the intended diagnostic, not terminate through a signal. Installer checks, bootstrap fixed points, sanitizer runs, native Windows checks, and real portable-package execution are additional validation described below. Full-device tests use Linux `/dev/full` and explicitly skip those cases when it is unavailable, so other hosts can report a smaller count. A Windows integration count is separate from the Linux count.
 
 ## Commands to reproduce
 
@@ -15,6 +15,8 @@ make examples
 ```
 
 A clean subset build verifies the committed seed against stages 1, 2, and 3, runs the `720|18|ok` example, and checks four initial malformed-input cases. Driver self-rebuild compares next-stage C for both compiler and command line before publication.
+
+The 0.4.8 seed is regenerated after correcting bootstrap basename emission for both `/` and `\`. Native Windows validation caught the old path-dependent source labels. The fixed-point comparisons use the updated source and generated seed together; the seed is not hand-patched to make a comparison pass.
 
 | Suite | Checks | Main coverage |
 | --- | ---: | --- |
@@ -49,6 +51,7 @@ A clean subset build verifies the committed seed against stages 1, 2, and 3, run
 | `tests/selfhost/frontend_stability.sh` | 13 | Evaluation order, laziness, loops, checked arithmetic, expression limit, source relocation |
 | `tests/selfhost/runtime_stability.sh` | 21 | String chunks/cache, bounds, arithmetic helpers, source aliases, cleanup |
 | `tests/selfhost/diagnostics.sh` | 7 | Expression columns, long lines, EOF, invalid token, operand types, undefined names, failed rereads without stale excerpts |
+| `tests/selfhost/paths_048.sh` | 4 | Stable source labels for slash, backslash, mixed, and drive-style spellings |
 | `tests/selfhost/output_048.sh` | 6 | Subset driver and generated-program output failures, unsuccessful exit status, and retained successful output |
 | `tests/native/source_io.sh` | 6 | Nonblocking FIFO rejection in both frontends, formatter, headers, imports, and driver |
 
