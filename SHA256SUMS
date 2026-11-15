@@ -82,7 +82,7 @@ cbdaeb8c724d9e5edb820c7ded134b64224827f4fd87dbf94b1897e7429d2343  ./kremenc
 a76c17d358f606eac1881139ee6fc2b3e90378e8bbf7c5e22eb8bbb7a872400b  ./native/checker.c
 8fa1c7be8951c308eb713574373771282f8cab82ab115f9b412b5af1c62304f2  ./native/codegen.c
 bc84ccbae79025b6db4567779a43d9e53fb74ff7ae113a7939da61d2b25701e0  ./native/core.c
-410b6c8123b511ff2de420e4f4557091f42f26fd605038befcfad6142c5b1440  ./native/diagnostics.c
+48a8990206b58094710a525f504c383f2459682a9fa6f4ae099539b74936ee34  ./native/diagnostics.c
 fb4bff639b112d33b7b4fa49f1e929f9d51f5f0d16eda21dc63f2e454edd991f  ./native/doctor.c
 fd032a0d1b2f714c0fcb6906b6a3c106700d74e5957326aa2b82f917c10eb499  ./native/fast_copy.S
 b8f80e2d5a37c121211aa17288f910d8b1feabe43633052e06b7b2457ed9411f  ./native/fast_copy.c
@@ -91,7 +91,7 @@ a38e091197b84b7e63303bc37662750d96ba5d27b4ea6e7a67cbe825554d460a  ./native/forma
 a7fcfc3c324c2e33b6f07b152d414b38457d6e0e5dd097064c9a1167351d0be5  ./native/learn.c
 2cef9ffb1428005df6d29d1779602d1a0e74b74eebe9127c99a1499a4c022fb8  ./native/lexer.c
 26a415f26bcfef48e704ba0493079d26fc2848e09ba4c2a3411ba1cf14482a49  ./native/main.c
-68bc4431dab6aaa7785836014c5ea91e3c71db70a1d0ab57d2abbebbea10fe95  ./native/modules.c
+a7ea6c6f60c4a14978f9d6ac245122434e3640938b5c34e26c55dff66c529e81  ./native/modules.c
 e1201aa85716d2ee9b12d81b19e2b0cde60265992d7c2e2eb23f18b309cb63f0  ./native/parser.c
 fb0117092a92740929e41c98eb41617e45fd26a0b4b37de1b79bf299c89de867  ./native/platform.h
 398864e09f6011a3c695fcc0b039883b4bf46df94b45ad4e744279d497bd0580  ./runtime/kremen_rt.h
@@ -137,7 +137,7 @@ c04d3705feb789f8e26d1bc4d20d195d41def8e8decf3098f1b553cb04719cc4  ./tests/native
 a1151864cbcc87085fedff5586f7ae9a872d47cafd06b5b334dd705d9a3b23cd  ./tests/native/modules/math/vec/operations.kr
 ad369c6d0ed2af691a164bd0b166e973582b8a6078549f5cf340df41daa7c4b8  ./tests/native/modules/math/vec/type.kr
 66606415867d1c2e8b68086f0e83fae0ce832ba40a0788285383592dde478280  ./tests/native/modules/math/vec/type.krh
-6e29e512037a06089c4bf3db7903abda852b9f76750681e024e9cafbbb7f57fb  ./tests/native/modules_049.sh
+19949276f36c4cd48f359c9942b79f17241ee08cbcbc4c61cbed5d4b7cf3ae27  ./tests/native/modules_049.sh
 a372b845892ccfd47017e5d1180475af09a7b748db55de88e35ca9047277c3f0  ./tests/native/optimization_049.sh
 0e67de9ed1cdf2c7aee70f2eb89e5d0f64f47fe60f7ac3283e5ec248fd26f123  ./tests/native/output_046.sh
 a72a4befe2dc602a4defd414f212b24b55303bf518ad63a22c14c9aa2580653e  ./tests/native/output_failure_046.c

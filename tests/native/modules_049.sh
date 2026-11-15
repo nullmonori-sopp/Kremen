@@ -56,6 +56,7 @@ printf 'import "std/math/math.krh"\nfunc main() {}\n' > "$PROJECT/main.kr"
 reject 'headers are not import entry points' 'import the implementation .kr'
 printf 'import "std/missing"\nfunc main() {}\n' > "$PROJECT/main.kr"
 reject 'missing standard module identifies its import' 'cannot resolve import'
+grep -F "relative to $LIBRARY" "$WORK/error" > /dev/null || fail 'missing standard module reports the actual search directory'
 
 printf 'import "std/math"\nfunc main() { println(math.value()) }\n' > "$PROJECT/main.kr"
 printf 'package outside\nfunc value() i64 { return 1 }\n' > "$WORK/outside.kr"

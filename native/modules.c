@@ -46,7 +46,7 @@ char *km_resolve(Context *ctx, const char *from, const char *requested) {
     if (suffix(candidate, ".krh")) km_error(ctx, tok, "E013", "import the implementation .kr, its .krh is loaded automatically");
     if (!exists(candidate) && !suffix(candidate, ".kr")) candidate = km_sprintf(ctx, "%s.kr", candidate);
     char *resolved = km_alloc(ctx, PATH_MAX);
-    if (!km_host_realpath(candidate, resolved)) km_error(ctx, tok, "E013", "cannot resolve import '%s' relative to %s: %s", requested, from, strerror(errno));
+    if (!km_host_realpath(candidate, resolved)) km_error(ctx, tok, "E013", "cannot resolve import '%s' relative to %s: %s", requested, standard_import(requested) ? dir : from, strerror(errno));
     require_path(ctx, resolved, root, tok, "import", requested);
     return km_strdup(ctx, resolved);
 }
